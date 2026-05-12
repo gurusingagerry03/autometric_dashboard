@@ -65,22 +65,25 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       })
       return true
     },
-    authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user
-      const isOnDashboard = nextUrl.pathname.startsWith('/dashboard')
-      if (isOnDashboard && !isLoggedIn) return false
+    authorized() {
       return true
     },
     async jwt({ token, user, account }) {
-      if (user?.id) token.id = user.id
+      if (user) {
+        token.id    = user.id
+        token.name  = user.name
+        token.email = user.email
+      }
       if (account?.provider === 'google' && token.email) {
-        const id = await getDbUserIdByEmail(token.email)
+        const id = await getDbUserIdByEmail(token.email as string)
         if (id) token.id = id
       }
       return token
     },
     session({ session, token }) {
-      if (token.id) session.user.id = token.id as string
+      session.user.id    = token.id    as string
+      session.user.name  = token.name  as string
+      session.user.email = token.email as string
       return session
     },
   },

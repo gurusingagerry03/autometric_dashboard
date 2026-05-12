@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import LeftPanel from './LeftPanel'
 import LoginForm from './LoginForm'
 import RegisterForm from './RegisterForm'
@@ -11,6 +12,18 @@ export type Mode = 'login' | 'register' | 'forgot-password'
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>('login')
+  const { status } = useSession()
+
+  useEffect(() => {
+    fetch('/api/auth/session', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.user) window.location.replace('/organizations')
+      })
+      .catch(() => {})
+  }, [])
+
+  if (status === 'authenticated') return null
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#f0f1f8' }}>

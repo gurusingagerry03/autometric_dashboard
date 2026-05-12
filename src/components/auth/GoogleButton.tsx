@@ -15,7 +15,7 @@ export default function GoogleButton({ label }: { label: string }) {
   return (
     <button
       type="button"
-      onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+      onClick={() => signIn('google', { callbackUrl: '/organizations' })}
       className="w-full h-11 flex items-center justify-center gap-3 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md font-semibold text-on-surface hover:bg-surface-container transition-colors"
     >
       <GoogleIcon />

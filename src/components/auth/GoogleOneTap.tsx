@@ -30,7 +30,7 @@ export default function GoogleOneTap() {
         callback: async ({ credential }: { credential: string }) => {
           await signIn('google-one-tap', {
             idToken: credential,
-            callbackUrl: '/dashboard',
+            callbackUrl: '/organizations',
           })
         },
         cancel_on_tap_outside: false,
