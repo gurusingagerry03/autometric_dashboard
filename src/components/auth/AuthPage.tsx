@@ -12,6 +12,7 @@ export type Mode = 'login' | 'register' | 'forgot-password'
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>('login')
 
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#f0f1f8' }}>
       <GoogleOneTap />
