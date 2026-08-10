@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ChartTooltip, useChartTooltip } from '@/components/ui/ChartTooltip'
+import { ChartTooltip, useChartTooltip, formatTipValue } from '@/components/ui/ChartTooltip'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import {
   ChartConfig, Series, LineSeries, BarSeries, resolveBarData, resolveLineData, chartIcon, chartSummary,
@@ -141,7 +141,7 @@ function MultiLine({ series, labels }: { series: LineSeries[]; labels: string[] 
     const r = el.getBoundingClientRect()
     const i = Math.min(len - 1, Math.max(0, Math.round(((e.clientX - r.left) / r.width) * (len - 1))))
     setHover(i)
-    show(e, labels[i], series.map(s => ({ label: s.name, value: compactNum(s.data[i] ?? 0), color: s.color })))
+    show(e, labels[i], series.map(s => ({ label: s.name, value: formatTipValue(s.data[i] ?? 0), color: s.color })))
   }
 
   function onLeave() { setHover(null); hide() }
@@ -190,8 +190,8 @@ function GroupedBars({ labels, series, orientation }: { labels: string[]; series
   // rather than trying to hit-test a shared band.
   const hoverProps = (s: BarSeries, gi: number) => ({
     className: 'cursor-pointer',
-    onMouseEnter: (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: compactNum(s.data[gi] ?? 0), color: s.color }]),
-    onMouseMove:  (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: compactNum(s.data[gi] ?? 0), color: s.color }]),
+    onMouseEnter: (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: formatTipValue(s.data[gi] ?? 0), color: s.color }]),
+    onMouseMove:  (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: formatTipValue(s.data[gi] ?? 0), color: s.color }]),
     onMouseLeave: hide,
   })
 
@@ -257,7 +257,7 @@ function WordCloud({ words }: { words: CloudWordData[] }) {
           const pal = SENTIMENT_PALETTES[p.sentiment]
           const color = pal[Math.floor(whash(p.word + 'c') * pal.length)]
           const lines = [
-            { label: 'Mentions', value: compactNum(freqOf.get(p.word) ?? 0), color },
+            { label: 'Mentions', value: formatTipValue(freqOf.get(p.word) ?? 0), color },
             { label: 'Sentiment', value: p.sentiment },
           ]
           return (

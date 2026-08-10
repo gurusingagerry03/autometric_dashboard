@@ -111,7 +111,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
                   line={data.typePerf.map(s => s.replies)}
                   leftMax={reachMax} rightMax={repliesMax} height={250}
                   fmtLeft={n => fmtNum(n)}
-                  barName="Avg Reach" lineName="Avg Replies" fmtRight={n => fmtNum(n)} />
+                  barName="Avg Reach" lineName="Avg Replies" />
               : <div className="h-[250px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data tipe story.</div>}
           </div>
           <div className="mx-4 mb-4 mt-auto">

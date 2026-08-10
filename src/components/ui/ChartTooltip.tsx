@@ -26,6 +26,18 @@ export interface TipState {
 /** Half the tooltip's widest realistic width — keeps it inside the viewport. */
 const TIP_EDGE = 90
 
+/**
+ * Default number formatting for tooltip values: grouped thousands, US style
+ * (117348 → "117,348").
+ *
+ * Tooltips deliberately show the EXACT figure even where the axis is compact
+ * ("117.3K") — reading the precise number is the reason to hover in the first
+ * place. Pass your own formatter only for units that need one (%, seconds).
+ */
+export function formatTipValue(n: number): string {
+  return n.toLocaleString('en-US')
+}
+
 export function useChartTooltip() {
   const [tip, setTip] = useState<TipState | null>(null)
 

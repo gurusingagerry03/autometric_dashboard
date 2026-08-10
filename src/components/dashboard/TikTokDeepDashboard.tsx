@@ -100,7 +100,7 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
         </div>
         <div className="px-4 pb-4 pt-1">
           {data.churnWeeks.length
-            ? <DivergingBars data={data.churnWeeks} height={240} fmt={fmtNum} />
+            ? <DivergingBars data={data.churnWeeks} height={240} />
             : <div className="h-[240px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data churn.</div>}
         </div>
         <div className="mx-4 mb-4">

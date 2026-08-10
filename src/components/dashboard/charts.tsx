@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useRef, useState } from 'react'
-import { ChartTooltip, useChartTooltip } from '@/components/ui/ChartTooltip'
+import { ChartTooltip, useChartTooltip, formatTipValue } from '@/components/ui/ChartTooltip'
 
 /* ---------- helpers ---------- */
 
@@ -17,7 +17,7 @@ function buildPath(data: number[], w: number, h: number, pad: number) {
   }).join(' ')
 }
 
-const defaultFmt = (n: number) => n.toLocaleString('en-US')
+const defaultFmt = formatTipValue
 
 /* ---------- Sparkline (KPI cards) ---------- */
 
@@ -137,10 +137,13 @@ function niceCeil(n: number) {
   return Math.ceil(n / step) * step
 }
 
-export function MultiLineChart({ series, labels, height = 220, dots = false, yAxis = false, fmtY }: {
+export function MultiLineChart({ series, labels, height = 220, dots = false, yAxis = false, fmtY, fmtTip = defaultFmt }: {
   series: { name: string; color: string; data: number[] }[]
   labels?: string[]; height?: number; dots?: boolean
+  /** Y-axis tick formatter — often compact ("1.2K") to keep the axis narrow. */
   yAxis?: boolean; fmtY?: (n: number) => string
+  /** Hover value formatter. Separate from fmtY so the tooltip can stay exact. */
+  fmtTip?: (n: number) => string
 }) {
   const W = 600
   const H = height
@@ -170,7 +173,7 @@ export function MultiLineChart({ series, labels, height = 220, dots = false, yAx
     const xv = ((e.clientX - r.left) / r.width) * W
     const i = Math.min(n - 1, Math.max(0, Math.round((xv - pad) / stepX)))
     setHover(i)
-    show(e, labels?.[i], series.map(s => ({ label: s.name, value: fy(s.data[i] ?? 0), color: s.color })))
+    show(e, labels?.[i], series.map(s => ({ label: s.name, value: fmtTip(s.data[i] ?? 0), color: s.color })))
   }
 
   function onLeave() { setHover(null); hide() }
@@ -277,8 +280,9 @@ export function ScatterPlot({ points, xMax, yMax, xTicks, yTicks, xLabel, yLabel
 
 /* ---------- Diverging bars (gained up / lost down) ---------- */
 
-export function DivergingBars({ data, posColor = '#7cc499', negColor = '#e89aa3', height = 240, fmt = (n: number) => String(n) }: {
+export function DivergingBars({ data, posColor = '#7cc499', negColor = '#e89aa3', height = 240, fmt = defaultFmt }: {
   data: { label: string; gained: number; lost: number }[]
+  /** Hover value formatter; exact grouped numbers by default. */
   posColor?: string; negColor?: string; height?: number; fmt?: (n: number) => string
 }) {
   const maxPos = Math.max(...data.map(d => d.gained), 1)
@@ -325,12 +329,13 @@ export function DivergingBars({ data, posColor = '#7cc499', negColor = '#e89aa3'
 
 /* ---------- Combo: bars (left axis) + line (right axis) ---------- */
 
-export function ComboBarLine({ labels, bars, line, barColor = '#e7a6bd', lineColor = '#6c4cd6', leftMax, rightMax, height = 260, fmtLeft = (n: number) => String(n), barName = 'Bars', lineName = 'Line', fmtRight }: {
+export function ComboBarLine({ labels, bars, line, barColor = '#e7a6bd', lineColor = '#6c4cd6', leftMax, rightMax, height = 260, fmtLeft = (n: number) => String(n), barName = 'Bars', lineName = 'Line', fmtTip = defaultFmt }: {
   labels: string[]; bars: number[]; line: number[]
   barColor?: string; lineColor?: string; leftMax: number; rightMax: number; height?: number
+  /** Left-axis tick formatter — usually compact so the axis stays narrow. */
   fmtLeft?: (n: number) => string
-  /** Series names + right-axis formatter, used by the hover tooltip. */
-  barName?: string; lineName?: string; fmtRight?: (n: number) => string
+  /** Series names for the hover tooltip, plus its value formatter (exact by default). */
+  barName?: string; lineName?: string; fmtTip?: (n: number) => string
 }) {
   const W = 600, H = height, padL = 46, padR = 42, padT = 12, padB = 30
   const plotW = W - padL - padR, plotH = H - padT - padB
@@ -343,12 +348,11 @@ export function ComboBarLine({ labels, bars, line, barColor = '#e7a6bd', lineCol
   const linePath = line.map((v, i) => `${i === 0 ? 'M' : 'L'}${cx(i).toFixed(1)},${yR(v).toFixed(1)}`).join(' ')
   const leftTicks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(leftMax * f))
   const rightTicks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(rightMax * f))
-  const fr = fmtRight ?? defaultFmt
   const { tip, show, hide } = useChartTooltip()
 
   const lines = (i: number) => [
-    { label: barName,  value: fmtLeft(bars[i] ?? 0), color: barColor },
-    { label: lineName, value: fr(line[i] ?? 0),      color: lineColor },
+    { label: barName,  value: fmtTip(bars[i] ?? 0), color: barColor },
+    { label: lineName, value: fmtTip(line[i] ?? 0), color: lineColor },
   ]
 
   return (
