@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
@@ -18,7 +18,7 @@ const ceilTo = (n: number, step: number) => Math.max(step, Math.ceil(n / step) *
 
 export default function TikTokDeepDashboard({ orgId }: { orgId: string }) {
   return (
-    <DashboardChrome title="TikTok Deep" subtitle="Growth, churn & retention from TikTok's API">
+    <DashboardChrome title="TikTok Deep" subtitle="Follower growth, churn & retention on TikTok">
       {(state) => <TikTokBody orgId={orgId} brandId={state.brand.id} platform={state.platform} period={state.period} start={state.start} end={state.end} />}
     </DashboardChrome>
   )
@@ -52,7 +52,7 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -80,8 +80,8 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
       {/* Follower churn */}
       <SectionHeader icon="sync_alt">Follower Churn Analysis</SectionHeader>
       <Card className="mb-3">
-        <CardHead title="Follower Churn Analysis" metricKey="tiktok_churn_daily.net_growth" sub="Unique to TikTok's API — no other platform in this schema tracks churn at this granularity"
-          action={<FieldTag>new_followers · lost_followers · net_growth</FieldTag>} />
+        <CardHead title="Follower Churn Analysis" metricKey="tiktok_churn_daily.net_growth" sub="Only TikTok reports followers gained and lost day by day"
+          action={<FieldTag>Followers gained · Followers lost · Net growth</FieldTag>} />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 px-4 pt-1">
           {[
             { label: 'New Followers', value: `+${fmtNum(gained)}`, bg: '#edf6ef', border: '#d7ebdb', color: '#3d8a5f' },
@@ -112,18 +112,19 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
       <SectionHeader icon="insights">Retention Drivers</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Card className="flex flex-col">
-          <CardHead title="Duration vs. Completion Rate" metricKey="post_metric.completion_rate" action={<FieldTag>video_duration · completion_rate</FieldTag>} />
+          <CardHead title="Duration vs. Completion Rate" metricKey="post_metric.completion_rate" action={<FieldTag>Video length · Completion rate</FieldTag>} />
           <div className="px-4 pb-4 pt-3 flex-1">
             {data.durationCompletion.length
               ? <ScatterPlot points={data.durationCompletion} xMax={xMax} yMax={100}
                   xTicks={xTicks} yTicks={yTicks}
-                  xLabel="Video Duration (seconds)" color="#8b7fc7" height={260} />
+                  xLabel="Video Duration (seconds)" color="#8b7fc7" height={260}
+                  xName="Duration (s)" yName="Completion" />
               : <div className="h-[260px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data durasi/completion.</div>}
           </div>
         </Card>
 
         <Card className="flex flex-col">
-          <CardHead title="Avg Watch Time by Content Pillar" metricKey="pillar_performance_daily.watch_time_sum" action={<FieldTag>avg_watch_time · content_pillar</FieldTag>} />
+          <CardHead title="Avg Watch Time by Content Pillar" metricKey="pillar_performance_daily.watch_time_sum" action={<FieldTag>Avg watch time · Content pillar</FieldTag>} />
           <div className="px-4 pb-4 pt-3">
             {data.watchByPillar.length
               ? <HBars items={data.watchByPillar.map(w => ({

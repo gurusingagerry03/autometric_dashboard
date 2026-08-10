@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard } from './ui'
@@ -61,7 +61,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -179,7 +179,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
         <Card className="flex flex-col">
           <div className="flex items-center justify-between px-5 pt-4 pb-1 gap-2">
             <span style={PJ} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Content Attribute Breakdown</span>
-            <span style={PJ} className="text-[11px] font-semibold text-[#3d8a5f] bg-[#eaf5ef] px-2.5 py-1 rounded-full">content_attribute_daily</span>
+            <span style={PJ} className="text-[11px] font-semibold text-[#3d8a5f] bg-[#eaf5ef] px-2.5 py-1 rounded-full">By content tag</span>
           </div>
           <p className="px-5 pt-1.5 pb-3 text-[12.5px] text-[#6b7280]">Engagement rate by content tag — how each label performs vs. overall average</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 px-5">

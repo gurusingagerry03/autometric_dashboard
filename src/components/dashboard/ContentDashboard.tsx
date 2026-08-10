@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
@@ -62,7 +62,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -177,7 +177,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       <SectionHeader icon="smart_display">Video Analytics</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Card className="flex flex-col">
-          <CardHead title="TikTok Completion Rate Distribution" metricKey="post_metric.completion_rate" sub="completion_rate · % of videos per bucket" />
+          <CardHead title="TikTok Completion Rate Distribution" metricKey="post_metric.completion_rate" sub="Share of videos by how much of them gets watched" />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.completionDist.some(d => d.value > 0)
               ? <BarChart height={200} bars={data.completionDist.map((d, i) => ({
@@ -191,7 +191,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
         </Card>
 
         <Card className="flex flex-col">
-          <CardHead title="Reel Watch Time by Duration" metricKey="post_metric.avg_watch_time" sub="reel_avg_watch_time · avg completion %" />
+          <CardHead title="Reel Watch Time by Duration" metricKey="post_metric.avg_watch_time" sub="Average watch time and completion by reel length" />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.reelWatch.some(d => d.value > 0)
               ? <BarChart height={200} bars={data.reelWatch.map(d => ({

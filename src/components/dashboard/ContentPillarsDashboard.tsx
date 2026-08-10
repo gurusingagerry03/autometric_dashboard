@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader } from './ui'
@@ -85,7 +85,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -98,7 +98,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
           <div className="px-5 pt-4 pb-1">
             <h3 style={PJ} className="text-[15px] font-bold text-[#111827]">Define Your Content Pillars</h3>
             <p className="text-[12.5px] text-[#9ca3af] mt-1 leading-relaxed">
-              Name each pillar, assign a color, and add relevant hashtags. Saved to <code className="text-[#6c4cd6] bg-[#f3f1fb] px-1 rounded">l2_gold.dim_content_pillar</code>; performance aggregates from <code className="text-[#6c4cd6] bg-[#f3f1fb] px-1 rounded">pillar_performance_daily</code>.
+              Name each pillar, assign a color, and add relevant hashtags. Posts matching those hashtags are grouped under the pillar, and their performance is summed up in the comparison below.
             </p>
           </div>
 
@@ -160,7 +160,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
         <Card className="flex flex-col">
           {comparisonRun && pillars.length >= 2 ? (
             <>
-              <CardHead title="Pillar Performance Comparison" metricKey="pillar_performance_daily.engagement_sum" sub="Engagement rate aggregated per pillar (gold)" />
+              <CardHead title="Pillar Performance Comparison" metricKey="pillar_performance_daily.engagement_sum" sub="Engagement rate averaged across each pillar" />
               <div className="px-4 pb-5 pt-3 flex-1 flex flex-col justify-center">
                 {comparison.some(c => c.posts > 0) ? (
                   <HBars items={comparison.map(c => ({

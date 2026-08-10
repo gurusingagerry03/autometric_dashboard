@@ -1,4 +1,4 @@
-import pool from '@/lib/db'
+﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi, DashPlatform, TopPostRow } from '@/components/dashboard/data'
 
@@ -213,7 +213,7 @@ function buildKpis(
   return [
     { key: 'posts', label: 'Total Posts (Period)', icon: 'grid_view', value: fmtNum(curG.posts), ...deltaStr(curG.posts, prevG.posts), spark: sg.posts.length ? sg.posts : [0] },
     { key: 'saves', label: 'Avg. Saves Rate (IG)', icon: 'bookmark', value: `${savesCur.toFixed(2)}%`, ...ptsStr(savesCur, savesPrev), spark: sg.savesRate.length ? sg.savesRate : [0] },
-    { key: 'compl', label: 'Avg. Completion Rate (TK)', icon: 'smart_display', value: `${Math.round(curS.tkCompl)}%`, ...ptsStr(curS.tkCompl, prevS.tkCompl), spark: ss.completion.length ? ss.completion : [0] },
+    { key: 'compl', label: 'Avg. Completion Rate (TT)', icon: 'smart_display', value: `${Math.round(curS.tkCompl)}%`, ...ptsStr(curS.tkCompl, prevS.tkCompl), spark: ss.completion.length ? ss.completion : [0] },
     { key: 'clicks', label: 'Link Clicks (FB)', icon: 'ads_click', value: fmtNum(curS.fbClicks), ...deltaStr(curS.fbClicks, prevS.fbClicks), spark: ss.clicks.length ? ss.clicks : [0] },
   ]
 }

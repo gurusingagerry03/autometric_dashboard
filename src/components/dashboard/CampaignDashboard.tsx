@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHead, SectionHeader } from './ui'
@@ -132,7 +132,7 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }

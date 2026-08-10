@@ -1,4 +1,4 @@
-import pool from '@/lib/db'
+﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi, TrendSeries, DashPlatform, ContributorRow } from '@/components/dashboard/data'
 
@@ -124,7 +124,7 @@ function buildKpis(cur: KpiTotals, prev: KpiTotals, s: Awaited<ReturnType<typeof
   return [
     { key: 'c-total', label: 'Total Comments Tracked', icon: 'forum', value: fmtNum(cur.total), ...deltaStr(cur.total, prev.total), spark: s.total.length ? s.total : [0] },
     { key: 'c-igr', label: 'IG Avg. Replies/Comment', icon: 'reply', value: igCur.toFixed(1), ...deltaStr(igCur, igPrev), spark: s.igRep.length ? s.igRep : [0] },
-    { key: 'c-tkr', label: 'TK Avg. Likes/Comment', icon: 'thumb_up', value: fmtNum(tkCur), ...deltaStr(tkCur, tkPrev), spark: s.tkLikes.length ? s.tkLikes : [0] },
+    { key: 'c-tkr', label: 'TT Avg. Likes/Comment', icon: 'thumb_up', value: fmtNum(tkCur), ...deltaStr(tkCur, tkPrev), spark: s.tkLikes.length ? s.tkLikes : [0] },
     { key: 'c-fbl', label: 'FB Avg. Likes/Comment', icon: 'favorite', value: fbCur.toFixed(1), ...deltaStr(fbCur, fbPrev), spark: s.fbLik.length ? s.fbLik : [0] },
   ]
 }

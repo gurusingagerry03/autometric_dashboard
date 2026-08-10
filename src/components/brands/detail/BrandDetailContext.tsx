@@ -23,6 +23,8 @@ interface BrandDetailCtx {
   ) => Promise<VerifyOutcome>
   removeCompetitor: (socialAccountId: string) => Promise<void>
   updateBrandName: (name: string) => Promise<void>
+  /** Set avatar dari file yang dipilih (data URI) atau alamat gambar; null = hapus. */
+  updateBrandAvatar: (input: { image?: string; url?: string } | null) => Promise<void>
   deleteBrand: () => Promise<void>
   /** Hasil verifikasi competitor yang menyusul di background. */
   competitorNotice: CompetitorNotice | null
@@ -198,6 +200,20 @@ export function BrandDetailProvider({
     setBrand(b => ({ ...b, name }))
   }
 
+  async function updateBrandAvatar(input: { image?: string; url?: string } | null) {
+    const res = input === null
+      ? await fetch(`/api/brands/${brand.id}/avatar`, { method: 'DELETE' })
+      : await fetch(`/api/brands/${brand.id}/avatar`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        })
+
+    const payload = await res.json().catch(() => null)
+    if (!res.ok) throw new Error(payload?.error ?? 'Failed to update avatar')
+    setBrand(b => ({ ...b, profile_url: payload?.data?.profile_url ?? null }))
+  }
+
   async function deleteBrand() {
     const res = await fetch(`/api/brands/${brand.id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error('Failed to delete brand')
@@ -207,7 +223,7 @@ export function BrandDetailProvider({
     <Ctx.Provider value={{
       brand, orgName, addAccount, disconnectAccount, addCompetitor,
       awaitCompetitorVerification, removeCompetitor,
-      updateBrandName, deleteBrand,
+      updateBrandName, updateBrandAvatar, deleteBrand,
       competitorNotice, clearCompetitorNotice: () => setCompetitorNotice(null),
     }}>
       {children}

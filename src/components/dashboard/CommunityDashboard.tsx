@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout } from './ui'
@@ -90,7 +90,7 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -142,7 +142,7 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
 
       <SectionHeader icon="leaderboard">Top Commenters — Community Leaderboard</SectionHeader>
       <Card className="overflow-hidden">
-        <CardHead title="Top Commenters — Community Leaderboard" metricKey="community_contributors.composite_score" sub="comment_username · likes_count · replies_count" />
+        <CardHead title="Top Commenters — Community Leaderboard" metricKey="community_contributors.composite_score" sub="Ranked by comments, likes received and replies" />
         <div className="overflow-x-auto">
           <div className="min-w-[720px]">
             <div className={`grid ${LB_COLS} gap-2 px-4 py-2.5 border-y border-[#eef0f2] bg-[#fafbfb]`}>

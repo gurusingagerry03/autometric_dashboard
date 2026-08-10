@@ -63,6 +63,23 @@ export default function OrgNav({ fallbackOrgSlug }: { fallbackOrgSlug: string })
 function SubLink({ item, base, pathname }: { item: OrgNavItem; base: string; pathname: string }) {
   const href = `${base}/${item.path}`
   const active = pathname.startsWith(href)
+
+  if (item.disabled) {
+    return (
+      <div
+        aria-disabled="true"
+        title="Belum tersedia"
+        style={PJ}
+        className="flex items-center gap-2.5 h-8 rounded-md text-[12.5px] font-semibold border-l-[3px] border-l-[#eef0f2] ml-[18px] pl-[10px] pr-3 text-[#c7cbd1] cursor-not-allowed select-none"
+      >
+        <span className="material-symbols-outlined text-[16px] flex-shrink-0 text-[#d5d9de]">
+          {item.icon}
+        </span>
+        {item.label}
+      </div>
+    )
+  }
+
   return (
     <Link
       href={href}

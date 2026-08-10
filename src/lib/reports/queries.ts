@@ -206,6 +206,32 @@ export async function insertReportTemplate(input: InsertReportTemplateInput): Pr
   return rows[0].id
 }
 
+/**
+ * Overwrites an existing template's name + structure in place, so picking a
+ * template up again and carrying on doesn't force a second copy into the list.
+ * Scoped to org; returns false when the template doesn't belong to it.
+ */
+export async function updateReportTemplate(
+  orgId: string,
+  id: string,
+  input: { name: string; sourceBrandName: string | null; config: ReportTemplateConfig },
+): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE report_templates
+        SET name = $3, source_brand_name = $4, slide_count = $5, config = $6
+      WHERE id = $1 AND organization_id = $2`,
+    [
+      id,
+      orgId,
+      input.name,
+      input.sourceBrandName,
+      input.config.slides?.length ?? 0,
+      JSON.stringify(input.config),
+    ],
+  )
+  return (rowCount ?? 0) > 0
+}
+
 /** Deletes a template (scoped to org); returns true when a row was removed. */
 export async function deleteReportTemplate(orgId: string, id: string): Promise<boolean> {
   const { rowCount } = await pool.query(

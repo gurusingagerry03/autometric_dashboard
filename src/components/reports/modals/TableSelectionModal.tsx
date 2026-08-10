@@ -146,7 +146,7 @@ export default function TableSelectionModal({
                 </div>
                 {availableCompetitors.length === 0 ? (
                   <p className="text-[11px] text-[#94a3b8] leading-snug">
-                    Belum ada competitor dengan data untuk channel/periode ini. Tambah competitor & tunggu sync, atau jalankan medallion.
+                    No competitor has data for this channel and period yet. Add a competitor, then give it time to collect data.
                   </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">

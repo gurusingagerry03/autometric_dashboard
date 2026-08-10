@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
@@ -58,7 +58,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -84,7 +84,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <Card className="flex flex-col">
           <CardHead title="Story Retention Funnel" metricKey="story_metric_daily.taps_fwd_sum" sub="How audiences navigate through your story sequences"
-            action={<FieldTag>taps_forward · taps_back · exits</FieldTag>} />
+            action={<FieldTag>Taps forward · Taps back · Exits</FieldTag>} />
           <div className="px-4 pb-4 pt-3">
             {data.funnel.some(f => f.value > 0)
               ? <HBars items={data.funnel.map(f => ({
@@ -98,7 +98,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
         </Card>
 
         <Card className="flex flex-col">
-          <CardHead title="Story Type Performance" metricKey="story_type_daily.story_type" action={<FieldTag>story_type field</FieldTag>} />
+          <CardHead title="Story Type Performance" metricKey="story_type_daily.story_type" action={<FieldTag>By story type</FieldTag>} />
           <div className="flex items-center justify-center gap-6 pb-1">
             <Badge text="Avg Reach" color="#e7a6bd" />
             <Badge text="Avg Replies" color="#6c4cd6" />
@@ -110,7 +110,8 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
                   bars={data.typePerf.map(s => s.reach)}
                   line={data.typePerf.map(s => s.replies)}
                   leftMax={reachMax} rightMax={repliesMax} height={250}
-                  fmtLeft={n => fmtNum(n)} />
+                  fmtLeft={n => fmtNum(n)}
+                  barName="Avg Reach" lineName="Avg Replies" fmtRight={n => fmtNum(n)} />
               : <div className="h-[250px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data tipe story.</div>}
           </div>
           <div className="mx-4 mb-4 mt-auto">

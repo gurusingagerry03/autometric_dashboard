@@ -1,4 +1,4 @@
-import pool from '@/lib/db'
+﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type {
   OverviewKpi, TrendSeries, DashPlatform, ContributorRow, RelevanceTierRow, UgcPost,
@@ -128,7 +128,7 @@ function buildKpis(cur: ProfDay[], prev: ProfDay[]): OverviewKpi[] {
   return [
     { key: 'foll', label: 'Total Tracked Followers', icon: 'group', value: fmtNum(follCur), ...deltaStr(follCur, follStart), spark: cur.length ? cur.map(r => Math.round(r.foll)) : [0] },
     { key: 'igr', label: 'IG Profile Reach', icon: 'ads_click', value: fmtNum(igCur), ...deltaStr(igCur, igPrev), spark: cur.length ? cur.map(r => Math.round(r.igReach)) : [0] },
-    { key: 'tkv', label: 'TK Profile Views', icon: 'visibility', value: fmtNum(tkCur), ...deltaStr(tkCur, tkPrev), spark: cur.length ? cur.map(r => Math.round(r.tkVisit)) : [0] },
+    { key: 'tkv', label: 'TT Profile Views', icon: 'visibility', value: fmtNum(tkCur), ...deltaStr(tkCur, tkPrev), spark: cur.length ? cur.map(r => Math.round(r.tkVisit)) : [0] },
     { key: 'fbv', label: 'FB Profile Visits', icon: 'person', value: fmtNum(fbCur), ...deltaStr(fbCur, fbPrev), spark: cur.length ? cur.map(r => Math.round(r.fbVisit)) : [0] },
   ]
 }

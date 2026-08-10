@@ -227,6 +227,8 @@ function channelValue(ch: TableChannel, id: string, a: PostAgg, g: GoldAgg): num
     case 'avg_shares': return perPost(a.shares)
     case 'avg_saved': return perPost(a.saves)
     case 'avg_reposts': return perPost(a.repost)
+    case 'eng_owned': return a.eng
+    case 'eng_public': return a.engPub
     case 'avg_eng_owned': return perPost(a.eng)
     case 'avg_eng_public': return perPost(a.engPub)
     case 'avg_reach': return perPost(a.reach)
@@ -347,7 +349,9 @@ function allContentValues(rows: PostRow[]): Record<string, number | null> {
 // One window's Channel Performance values, keyed by channel_level.allColumns ids.
 // Averages are per day (distinct gold metric_date count in the window). "Profile
 // Views" has no distinct gold source, so it (and its average) is null → "—".
-function allChannelValues(g: GoldAgg, cnt: number, days: number): Record<string, number | null> {
+// Engagement comes from the post aggregate `a` (same source as the per-channel
+// table's Avg. Engagement), since brand_metric_daily isn't queried for it here.
+function allChannelValues(g: GoldAgg, a: PostAgg, days: number): Record<string, number | null> {
   const perDay = (sum: number | null): number | null => (days > 0 && sum != null ? sum / days : null)
   return {
     total_followers: g.followers,
@@ -357,7 +361,9 @@ function allChannelValues(g: GoldAgg, cnt: number, days: number): Record<string,
     profile_reach: g.profileReach, avg_profile_reach: perDay(g.profileReach),
     profile_views: null, avg_profile_views: null,
     profile_visit: g.profileViews, avg_profile_visit: perDay(g.profileViews), // g.profileViews = profile_visit_sum
-    total_posts: cnt > 0 ? cnt : null,
+    total_posts: a.cnt > 0 ? a.cnt : null,
+    eng_owned: a.eng, avg_eng_owned: perDay(a.eng),
+    eng_public: a.engPub, avg_eng_public: perDay(a.engPub),
   }
 }
 
@@ -543,7 +549,7 @@ export async function getReportTableMetrics(
     // period (a platform with no posts / no profile snapshots is left out).
     if (curPostRows.length > 0) contentByPlatform[ch] = allContentValues(curPostRows)
     if (curGoldRows.length > 0) {
-      channelByPlatform[ch] = allChannelValues(curGold, curPosts.cnt, new Set(curGoldRows.map(r => r.metric_date)).size)
+      channelByPlatform[ch] = allChannelValues(curGold, curPosts, new Set(curGoldRows.map(r => r.metric_date)).size)
     }
   }
 
@@ -564,8 +570,8 @@ export async function getReportTableMetrics(
   const dayCount = (rows: GoldRow[]) => new Set(rows.map(r => r.metric_date)).size
   content['all'] = pairSection(allContentValues(allCurPostRows), allContentValues(allPrevPostRows))
   channel['all'] = pairSection(
-    allChannelValues(allCurGold, allCurPosts.cnt, dayCount(allCurGoldRows)),
-    allChannelValues(allPrevGold, allPrevPosts.cnt, dayCount(allPrevGoldRows)),
+    allChannelValues(allCurGold, allCurPosts, dayCount(allCurGoldRows)),
+    allChannelValues(allPrevGold, allPrevPosts, dayCount(allPrevGoldRows)),
   )
   injectCustomMetrics(customDefs, 'all', content['all']!, channel['all']!, allCurPosts, allPrevPosts, allCurGold, allPrevGold)
 

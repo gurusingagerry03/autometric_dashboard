@@ -197,7 +197,7 @@ export default function SchedulerSettingsPage() {
             <div className="min-w-0 mr-4">
               <p className="text-[14px] font-semibold text-[#0f172a]" style={PJB}>Run Manual</p>
               <p className="text-[12.5px] mt-0.5" style={PJB}>
-                {runState === 'running' && <span className="text-[#3b82f6]">Sedang sync semua akun…</span>}
+                {runState === 'running' && <span className="text-[#3b82f6]">Refreshing every account…</span>}
                 {runState === 'done' && runResult && (
                   <span className="text-[#166534]">
                     Selesai · {runResult.accounts} akun · {runResult.success} berhasil
@@ -205,7 +205,7 @@ export default function SchedulerSettingsPage() {
                   </span>
                 )}
                 {runState === 'error' && <span className="text-[#ef4444]">{runError}</span>}
-                {runState === 'idle' && <span className="text-[#94a3b8]">Jalankan sync manual untuk semua akun</span>}
+                {runState === 'idle' && <span className="text-[#94a3b8]">Refresh the data for every account now</span>}
               </p>
             </div>
             <button onClick={runNow} disabled={runState === 'running'} style={PJB}

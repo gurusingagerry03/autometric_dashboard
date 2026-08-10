@@ -162,6 +162,15 @@ export async function updateBrandName(brandId: string, name: string): Promise<vo
   await pool.query(`UPDATE brands SET name = $1 WHERE id = $2`, [name, brandId])
 }
 
+/**
+ * Sets the brand's avatar, or clears it with null (the UI then falls back to the
+ * initials badge). Unlike the auto-fill on account connect — which only writes
+ * when profile_url IS NULL — this always wins: it's a deliberate user choice.
+ */
+export async function updateBrandAvatar(brandId: string, profileUrl: string | null): Promise<void> {
+  await pool.query(`UPDATE brands SET profile_url = $1 WHERE id = $2`, [profileUrl, brandId])
+}
+
 // Soft delete: l2_gold declares ON DELETE RESTRICT foreign keys to public.brands
 // (see scripts/add-medallion-fks.js), so a real DELETE aborts for any brand that
 // has gold data. Marking `deleted_at` hides the brand from every read path while

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { DashBrand } from '@/components/dashboard/data'
-import type { ReportTemplateConfig, ReportTemplateRecord } from '@/lib/reports/data/slideModel'
+import type { ReportTemplateRecord } from '@/lib/reports/data/slideModel'
 import { REPORT_FONTS, FONT_META, fontStack } from '@/lib/reports/data/fonts'
 import { MONTHS, YEARS } from './constants'
 import { PJ, Label, Field } from './ui'
@@ -10,7 +10,7 @@ import { PJ, Label, Field } from './ui'
 export default function SetupStep(props: {
   brands: DashBrand[]
   templates: ReportTemplateRecord[]
-  onUseTemplate: (config: ReportTemplateConfig) => boolean
+  onUseTemplate: (template: ReportTemplateRecord) => boolean
   brandId: string; onBrand: (id: string) => void
   month: string; setMonth: (v: string) => void; year: number; setYear: (v: number) => void
   title: string; setTitle: (v: string) => void; subtitle: string; setSubtitle: (v: string) => void
@@ -35,7 +35,7 @@ export default function SetupStep(props: {
   function handlePickTemplate(id: string) {
     if (!id) { setPickedId(''); return }
     const t = props.templates.find(x => x.id === id)
-    if (t && props.onUseTemplate(t.config)) setPickedId(id)
+    if (t && props.onUseTemplate(t)) setPickedId(id)
   }
 
   return (

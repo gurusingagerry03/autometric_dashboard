@@ -1,4 +1,4 @@
-import pool from '@/lib/db'
+﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type {
   OverviewKpi, TrendSeries, TrendMetric, DashPlatform, BrandMatrixRow, ContentAttribute,
@@ -133,7 +133,7 @@ function buildKpis(cur: Totals, prev: Totals, s: Awaited<ReturnType<typeof daily
     { key: 'reach', label: 'Total Reach', icon: 'ads_click', value: fmtNum(cur.reach), ...deltaStr(cur.reach, prev.reach), spark: s.reach.length ? s.reach : [0] },
     { key: 'eng', label: 'Total Engagement', icon: 'favorite', value: fmtNum(cur.eng), ...deltaStr(cur.eng, prev.eng), spark: s.eng.length ? s.eng : [0] },
     { key: 'er', label: 'Blended Eng. Rate', icon: 'bolt', value: `${erCur.toFixed(2)}%`, delta: `${erDelta >= 0 ? '+' : ''}${erDelta.toFixed(2)}pts`, good: erDelta >= 0, spark: s.er.length ? s.er : [0] },
-    { key: 'views', label: 'TK Video Views', icon: 'smart_display', value: fmtNum(cur.tkviews), ...deltaStr(cur.tkviews, prev.tkviews), spark: s.tkviews.length ? s.tkviews : [0] },
+    { key: 'views', label: 'TT Video Views', icon: 'smart_display', value: fmtNum(cur.tkviews), ...deltaStr(cur.tkviews, prev.tkviews), spark: s.tkviews.length ? s.tkviews : [0] },
     { key: 'growth', label: 'Net Follower Growth', icon: 'group_add', value: `${cur.net >= 0 ? '+' : ''}${fmtNum(cur.net)}`, ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
   ]
 }

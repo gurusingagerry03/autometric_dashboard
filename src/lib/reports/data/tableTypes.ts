@@ -143,10 +143,17 @@ const CHANNEL_ALL_COLUMNS: TableColumn[] = [
   { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
   { id: 'avg_profile_visit', label: 'Avg. Profile Visit', format: 'number' },
   { id: 'total_posts', label: 'Total Post', format: 'number' },
+  // Engagement earned across the period. Like every other Avg. column in this
+  // table the average is PER DAY (the Content Performance table averages per post).
+  { id: 'eng_owned', label: 'Engagement', format: 'compact' },
+  { id: 'avg_eng_owned', label: 'Avg. Engagement', format: 'compact' },
+  { id: 'eng_public', label: 'Engagement Public', format: 'compact' },
+  { id: 'avg_eng_public', label: 'Avg. Engagement Public', format: 'compact' },
 ]
 const CHANNEL_ALL_DEFAULTS = [
   'total_followers', 'followers_net_growth', 'new_follows', 'unfollows',
   'profile_reach', 'profile_views', 'profile_visit', 'total_posts',
+  'eng_owned', 'avg_eng_owned',
 ]
 
 export const TABLE_TYPES: Record<string, TableType> = {
@@ -185,7 +192,7 @@ export const TABLE_TYPES: Record<string, TableType> = {
   channel_level: {
     id: 'channel_level', label: 'Channel Level Metric', icon: 'insights',
     description: 'Profile-wide metrics — this period vs last.', rowType: 'comparison', channelScoped: true,
-    defaultColumns: ['total_followers', 'followers_net_growth', 'profile_views', 'total_posts', 'avg_eng_owned', 'avg_er_reach'],
+    defaultColumns: ['total_followers', 'followers_net_growth', 'profile_views', 'total_posts', 'eng_owned', 'avg_eng_owned', 'avg_er_reach'],
     // Cross-channel "all" view (Channel Performance spec) — see CHANNEL_ALL_COLUMNS.
     // Daily profile aggregates: SUM column (period total) + Avg. column (per day).
     // Followers & Total Post are SUM only. "Profile Views" has no gold source → "—".
@@ -208,6 +215,8 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'avg_shares', label: 'Avg. Shares', format: 'number' },
       { id: 'avg_saved', label: 'Avg. Saved', format: 'number', channels: ['instagram', 'tiktok'] },
       { id: 'avg_reposts', label: 'Avg. Reposts', format: 'number', channels: ['instagram'] },
+      { id: 'eng_owned', label: 'Engagement Owned', format: 'compact' },
+      { id: 'eng_public', label: 'Engagement Public', format: 'compact' },
       { id: 'avg_eng_owned', label: 'Avg. Engagement Owned', format: 'compact' },
       { id: 'avg_eng_public', label: 'Avg. Engagement Public', format: 'compact' },
       { id: 'avg_reach', label: 'Avg. Reach', format: 'compact' },

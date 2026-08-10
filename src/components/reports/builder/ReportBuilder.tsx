@@ -7,7 +7,7 @@ import { CoverColors, CoverMode, extractPalette, normalizeHex } from '@/lib/repo
 import { COVER_TEMPLATES, getTemplate } from '@/lib/reports/cover/templates'
 import { exportCoverPptx } from '@/lib/reports/export/exportCover'
 import { exportReportPptx } from '@/lib/reports/export/exportReport'
-import { downloadBlob, saveExportToLibrary, saveTemplateToLibrary } from '@/lib/reports/export/clientSave'
+import { downloadBlob, saveExportToLibrary, saveTemplateToLibrary, updateTemplateInLibrary } from '@/lib/reports/export/clientSave'
 import { ReportTableMetrics } from '@/lib/reports/data/tableTypes'
 import { ReportChartMetrics } from '@/lib/reports/data/chartTypes'
 import { ReportKpiMetrics } from '@/lib/reports/data/kpiMetrics'
@@ -96,6 +96,8 @@ export default function ReportBuilder({
   })
   const [isExporting, setIsExporting] = useState(false)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
+  // Set once the user starts from a saved template, so saving can update it in place.
+  const [activeTemplate, setActiveTemplate] = useState<{ id: string; name: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const coverCaptureRef = useRef<HTMLDivElement>(null)
 
@@ -328,7 +330,8 @@ export default function ReportBuilder({
 
   // Apply a saved template from the Setup step: replace slides + cover style only.
   // Brand/period/colors/logo stay as the user set them. Returns false if cancelled.
-  function applyTemplate(config: ReportTemplateConfig): boolean {
+  function applyTemplate(t: ReportTemplateRecord): boolean {
+    const config = t.config
     if (slides.length > 0 && !window.confirm('Replace the current slides with this template’s structure?')) return false
     setSlides(seedTemplateSlides(config.slides))
     setTemplateId(config.cover.templateId)
@@ -336,19 +339,28 @@ export default function ReportBuilder({
     setFont(config.cover.font)
     setTitle(config.cover.title)
     setSubtitle(config.cover.subtitle)
+    // Remember where the structure came from so the next save can go back onto
+    // it — otherwise resuming work always leaves a duplicate template behind.
+    setActiveTemplate({ id: t.id, name: t.name })
     return true
   }
 
   // Persist the current report structure as a reusable template. Called by the
   // Save Template modal (which owns the name field + loading/error state).
-  async function saveTemplate(name: string): Promise<{ ok: boolean; error?: string }> {
+  // `existingId` overwrites that template; null creates a new one.
+  async function saveTemplate(name: string, existingId: string | null): Promise<{ ok: boolean; error?: string }> {
     // A template = structure only: cover style + slides, no brand/period/data.
     const config: ReportTemplateConfig = {
       cover: { templateId, mode, font, title, subtitle },
       slides,
     }
-    const res = await saveTemplateToLibrary(orgId, name, brandName || null, config)
-    if (res.ok) router.refresh()
+    const res = existingId
+      ? await updateTemplateInLibrary(orgId, existingId, name, brandName || null, config)
+      : await saveTemplateToLibrary(orgId, name, brandName || null, config)
+    if (res.ok) {
+      if (existingId) setActiveTemplate({ id: existingId, name })
+      router.refresh()
+    }
     return res
   }
 
@@ -634,6 +646,7 @@ export default function ReportBuilder({
         defaultName={title || 'My report template'}
         onClose={() => setSaveTemplateOpen(false)}
         onSave={saveTemplate}
+        activeTemplate={activeTemplate}
       />
     </div>
     </ReportPostContext.Provider>

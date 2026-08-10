@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
@@ -80,7 +80,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Memuat data dari gold layer…</p>
+        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
       </div>
     )
   }
@@ -106,7 +106,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {/* Demographics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <Card className="flex flex-col">
-          <CardHead title="Audience Age Distribution" metricKey="audience_demographics_daily.age" sub="unified_audience · share by age bucket" />
+          <CardHead title="Audience Age Distribution" metricKey="audience_demographics_daily.age" sub="Share of followers by age group" />
           <div className="px-4 pb-4 pt-3">
             {data.age.some(a => a.value > 0)
               ? <HBars items={data.age.map(a => ({
@@ -312,7 +312,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {/* UGC */}
       <SectionHeader icon="loyalty">User-Generated Content — Tagged Posts</SectionHeader>
       <Card className="overflow-hidden">
-        <CardHead title="Tagged Posts" metricKey="ugc_tagged_posts.total_engagement" sub="instagram_tagged_post · username, like_count, comment_count" />
+        <CardHead title="Tagged Posts" metricKey="ugc_tagged_posts.total_engagement" sub="Instagram posts that tagged you, with their likes and comments" />
         <div className="overflow-x-auto">
           <div className="min-w-[760px]">
             <div className={`grid ${UGC_COLS} gap-2 px-4 py-2.5 border-y border-[#eef0f2] bg-[#fafbfb]`}>

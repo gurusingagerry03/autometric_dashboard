@@ -60,6 +60,34 @@ export async function saveExportToLibrary(
   return { ok: true }
 }
 
+/** Overwrites an existing template with the current structure. */
+export async function updateTemplateInLibrary(
+  orgId: string,
+  templateId: string,
+  name: string,
+  sourceBrandName: string | null,
+  config: ReportTemplateConfig,
+): Promise<SaveExportResult> {
+  let res: Response
+  try {
+    res = await fetch(
+      `/api/organizations/${encodeURIComponent(orgId)}/reports/templates/${encodeURIComponent(templateId)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, sourceBrandName, config }),
+      },
+    )
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Network error' }
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    return { ok: false, error: data?.error ?? `Update failed (${res.status})` }
+  }
+  return { ok: true }
+}
+
 /** Saves a reusable report template (cover style + slides, no data) to the org. */
 export async function saveTemplateToLibrary(
   orgId: string,

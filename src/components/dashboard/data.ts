@@ -1,4 +1,4 @@
-// Data layer for the analytics dashboard. Currently dummy — swap these exports for
+﻿// Data layer for the analytics dashboard. Currently dummy — swap these exports for
 // real queries later without touching the view components.
 // Everything here is fabricated but internally consistent so the UI reads well.
 
@@ -288,7 +288,7 @@ export const OVERVIEW_KPIS: OverviewKpi[] = [
   { key: 'reach',  label: 'Total Reach (30d)',   icon: 'ads_click',     value: '48.7M', delta: '+14%',        good: true, spark: [38, 40, 39, 42, 44, 43, 46, 47, 48.7] },
   { key: 'eng',    label: 'Total Engagement',    icon: 'favorite',      value: '2.1M',  delta: '+22%',        good: true, spark: [1.5, 1.6, 1.7, 1.7, 1.8, 1.9, 2.0, 2.1] },
   { key: 'er',     label: 'Blended Eng. Rate',   icon: 'bolt',          value: '4.3%',  delta: '+0.8pts',     good: true, spark: [3.4, 3.6, 3.7, 3.8, 4.0, 4.1, 4.2, 4.3] },
-  { key: 'views',  label: 'TK Video Views',      icon: 'smart_display', value: '18.2M', delta: '+44%',        good: true, spark: [10, 11, 12, 13, 15, 16, 17, 18.2] },
+  { key: 'views',  label: 'TT Video Views',      icon: 'smart_display', value: '18.2M', delta: '+44%',        good: true, spark: [10, 11, 12, 13, 15, 16, 17, 18.2] },
   { key: 'growth', label: 'Net Follower Growth', icon: 'group_add',     value: '+104K', delta: 'TikTok excl.', good: true, spark: [60, 70, 78, 85, 90, 96, 100, 104] },
 ]
 
@@ -369,7 +369,7 @@ export const HEATMAP_TIME_LABELS = ['08:00', '12:00', '15:00', '18:00', '20:00',
 export const CONTENT_OVERVIEW_KPIS: OverviewKpi[] = [
   { key: 'posts',  label: 'Total Posts (Period)',      icon: 'grid_view',     value: '291',   delta: '18% vs prior', good: true,  spark: [210, 225, 234, 240, 255, 268, 280, 291] },
   { key: 'saves',  label: 'Avg. Saves Rate (IG)',      icon: 'bookmark',      value: '2.3%',  delta: '0.4pts',       good: true,  spark: [1.8, 1.9, 1.95, 2.0, 2.1, 2.2, 2.25, 2.3] },
-  { key: 'compl',  label: 'Avg. Completion Rate (TK)', icon: 'smart_display', value: '41%',   delta: '3pts',         good: false, spark: [46, 45, 44, 44, 43, 42, 41.5, 41] },
+  { key: 'compl',  label: 'Avg. Completion Rate (TT)', icon: 'smart_display', value: '41%',   delta: '3pts',         good: false, spark: [46, 45, 44, 44, 43, 42, 41.5, 41] },
   { key: 'clicks', label: 'Link Clicks (FB)',          icon: 'ads_click',     value: '14.2K', delta: '22%',          good: true,  spark: [9.5, 10, 11, 11.5, 12.5, 13, 13.8, 14.2] },
 ]
 
@@ -449,7 +449,7 @@ export const TIKTOK_COMPLETION_INSIGHT =
 export const AUDIENCE_KPIS: OverviewKpi[] = [
   { key: 'foll', label: 'Total Tracked Followers', icon: 'group',      value: '23.4M', delta: '8.2% MoM', good: true,  spark: [20.1, 20.8, 21.3, 21.9, 22.4, 22.8, 23.1, 23.4] },
   { key: 'ige',  label: 'IG Accounts Engaged',     icon: 'favorite',   value: '1.2M',  delta: '11%',      good: true,  spark: [0.9, 0.95, 1.0, 1.05, 1.08, 1.12, 1.16, 1.2] },
-  { key: 'tkv',  label: 'TK Profile Views',        icon: 'visibility', value: '4.8M',  delta: '34%',      good: true,  spark: [3.0, 3.3, 3.6, 3.9, 4.1, 4.4, 4.6, 4.8] },
+  { key: 'tkv',  label: 'TT Profile Views',        icon: 'visibility', value: '4.8M',  delta: '34%',      good: true,  spark: [3.0, 3.3, 3.6, 3.9, 4.1, 4.4, 4.6, 4.8] },
   { key: 'fbv',  label: 'FB Profile Visits',       icon: 'person',     value: '890K',  delta: '0.4%',     good: true,  flat: true, spark: [880, 885, 882, 888, 884, 889, 887, 890] },
 ]
 
@@ -637,7 +637,7 @@ export const WATCH_INSIGHT =
 export const COMMUNITY_KPIS: OverviewKpi[] = [
   { key: 'c-total', label: 'Total Comments Tracked', icon: 'forum',         value: '84.2K', delta: '31%',  good: true,  spark: [58, 62, 66, 70, 74, 78, 81, 84.2] },
   { key: 'c-igr',   label: 'IG Avg. Replies/Comment', icon: 'reply',        value: '1.8',   delta: '0.3',  good: true,  spark: [1.4, 1.45, 1.5, 1.6, 1.65, 1.7, 1.75, 1.8] },
-  { key: 'c-tkr',   label: 'TK Comment-Like Ratio',   icon: 'thumb_up',     value: '0.12',  delta: 'high', good: true,  spark: [0.08, 0.09, 0.095, 0.1, 0.105, 0.11, 0.115, 0.12] },
+  { key: 'c-tkr',   label: 'TT Comment-Like Ratio',   icon: 'thumb_up',     value: '0.12',  delta: 'high', good: true,  spark: [0.08, 0.09, 0.095, 0.1, 0.105, 0.11, 0.115, 0.12] },
   { key: 'c-fbl',   label: 'FB Avg. Likes/Comment',   icon: 'favorite',     value: '4.2',   delta: 'stable', good: true, flat: true, spark: [4.1, 4.2, 4.15, 4.2, 4.18, 4.2, 4.19, 4.2] },
 ]
 

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { ChartTooltip, useChartTooltip } from '@/components/ui/ChartTooltip'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import {
   ChartConfig, Series, LineSeries, BarSeries, resolveBarData, resolveLineData, chartIcon, chartSummary,
@@ -120,19 +121,58 @@ function ChartFrame({ labels, left, right, horizontal, children }: { labels: str
 
 // Multi-line plot — each series maps against its OWN scale (dual-axis), so a
 // large-magnitude metric and a small one both fill the plot height.
-function MultiLine({ series }: { series: LineSeries[] }) {
+// Hovering anywhere over the plot reads out every series at that x position.
+function MultiLine({ series, labels }: { series: LineSeries[]; labels: string[] }) {
   const w = 100, h = 56
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [hover, setHover] = useState<number | null>(null)
+  const { tip, show, hide } = useChartTooltip()
+
+  const len = Math.max(...series.map(s => s.data.length), 0)
+  const xAt = (i: number) => (i / Math.max(len - 1, 1)) * w
+  const yAt = (s: LineSeries, i: number) => {
+    const span = (s.scale.max - s.scale.min) || 1
+    return h - (((s.data[i] ?? 0) - s.scale.min) / span) * h
+  }
+
+  function onMove(e: React.MouseEvent<SVGSVGElement>) {
+    const el = svgRef.current
+    if (!el || !len) return
+    const r = el.getBoundingClientRect()
+    const i = Math.min(len - 1, Math.max(0, Math.round(((e.clientX - r.left) / r.width) * (len - 1))))
+    setHover(i)
+    show(e, labels[i], series.map(s => ({ label: s.name, value: compactNum(s.data[i] ?? 0), color: s.color })))
+  }
+
+  function onLeave() { setHover(null); hide() }
+
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
-      {series.map(s => {
-        const span = (s.scale.max - s.scale.min) || 1
-        const pts = s.data.map((v, i) => [(i / Math.max(s.data.length - 1, 1)) * w, h - ((v - s.scale.min) / span) * h])
-        return (
-          <polyline key={s.name} points={pts.map(p => p.join(',')).join(' ')} fill="none" stroke={s.color}
-            strokeWidth={2.4} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-        )
-      })}
-    </svg>
+    <>
+      <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none"
+        onMouseMove={onMove} onMouseLeave={onLeave}>
+        {series.map(s => {
+          const span = (s.scale.max - s.scale.min) || 1
+          const pts = s.data.map((v, i) => [(i / Math.max(s.data.length - 1, 1)) * w, h - ((v - s.scale.min) / span) * h])
+          return (
+            <polyline key={s.name} points={pts.map(p => p.join(',')).join(' ')} fill="none" stroke={s.color}
+              strokeWidth={2.4} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          )
+        })}
+        {hover !== null && (
+          <g pointerEvents="none">
+            <line x1={xAt(hover)} x2={xAt(hover)} y1={0} y2={h} stroke="#cbd5e1" strokeWidth={1}
+              strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+            {series.map(s => (
+              // r is in viewBox units on a non-uniformly scaled axis, so an <ellipse>
+              // with matched rx/ry would still skew — a small circle reads fine here.
+              <circle key={s.name} cx={xAt(hover)} cy={yAt(s, hover)} r={1.1} fill="#fff"
+                stroke={s.color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+            ))}
+          </g>
+        )}
+      </svg>
+      <ChartTooltip tip={tip} />
+    </>
   )
 }
 
@@ -144,26 +184,45 @@ function GroupedBars({ labels, series, orientation }: { labels: string[]; series
   const n = Math.max(series.length, 1)
   const bGap = 0.6
   const frac = (s: BarSeries, gi: number) => Math.max(0, Math.min(1, (s.data[gi] ?? 0) / (s.scale.max || 1)))
+  const { tip, show, hide } = useChartTooltip()
+
+  // Bars are thin slivers on a 100×56 viewBox, so each one carries its own hover
+  // rather than trying to hit-test a shared band.
+  const hoverProps = (s: BarSeries, gi: number) => ({
+    className: 'cursor-pointer',
+    onMouseEnter: (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: compactNum(s.data[gi] ?? 0), color: s.color }]),
+    onMouseMove:  (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: compactNum(s.data[gi] ?? 0), color: s.color }]),
+    onMouseLeave: hide,
+  })
+
   if (orientation === 'horizontal') {
     const gH = (h - gGap * (groups - 1)) / groups
     const bh = (gH - bGap * (n - 1)) / n
     return (
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
-        {labels.map((_, gi) => series.map((s, si) => (
-          <rect key={`${gi}-${si}`} x={0} y={gi * (gH + gGap) + si * (bh + bGap)} width={frac(s, gi) * w} height={bh} rx={0.6} fill={s.color} />
-        )))}
-      </svg>
+      <>
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
+          {labels.map((_, gi) => series.map((s, si) => (
+            <rect key={`${gi}-${si}`} x={0} y={gi * (gH + gGap) + si * (bh + bGap)} width={frac(s, gi) * w} height={bh} rx={0.6} fill={s.color}
+              {...hoverProps(s, gi)} />
+          )))}
+        </svg>
+        <ChartTooltip tip={tip} />
+      </>
     )
   }
   const gW = (w - gGap * (groups - 1)) / groups
   const bw = (gW - bGap * (n - 1)) / n
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
-      {labels.map((_, gi) => series.map((s, si) => {
-        const bh = frac(s, gi) * h
-        return <rect key={`${gi}-${si}`} x={gi * (gW + gGap) + si * (bw + bGap)} y={h - bh} width={bw} height={bh} rx={0.6} fill={s.color} />
-      }))}
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
+        {labels.map((_, gi) => series.map((s, si) => {
+          const bh = frac(s, gi) * h
+          return <rect key={`${gi}-${si}`} x={gi * (gW + gGap) + si * (bw + bGap)} y={h - bh} width={bw} height={bh} rx={0.6} fill={s.color}
+            {...hoverProps(s, gi)} />
+        }))}
+      </svg>
+      <ChartTooltip tip={tip} />
+    </>
   )
 }
 
@@ -186,26 +245,42 @@ function WordCloud({ words }: { words: CloudWordData[] }) {
     setPlaced(computeWordCloud(words))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig])
+
+  const { tip, show, hide } = useChartTooltip()
+  // The layout keeps the word + sentiment but not the count, so read it back here.
+  const freqOf = new Map(words.map(w => [w.word, w.frequency]))
+
   return (
-    <svg viewBox={`0 0 ${WC_W} ${WC_H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" style={{ display: 'block' }}>
-      {placed.map(p => {
-        const pal = SENTIMENT_PALETTES[p.sentiment]
-        const color = pal[Math.floor(whash(p.word + 'c') * pal.length)]
-        return (
-          <text
-            key={p.word}
-            textAnchor="middle"
-            transform={`translate(${p.x.toFixed(2)},${p.y.toFixed(2)})${p.rotate ? ` rotate(${p.rotate})` : ''}`}
-            fontSize={p.fontSize}
-            fontWeight={p.weight}
-            fontFamily={WC_FONT}
-            fill={color}
-          >
-            {p.word}
-          </text>
-        )
-      })}
-    </svg>
+    <>
+      <svg viewBox={`0 0 ${WC_W} ${WC_H}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" style={{ display: 'block' }}>
+        {placed.map(p => {
+          const pal = SENTIMENT_PALETTES[p.sentiment]
+          const color = pal[Math.floor(whash(p.word + 'c') * pal.length)]
+          const lines = [
+            { label: 'Mentions', value: compactNum(freqOf.get(p.word) ?? 0), color },
+            { label: 'Sentiment', value: p.sentiment },
+          ]
+          return (
+            <text
+              key={p.word}
+              textAnchor="middle"
+              transform={`translate(${p.x.toFixed(2)},${p.y.toFixed(2)})${p.rotate ? ` rotate(${p.rotate})` : ''}`}
+              fontSize={p.fontSize}
+              fontWeight={p.weight}
+              fontFamily={WC_FONT}
+              fill={color}
+              className="cursor-pointer"
+              onMouseEnter={e => show(e, p.word, lines)}
+              onMouseMove={e => show(e, p.word, lines)}
+              onMouseLeave={hide}
+            >
+              {p.word}
+            </text>
+          )
+        })}
+      </svg>
+      <ChartTooltip tip={tip} />
+    </>
   )
 }
 
@@ -264,7 +339,7 @@ function RenderChart({ config, colors, channel }: { config: ChartConfig; colors:
           left={{ scale: left.scale, color: left.color }}
           right={right ? { scale: right.scale, color: right.color } : undefined}
         >
-          <MultiLine series={series} />
+          <MultiLine series={series} labels={labels} />
         </ChartFrame>
       </div>
     </div>
