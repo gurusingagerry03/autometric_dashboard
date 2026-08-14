@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { verifyBrandAccess, addCompetitor, listBrandCompetitors, countBrandCompetitorsOnPlatform } from '@/lib/brands/queries'
-import { PLATFORM_LIST, PLATFORM_CONFIG, type Platform } from '@/lib/brands/types'
+import { COMPETITOR_PLATFORM_LIST, PLATFORM_CONFIG, type Platform } from '@/lib/brands/types'
 import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
 import {
   initialFbCompetitorSync, initialTiktokCompetitorSync, initialIgCompetitorSync,
@@ -61,7 +61,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     const platform = typeof body?.platform === 'string' ? body.platform.trim() : ''
     const username  = typeof body?.username  === 'string' ? body.username.trim().replace(/^@/, '') : ''
 
-    if (!platform || !PLATFORM_LIST.includes(platform as never)) {
+    // Only the platforms with a competitor scrape pipeline — matching the pickers,
+    // so a hand-crafted request can't create a competitor nothing would ever sync.
+    if (!platform || !COMPETITOR_PLATFORM_LIST.includes(platform as never)) {
       return NextResponse.json({ error: 'Valid platform is required.' }, { status: 400 })
     }
     if (!username) {

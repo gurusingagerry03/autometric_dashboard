@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
-import { Brand, CompetitorAccount, Platform, SocialAccount, PLATFORM_LIST, PLATFORM_CONFIG } from '@/lib/brands/types'
+import { Brand, CompetitorAccount, Platform, SocialAccount, COMPETITOR_PLATFORM_LIST, PLATFORM_CONFIG } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
 import { CSV_PLATFORMS } from '@/lib/csv/types'
 import { useOAuthConnect, CONNECT_OPTIONS } from '@/hooks/useOAuthConnect'
@@ -71,7 +71,7 @@ function PlatformPicker({ selected, onSelect, used }: {
 }) {
   return (
     <div className="flex gap-2">
-      {PLATFORM_LIST.map(p => {
+      {COMPETITOR_PLATFORM_LIST.map(p => {
         const count = used[p] ?? 0
         const full  = count >= MAX_COMPETITORS_PER_PLATFORM
         return (

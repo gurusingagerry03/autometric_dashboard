@@ -15,7 +15,7 @@ export const ORG_NAV_ITEMS: OrgNavItem[] = [
       { label: 'Overview',           path: 'dashboard/overview',  icon: 'grid_view' },
       { label: 'Content Overview',   path: 'dashboard/content',   icon: 'stacked_bar_chart' },
       { label: 'Audience Deep Dive', path: 'dashboard/audience',  icon: 'groups' },
-      { label: 'Stories',            path: 'dashboard/stories',   icon: 'amp_stories' },
+      { label: 'Instagram Stories',  path: 'dashboard/stories',   icon: 'amp_stories' },
       { label: 'TikTok Deep',        path: 'dashboard/tiktok',    icon: 'music_note', disabled: true },
       { label: 'Community',          path: 'dashboard/community', icon: 'diversity_3' },
       { label: 'Campaign Analysis',  path: 'dashboard/campaign',  icon: 'campaign' },

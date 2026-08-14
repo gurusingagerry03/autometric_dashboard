@@ -110,6 +110,16 @@ export function fmtNum(n: number): string {
   return String(n)
 }
 
+/**
+ * Exact whole number with US grouping (1234 → "1,234"). Use it where the reader
+ * needs the precise figure — table cells and leaderboards — while `fmtNum` stays
+ * for the compact "1.2K" headline treatment. Both follow the same convention:
+ * COMMA groups thousands, PERIOD is the decimal point.
+ */
+export function fmtInt(n: number): string {
+  return Math.round(n).toLocaleString('en-US')
+}
+
 // Query fragment a tab appends to its data fetch. Custom ranges send explicit
 // start/end dates; presets send the label the API maps to a day count.
 export function buildPeriodQS(period: Period, start: string | null, end: string | null): string {
@@ -406,6 +416,8 @@ export interface TopPostRow {
   shares: number | null
   er: number
   tag: 'Organic' | 'Boosted'
+  /** Permalink to the post on its platform; null when the source has no URL. */
+  link?: string | null
 }
 
 export const TOP_POSTS_TABLE: TopPostRow[] = [
@@ -541,6 +553,8 @@ export interface UgcPost {
   comments: number
   total: number
   date: string
+  /** Permalink to the tagged post; null when the source has no URL. */
+  link?: string | null
 }
 export const UGC_POSTS: UgcPost[] = [
   { username: '@nayya070805',     format: 'Reel',  caption: 'Udah sama Manda aja, udah dicintai secara ugal ugalan…', likes: 342, comments: 28, total: 370, date: 'Jun 9' },

@@ -23,6 +23,8 @@ export interface CampaignPostRow {
   comments: number
   er: number
   hashtags: string[]
+  /** Permalink to the post on its platform; null when the source has no URL. */
+  link?: string | null
 }
 
 export interface CampaignAnalysis {
@@ -39,9 +41,10 @@ export async function getCampaignPosts(orgId: string, platform: PlatformParam, b
   const { rows } = await pool.query<{
     post_id: string; platform: DashPlatform; content_pillar: string | null; is_boosted: boolean
     caption: string | null; post_date: string; likes: number; comments: number; er: number | null
+    link: string | null
   }>(
     `SELECT v.post_id, v.platform, v.content_pillar, COALESCE(v.is_boosted,false) is_boosted,
-            v.caption, to_char(v.post_date, 'YYYY-MM-DD') post_date,
+            v.caption, v.link, to_char(v.post_date, 'YYYY-MM-DD') post_date,
             COALESCE(v.likes,0)::int likes, COALESCE(v.comments,0)::int comments,
             v.engagement_rate::float er
        FROM l2_gold.v_campaign_posts v
@@ -63,6 +66,7 @@ export async function getCampaignPosts(orgId: string, platform: PlatformParam, b
     comments: r.comments,
     er: +(r.er ?? 0).toFixed(1),
     hashtags: hashtagsOf(r.caption),
+    link: r.link,
   }))
 }
 

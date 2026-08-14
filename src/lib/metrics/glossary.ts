@@ -16,12 +16,19 @@
  */
 
 export interface MetricEntry {
-  /** Indonesian label suggested by the glossary. */
+  /** Metric name shown as the tooltip heading. */
   label: string
   /** Plain-language explanation shown in the tooltip. */
   description: string
   /** Optional caveat rendered in a muted second line. */
   caveat?: string
+  /**
+   * English copy, rendered under the Indonesian text in the same tooltip. Present
+   * only on the metrics the client signed off bilingually (docs/kepiai-Feedback
+   * copy.pdf); entries without it stay Indonesian-only.
+   */
+  descriptionEn?: string
+  caveatEn?: string
 }
 
 /* ── §1 l2_gold.post_metric — per content ─────────────────────────────────── */
@@ -107,17 +114,20 @@ const POST_METRIC: Record<string, MetricEntry> = {
     description: 'Panjang konten video dalam detik.',
   },
   'post_metric.completion_rate': {
-    label: 'Tingkat Tonton Selesai',
-    description: 'Persentase penonton yang menonton video ini sampai selesai.',
+    label: 'Average Completion Rate',
+    description: 'Persentase penonton yang menonton video hingga selesai.',
     caveat: 'Hanya tersedia untuk TikTok.',
+    descriptionEn: 'The percentage of viewers who watched the video until the end.',
+    caveatEn: 'Available for TikTok only.',
   },
   'post_metric.reels_skip_rate': {
     label: 'Reels Skip Rate',
     description: 'Belum tersedia — sumber data dari platform belum menyediakan metrik ini.',
   },
   'post_metric.post_type': {
-    label: 'Jenis Konten',
-    description: 'Jenis konten yang dipublikasikan, misalnya foto, video, reels, atau carousel.',
+    label: 'Post Type Performance',
+    description: 'Perbandingan performa berdasarkan jenis konten yang dipublikasikan, seperti foto, video, Reels, atau carousel.',
+    descriptionEn: 'A comparison of performance across different content types, such as images, videos, Reels, or carousels.',
   },
   'post_metric.content_pillar': {
     label: 'Pilar Konten',
@@ -137,12 +147,14 @@ const POST_METRIC: Record<string, MetricEntry> = {
 
 const BRAND_DAILY: Record<string, MetricEntry> = {
   'brand_metric_daily.post_count': {
-    label: 'Jumlah Konten',
-    description: 'Jumlah konten yang dipublikasikan pada periode ini.',
+    label: 'Total Posts',
+    description: 'Total konten yang dipublikasikan selama periode yang dipilih.',
+    descriptionEn: 'Total content published during the selected period.',
   },
   'brand_metric_daily.engagement_sum': {
-    label: 'Total Interaksi',
-    description: 'Total seluruh interaksi (suka, komentar, bagikan, simpan, repost) dari semua konten yang tayang pada periode ini.',
+    label: 'Total Engagement',
+    description: 'Total interaksi dari seluruh konten yang tayang pada periode ini, termasuk likes, comments, shares, saves, dan reposts.',
+    descriptionEn: 'Total interactions across all content published during this period, including likes, comments, shares, saves, and reposts.',
   },
   'brand_metric_daily.engagement_public_sum': {
     label: 'Interaksi Publik',
@@ -171,9 +183,11 @@ const BRAND_DAILY: Record<string, MetricEntry> = {
     caveat: 'Hanya Instagram.',
   },
   'brand_metric_daily.reach_sum': {
-    label: 'Jangkauan',
-    description: 'Total jangkauan dari semua konten yang tayang pada periode ini.',
-    caveat: 'Penjumlahan antar konten bisa menghitung orang yang sama lebih dari sekali.',
+    label: 'Reach',
+    description: 'Total orang yang dijangkau oleh seluruh konten pada periode ini.',
+    caveat: 'Orang yang sama dapat terhitung lebih dari sekali jika melihat beberapa konten.',
+    descriptionEn: 'Total reach across all content published during this period.',
+    caveatEn: 'The same person may be counted more than once across different content.',
   },
   'brand_metric_daily.views_sum': {
     label: 'Tayangan',
@@ -217,8 +231,9 @@ const BRAND_DAILY: Record<string, MetricEntry> = {
     caveat: 'Hanya tersedia untuk TikTok.',
   },
   'brand_metric_daily.net_growth_sum': {
-    label: 'Pertumbuhan Bersih',
-    description: 'Selisih follower baru dan follower yang hilang pada periode ini.',
+    label: 'Net Follower Growth',
+    description: 'Jumlah follower yang bertambah setelah dikurangi follower yang hilang pada periode ini.',
+    descriptionEn: 'The difference between new followers gained and followers lost during the selected period.',
   },
   'brand_metric_daily.profile_visit_sum': {
     label: 'Kunjungan Profil',
@@ -434,8 +449,9 @@ const AUDIENCE: Record<string, MetricEntry> = {
     description: 'Selisih follower baru dan follower yang hilang pada periode ini.',
   },
   'tiktok_churn_daily.video_views_sum': {
-    label: 'Tayangan Video',
-    description: 'Total tayangan video akun TikTok pada periode ini, diambil dari data tingkat profil.',
+    label: 'TikTok Video Views',
+    description: 'Total tayangan video TikTok pada periode yang dipilih, berdasarkan data dari tingkat profil.',
+    descriptionEn: 'Total TikTok video views during the selected period, based on profile-level data.',
   },
   'audience_demographics_daily.age': {
     label: 'Kelompok Usia',
@@ -545,12 +561,17 @@ const POSTING_TIME: Record<string, MetricEntry> = {
 const DERIVED: Record<string, MetricEntry> = {
   'derived.blended_er': {
     label: 'Blended Engagement Rate',
-    description: 'Rata-rata gabungan tingkat interaksi seluruh channel pada periode terpilih. Dihitung ulang dari total interaksi dibagi total penyebut, bukan merata-ratakan angka harian.',
+    description: 'Tingkat interaksi gabungan dari seluruh channel pada periode yang dipilih.',
+    caveat: 'Dihitung dari total interaksi dibandingkan dengan total basis perhitungan, bukan dari rata-rata engagement rate harian.',
+    descriptionEn: 'The combined engagement rate across all channels during the selected period.',
+    caveatEn: 'Calculated using the total interactions and overall calculation base, rather than averaging daily engagement rates.',
   },
   'derived.avg_saves_rate': {
-    label: 'Rata-rata Saves Rate',
-    description: 'Persentase konten yang disimpan dibanding jangkauannya. Menunjukkan seberapa sering konten dianggap layak disimpan untuk dilihat kembali.',
-    caveat: 'Hanya Instagram — platform lain tidak menyediakan angka simpan.',
+    label: 'Average Saves Rate',
+    description: 'Persentase simpan dibandingkan dengan jangkauan konten, yang menunjukkan seberapa sering konten dianggap layak untuk disimpan.',
+    caveat: 'Hanya tersedia untuk Instagram.',
+    descriptionEn: 'The percentage of saves relative to content reach, showing how often people find the content worth saving.',
+    caveatEn: 'Available for Instagram only.',
   },
   'derived.swipe_up_rate': {
     label: 'Swipe-Up Rate',
@@ -586,9 +607,11 @@ const DERIVED: Record<string, MetricEntry> = {
     caveat: 'Satu orang yang mengikuti beberapa channel terhitung lebih dari sekali.',
   },
   'derived.link_clicks_fb': {
-    label: 'Klik Tautan',
-    description: 'Berapa kali tautan pada konten diklik oleh pengguna.',
+    label: 'Link Clicks',
+    description: 'Total berapa kali tautan dalam konten diklik selama periode yang dipilih.',
     caveat: 'Hanya tersedia untuk Facebook.',
+    descriptionEn: 'Total number of times links in the content were clicked during the selected period.',
+    caveatEn: 'Available for Facebook only.',
   },
   'derived.profile_views': {
     label: 'Kunjungan Profil',
@@ -625,6 +648,46 @@ const DERIVED: Record<string, MetricEntry> = {
   'derived.avg_per_post': {
     label: 'Rata-rata per Konten',
     description: 'Nilai rata-rata metrik ini dibagi jumlah konten yang tayang pada periode terpilih.',
+  },
+  /* ── Chart/card explanations (client copy, docs/kepiai-Feedback copy.pdf) ──
+     These describe a VISUAL, not a raw column, and several of them sit on a card
+     whose underlying metric already has its own entry (post_count, completion_rate,
+     avg_watch_time). They get their own keys so the card can say what the chart
+     shows without overwriting what the metric itself means elsewhere. */
+  'derived.platform_share': {
+    label: 'Platform Share',
+    description: 'Menunjukkan seberapa besar kontribusi masing-masing platform terhadap total reach pada periode yang dipilih.',
+    descriptionEn: 'The percentage contribution of each platform to the total performance during the selected period.',
+  },
+  'derived.content_attribute_breakdown': {
+    label: 'Content Attribute Breakdown',
+    description: 'Performa engagement rate berdasarkan tag konten, dibandingkan dengan rata-rata keseluruhan.',
+    descriptionEn: 'Engagement rate performance by content tag, compared with the overall average.',
+  },
+  'derived.brand_benchmarking': {
+    label: 'Cross-brand, Cross-platform Benchmarking',
+    description: 'Perbandingan performa engagement antar brand dan platform dalam keseluruhan portofolio.',
+    descriptionEn: 'Compare engagement performance across brands and platforms within the portfolio.',
+  },
+  'derived.content_volume_weekly': {
+    label: 'Content Volume by Week',
+    description: 'Jumlah konten yang dipublikasikan setiap minggu selama periode yang dipilih.',
+    descriptionEn: 'The number of posts published each week during the selected period.',
+  },
+  'derived.completion_rate_distribution': {
+    label: 'TikTok Completion Rate Distribution',
+    description: 'Distribusi konten TikTok berdasarkan tingkat penyelesaian tontonan, dari video yang hanya ditonton sebagian hingga selesai.',
+    descriptionEn: 'The distribution of TikTok content based on completion rate, showing how much of each video viewers typically watch.',
+  },
+  'derived.reel_watch_by_duration': {
+    label: 'Reel Watch Time by Duration',
+    description: 'Perbandingan rata-rata tingkat tontonan Reels berdasarkan durasi video, untuk melihat durasi mana yang paling efektif mempertahankan penonton.',
+    descriptionEn: 'A comparison of average watch performance across different Reel lengths, showing which durations retain viewers best.',
+  },
+  'derived.performance_score': {
+    label: 'Skor Performa',
+    description: 'Skor gabungan 1–100 dari tiga metrik: tingkat interaksi (bobot 50%), jangkauan (30%), dan jumlah konten (20%).',
+    caveat: 'Skor bersifat relatif — setiap metrik dibandingkan terhadap brand & channel lain di tabel ini pada periode yang sama, jadi angkanya tidak bisa dibandingkan antar periode.',
   },
 }
 

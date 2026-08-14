@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard } from './ui'
 import { MultiLineChart, Donut } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
+import MetricInfo from '@/components/ui/MetricInfo'
 import {
-  TREND_METRICS, HEATMAP_DAYS, HEATMAP_TIME_LABELS, PLATFORM_META, PALETTE, fmtNum,
+  TREND_METRICS, HEATMAP_DAYS, HEATMAP_TIME_LABELS, PLATFORM_META, PALETTE, fmtNum, fmtInt,
   type TrendMetric, type PlatformFilter, type Period,
 } from './data'
 import type { OverviewPayload } from '@/lib/dashboard/overview'
@@ -117,7 +118,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </Card>
 
         <Card span="col-span-12 lg:col-span-4" className="flex flex-col">
-          <CardHead title="Platform Share" metricKey="brand_metric_daily.engagement_sum" sub="by reach" />
+          <CardHead title="Platform Share" metricKey="derived.platform_share" sub="by reach" />
           <div className="px-4 pb-5 pt-3 flex-1 flex items-center">
             {data.platformReachShare.length
               ? <Donut size={152}
@@ -133,12 +134,17 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {/* Brand performance matrix */}
       <SectionHeader icon="flag">Brand Performance Matrix</SectionHeader>
       <Card className="overflow-hidden">
-        <CardHead title="Cross-brand, cross-platform benchmarking" sub="Engagement benchmarking across the portfolio" />
+        <CardHead title="Cross-brand, cross-platform benchmarking" metricKey="derived.brand_benchmarking" sub="Engagement benchmarking across the portfolio" />
         <div className="overflow-x-auto">
           <div className="min-w-[760px]">
             <div className={`grid ${MATRIX_COLS} gap-2 px-4 py-2.5 border-y border-[#eef0f2] bg-[#fafbfb]`}>
               {['Brand', 'Platform', 'Followers', 'Reach', 'Engagement', 'ER', 'Posts', 'Trend', 'Score'].map(h => (
-                <span key={h} style={PJ} className="text-[10px] font-bold uppercase tracking-wider text-[#9ca3af]">{h}</span>
+                <span key={h} style={PJ} className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#9ca3af]">
+                  {h}
+                  {/* Score is a composite the reader can't infer from the row — the
+                      only column here that needs its formula spelled out. */}
+                  {h === 'Score' && <MetricInfo metricKey="derived.performance_score" size={12} />}
+                </span>
               ))}
             </div>
             {data.brandMatrix.map((r, i) => {
@@ -178,14 +184,17 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
         {/* Content attribute breakdown */}
         <Card className="flex flex-col">
           <div className="flex items-center justify-between px-5 pt-4 pb-1 gap-2">
-            <span style={PJ} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Content Attribute Breakdown</span>
+            <span style={PJ} className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">
+              Content Attribute Breakdown
+              <MetricInfo metricKey="derived.content_attribute_breakdown" size={12} />
+            </span>
             <span style={PJ} className="text-[11px] font-semibold text-[#3d8a5f] bg-[#eaf5ef] px-2.5 py-1 rounded-full">By content tag</span>
           </div>
           <p className="px-5 pt-1.5 pb-3 text-[12.5px] text-[#6b7280]">Engagement rate by content tag — how each label performs vs. overall average</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 px-5">
             {data.contentAttributes.map(a => (
               <div key={a.label} className="bg-[#fafbfb] border border-[#eef0f2] rounded-xl px-3 py-4 flex flex-col items-center text-center gap-0.5">
-                <span style={PJ} className="text-[26px] font-bold leading-none tabular-nums text-[#111827]">{a.count}</span>
+                <span style={PJ} className="text-[26px] font-bold leading-none tabular-nums text-[#111827]">{fmtInt(a.count)}</span>
                 <span className="text-[12px] font-medium text-[#6b7280] mt-1">{a.label}</span>
                 <span className="text-[12px] font-semibold mt-0.5 text-[#6b7280]">ER: {a.er}%</span>
               </div>

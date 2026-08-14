@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout } from './ui'
 import { MultiLineChart } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
-import { PLATFORM_META, PALETTE, type PlatformFilter, type Period } from './data'
+import { PLATFORM_META, PALETTE, fmtInt, type PlatformFilter, type Period } from './data'
 import type { CommunityPayload } from '@/lib/dashboard/community'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -159,8 +159,8 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
                 <span className="font-medium text-[#374151] truncate">{c.username}</span>
                 <span className="inline-flex items-center justify-center text-[10px] font-bold text-white rounded px-1.5 py-0.5 w-fit"
                   style={{ background: PLATFORM_META[c.platform].color }}>{PLATFORM_META[c.platform].short}</span>
-                <span className="font-semibold text-[#111827] tabular-nums">{c.comments}</span>
-                <span className="text-[#374151] tabular-nums">{c.likes}</span>
+                <span className="font-semibold text-[#111827] tabular-nums">{fmtInt(c.comments)}</span>
+                <span className="text-[#374151] tabular-nums">{fmtInt(c.likes)}</span>
                 <span className="text-[#374151] tabular-nums">{c.daily}</span>
                 <span className={`inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full w-fit ${TIER_STYLE[c.tier]}`}>{c.tier}</span>
               </div>

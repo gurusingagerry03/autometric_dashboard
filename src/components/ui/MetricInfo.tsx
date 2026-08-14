@@ -38,15 +38,16 @@ export default function MetricInfo({ metricKey, scope, size = 13, className = ''
     if (!el) return
     const r = el.getBoundingClientRect()
     // Estimate height so the flip decision is made before paint; the tooltip is
-    // short enough that a fixed estimate is accurate in practice.
-    const estimated = 132
+    // short enough that a fixed estimate is accurate in practice. A bilingual
+    // entry carries a second paragraph block, so it needs roughly twice the room.
+    const estimated = entry?.descriptionEn ? 236 : 132
     const above = r.bottom + GAP + estimated > window.innerHeight && r.top > estimated + GAP
     const left  = Math.min(
       Math.max(EDGE, r.left + r.width / 2 - WIDTH / 2),
       window.innerWidth - WIDTH - EDGE,
     )
     setPos({ top: above ? r.top - GAP : r.bottom + GAP, left, above })
-  }, [])
+  }, [entry?.descriptionEn])
 
   const show = useCallback(() => { place(); setOpen(true) },  [place])
   const hide = useCallback(() => { if (!pinned) setOpen(false) }, [pinned])
@@ -118,9 +119,17 @@ export default function MetricInfo({ metricKey, scope, size = 13, className = ''
           <p style={PJ} className="text-[11.5px] font-bold text-[#111827] mb-1">{entry.label}</p>
           <p className="text-[12px] leading-relaxed text-[#4b5563]">{entry.description}</p>
           {entry.caveat && (
-            <p className="text-[11.5px] leading-relaxed text-[#9ca3af] mt-1.5 pt-1.5 border-t border-[#f3f4f6]">
-              {entry.caveat}
-            </p>
+            <p className="text-[11.5px] leading-relaxed text-[#9ca3af] mt-1.5">{entry.caveat}</p>
+          )}
+          {/* English copy, when the metric carries it — separated by a rule so the
+              two languages read as one block each rather than four loose lines. */}
+          {entry.descriptionEn && (
+            <div className="mt-2 pt-2 border-t border-[#f3f4f6]">
+              <p className="text-[12px] leading-relaxed text-[#6b7280]">{entry.descriptionEn}</p>
+              {entry.caveatEn && (
+                <p className="text-[11.5px] leading-relaxed text-[#9ca3af] mt-1.5">{entry.caveatEn}</p>
+              )}
+            </div>
           )}
         </div>
       )}

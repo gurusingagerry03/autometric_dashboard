@@ -17,6 +17,15 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
 
 export const PLATFORM_LIST: Platform[] = ['instagram', 'tiktok', 'facebook', 'youtube', 'twitter']
 
+/**
+ * Platforms a competitor can actually be tracked on — the ones with a working
+ * scrape pipeline. YouTube and X stay in `Platform`/`PLATFORM_CONFIG` (the type
+ * and any existing rows still reference them) but are kept out of the competitor
+ * pickers and rejected by the competitors API, since nothing would ever ingest
+ * data for them.
+ */
+export const COMPETITOR_PLATFORM_LIST: Platform[] = ['instagram', 'tiktok', 'facebook']
+
 export const BRAND_COLORS = ['#1B8A80', '#7c5cbf', '#059669', '#d97706', '#e11d48', '#2563eb', '#db2777', '#0891b2']
 
 export function getColorFromId(id: string): string {

@@ -35,8 +35,22 @@ function PostCard({ post, selected, onToggle }: { post: CampaignPostRow; selecte
   const pm = pillarMeta(post.pillar)
   const plat = PLATFORM_META[post.platform]
   return (
+    // The card itself is the select toggle, so the permalink can't live inside it
+    // (an <a> nested in a <button> is invalid) — it sits alongside as an overlay.
+    <div className="group/card relative flex">
+      {post.link && (
+        <a
+          href={post.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Buka post di platform aslinya"
+          className="absolute top-2.5 right-2.5 z-10 w-6 h-6 flex items-center justify-center rounded-md text-[#9ca3af] opacity-0 group-hover/card:opacity-100 hover:text-[#6c4cd6] hover:bg-white transition"
+        >
+          <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+        </a>
+      )}
     <button onClick={onToggle} style={PJ}
-      className={`text-left rounded-xl border p-3.5 transition-all flex flex-col gap-2.5 ${
+      className={`w-full text-left rounded-xl border p-3.5 transition-all flex flex-col gap-2.5 ${
         selected ? 'border-[#6c4cd6] ring-2 ring-[#6c4cd6]/25 bg-[#f6f3fd]' : 'border-[#e5e7eb] bg-white hover:border-[#d1d5db]'
       }`}>
       <div className="flex items-center gap-1.5 flex-wrap">
@@ -55,6 +69,7 @@ function PostCard({ post, selected, onToggle }: { post: CampaignPostRow; selecte
       </span>
       {post.hashtags.length > 0 && <p className="text-[11px] text-[#bcc2c9] truncate">{post.hashtags.join(' ')}</p>}
     </button>
+    </div>
   )
 }
 

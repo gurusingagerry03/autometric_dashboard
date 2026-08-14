@@ -24,7 +24,7 @@ function niceMax(n: number) {
 
 export default function StoriesDashboard({ orgId }: { orgId: string }) {
   return (
-    <DashboardChrome title="Stories" subtitle="Instagram & Facebook story performance">
+    <DashboardChrome title="Instagram Stories" subtitle="Instagram story performance" lockPlatform="instagram">
       {(state) => <StoriesBody orgId={orgId} brandId={state.brand.id} platform={state.platform} period={state.period} start={state.start} end={state.end} />}
     </DashboardChrome>
   )

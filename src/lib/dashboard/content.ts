@@ -283,8 +283,9 @@ async function topPosts(orgId: string, platform: PlatformParam, w: Window, brand
   const { rows } = await pool.query<{
     platform: DashPlatform; caption: string | null; format: string | null; post_type: string | null
     reach: number; views: number; likes: number; comments: number; shares: number; er: number | null; boosted: boolean
+    link: string | null
   }>(
-    `SELECT p.platform, p.caption, p.format, p.post_type,
+    `SELECT p.platform, p.caption, p.format, p.post_type, p.link,
             COALESCE(p.reach,0)::int reach, COALESCE(p.views,0)::int views,
             COALESCE(p.likes,0)::int likes, COALESCE(p.comments,0)::int comments,
             COALESCE(p.shares,0)::int shares,
@@ -310,6 +311,7 @@ async function topPosts(orgId: string, platform: PlatformParam, w: Window, brand
       shares: r.shares,
       er: +(r.er ?? 0).toFixed(1),
       tag: r.boosted ? 'Boosted' : 'Organic',
+      link: r.link,
     }
   })
 }

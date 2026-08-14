@@ -151,3 +151,32 @@ export function KpiCard({ kpi, color }: { kpi: Kpi; color: string }) {
   )
 }
 
+
+/**
+ * A post's caption rendered as a link to the original post on its platform.
+ *
+ * Post lists all show a caption as the row's identity, and the caption is the
+ * natural thing to click through to the real post. Falls back to plain text when
+ * the source row carries no URL, so a missing permalink never looks broken.
+ */
+export function PostLink({ href, caption, className = '' }: {
+  href?: string | null
+  caption: string
+  className?: string
+}) {
+  const base = `min-w-0 truncate ${className}`
+  if (!href) return <span className={base} title={caption}>{caption}</span>
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${caption}\n\nBuka post di platform aslinya`}
+      onClick={e => e.stopPropagation()}
+      className={`${base} inline-flex items-center gap-1 hover:text-[#1B8A80] hover:underline underline-offset-2 transition-colors`}
+    >
+      <span className="truncate">{caption}</span>
+      <span className="material-symbols-outlined shrink-0 text-[13px] opacity-0 group-hover/row:opacity-60">open_in_new</span>
+    </a>
+  )
+}

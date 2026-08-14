@@ -1,10 +1,10 @@
 ﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink } from './ui'
 import { HBars, MultiLineChart } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
-import { PLATFORM_META, PALETTE, fmtNum, type PlatformFilter, type Period } from './data'
+import { PLATFORM_META, PALETTE, fmtNum, fmtInt, type PlatformFilter, type Period } from './data'
 import type { AudiencePayload } from '@/lib/dashboard/audience'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -156,6 +156,39 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </Card>
       </div>
 
+      {/* Geography + growth — kept next to the age/gender demographics above, so
+          everything describing WHO the audience is reads as one block before the
+          engagement-behaviour sections that follow. */}
+      <SectionHeader icon="public">Geography &amp; Growth</SectionHeader>
+      <div className="grid grid-cols-12 gap-3 mb-3">
+        <Card span="col-span-12 lg:col-span-5">
+          <CardHead title="Top Audience Cities" metricKey="audience_geo_daily.geo" sub="Share of followers by city" />
+          <div className="px-4 pb-4 pt-3">
+            {data.cities.length
+              ? <HBars items={data.cities.map((c, i) => ({
+                  label: c.city, value: c.value, display: `${c.value}%`, color: PALETTE[i % PALETTE.length],
+                }))} />
+              : <div className="py-10 text-center text-[12px] text-[#9ca3af]">Tidak ada data kota audiens.</div>}
+          </div>
+        </Card>
+
+        <Card span="col-span-12 lg:col-span-7" className="flex flex-col">
+          <CardHead title="Follower Growth Trend" metricKey="brand_metric_daily.follower_count_eod" sub="All brands · weekly" />
+          <div className="px-4 pb-3 pt-3 flex-1">
+            {data.followerTrend.length
+              ? <MultiLineChart series={data.followerTrend} labels={data.followerLabels} height={220} />
+              : <div className="h-[220px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data follower.</div>}
+          </div>
+          <div className="flex items-center gap-4 px-4 pb-4 flex-wrap">
+            {data.followerTrend.map(s => (
+              <span key={s.name} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6b7280]">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />{s.name}
+              </span>
+            ))}
+          </div>
+        </Card>
+      </div>
+
       {/* Comment relevance */}
       <SectionHeader icon="forum">Comment Relevance Analysis</SectionHeader>
       <Card className="mb-3">
@@ -260,8 +293,8 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   <span className="font-medium text-[#374151] truncate">{c.username}</span>
                 </div>
                 <img src={PLATFORM_META[c.platform].logo} alt={PLATFORM_META[c.platform].label} className="w-[18px] h-[18px] object-contain" />
-                <span className="text-[#374151] tabular-nums">{c.comments}</span>
-                <span className="text-[#374151] tabular-nums">{c.likes}</span>
+                <span className="text-[#374151] tabular-nums">{fmtInt(c.comments)}</span>
+                <span className="text-[#374151] tabular-nums">{fmtInt(c.likes)}</span>
                 <span className="text-[#374151] tabular-nums">{c.daily}</span>
                 <span className="font-semibold text-[#3d8a5f] tabular-nums">{c.relevance}%</span>
                 <span style={PJ} className="font-bold text-[#111827] tabular-nums">{c.score}</span>
@@ -278,37 +311,6 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </div>
       </Card>
 
-      {/* Geography + growth */}
-      <SectionHeader icon="public">Geography &amp; Growth</SectionHeader>
-      <div className="grid grid-cols-12 gap-3 mb-3">
-        <Card span="col-span-12 lg:col-span-5">
-          <CardHead title="Top Audience Cities" metricKey="audience_geo_daily.geo" sub="Share of followers by city" />
-          <div className="px-4 pb-4 pt-3">
-            {data.cities.length
-              ? <HBars items={data.cities.map((c, i) => ({
-                  label: c.city, value: c.value, display: `${c.value}%`, color: PALETTE[i % PALETTE.length],
-                }))} />
-              : <div className="py-10 text-center text-[12px] text-[#9ca3af]">Tidak ada data kota audiens.</div>}
-          </div>
-        </Card>
-
-        <Card span="col-span-12 lg:col-span-7" className="flex flex-col">
-          <CardHead title="Follower Growth Trend" metricKey="brand_metric_daily.follower_count_eod" sub="All brands · weekly" />
-          <div className="px-4 pb-3 pt-3 flex-1">
-            {data.followerTrend.length
-              ? <MultiLineChart series={data.followerTrend} labels={data.followerLabels} height={220} />
-              : <div className="h-[220px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data follower.</div>}
-          </div>
-          <div className="flex items-center gap-4 px-4 pb-4 flex-wrap">
-            {data.followerTrend.map(s => (
-              <span key={s.name} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6b7280]">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />{s.name}
-              </span>
-            ))}
-          </div>
-        </Card>
-      </div>
-
       {/* UGC */}
       <SectionHeader icon="loyalty">User-Generated Content — Tagged Posts</SectionHeader>
       <Card className="overflow-hidden">
@@ -322,7 +324,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
             </div>
             {data.ugc.map((p, i) => (
               <div key={p.username + i}
-                className={`grid ${UGC_COLS} gap-2 px-4 py-3 items-center text-[13px] hover:bg-[#fafbfb] ${
+                className={`group/row grid ${UGC_COLS} gap-2 px-4 py-3 items-center text-[13px] hover:bg-[#fafbfb] ${
                   i < data.ugc.length - 1 ? 'border-b border-[#f1f3f4]' : ''
                 }`}>
                 <span className="font-medium text-[#374151] truncate">{p.username}</span>
@@ -330,10 +332,10 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   <span className="material-symbols-outlined text-[15px] text-[#9ca3af]">{UGC_ICON[p.format] ?? 'image'}</span>
                   {p.format}
                 </span>
-                <span className="text-[#374151] truncate" title={p.caption}>“{p.caption}”</span>
-                <span className="text-[#374151] tabular-nums">{p.likes}</span>
-                <span className="text-[#374151] tabular-nums">{p.comments}</span>
-                <span className="font-semibold text-[#111827] tabular-nums">{p.total}</span>
+                <PostLink href={p.link} caption={`“${p.caption}”`} className="text-[#374151]" />
+                <span className="text-[#374151] tabular-nums">{fmtInt(p.likes)}</span>
+                <span className="text-[#374151] tabular-nums">{fmtInt(p.comments)}</span>
+                <span className="font-semibold text-[#111827] tabular-nums">{fmtInt(p.total)}</span>
                 <span className="text-[#9ca3af] text-[12px]">{p.date}</span>
               </div>
             ))}

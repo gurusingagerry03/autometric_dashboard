@@ -10,7 +10,7 @@ import DateRangePicker, {
 } from './DateRangePicker'
 import {
   PLATFORM_META, PLATFORM_FILTERS, fmtNum,
-  type PlatformFilter, type Period, type DashBrand,
+  type PlatformFilter, type Period, type DashBrand, type DashPlatform,
 } from './data'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -95,15 +95,23 @@ export interface ChromeState {
  * date range + refresh) and the clickable brand hero. Owns brand/platform/range
  * state and hands the resolved dates to the page via a render-prop child.
  */
-export default function DashboardChrome({ title, subtitle, children }: {
+export default function DashboardChrome({ title, subtitle, lockPlatform, children }: {
   title: string
   subtitle: string
+  /**
+   * Pin the whole tab to one platform (Instagram Stories is IG-only). The
+   * platform switcher becomes a static badge, and only brands with an account on
+   * that platform are offered — picking a brand that has none would just show an
+   * empty dashboard. The lock is deliberately NOT written to the shared filter
+   * storage, so the other tabs keep whatever platform the user chose there.
+   */
+  lockPlatform?: DashPlatform
   children: (state: ChromeState) => React.ReactNode
 }) {
   const pathname = usePathname()
   const orgSlug = pathname?.split('/').filter(Boolean)[1] ?? '' // /organizations/<slug>/dashboard/...
 
-  const [platform, setPlatform] = useState<PlatformFilter>('All')
+  const [platform, setPlatform] = useState<PlatformFilter>(lockPlatform ?? 'All')
   const [brands, setBrands] = useState<DashBrand[] | null>(null)
   const [brand, setBrand] = useState<DashBrand | null>(null)
   const [range, setRange] = useState<DateSelection | null>(null)
@@ -119,7 +127,7 @@ export default function DashboardChrome({ title, subtitle, children }: {
   useEffect(() => {
     const saved = readFilters(orgSlug)
     wantBrandId.current = saved?.brandId ?? null
-    if (saved?.platform && PLATFORM_FILTERS.includes(saved.platform)) setPlatform(saved.platform)
+    if (!lockPlatform && saved?.platform && PLATFORM_FILTERS.includes(saved.platform)) setPlatform(saved.platform)
     const restored = savedSelection(saved)
     rangeChosen.current = !!restored
     if (restored) setRange(restored)
@@ -132,9 +140,10 @@ export default function DashboardChrome({ title, subtitle, children }: {
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: { brands: DashBrand[] }) => {
         if (cancelled) return
-        setBrands(d.brands)
+        const usable = lockPlatform ? d.brands.filter(b => b.platforms.includes(lockPlatform)) : d.brands
+        setBrands(usable)
         // prefer the brand carried over from another tab, else the first brand
-        setBrand(prev => prev ?? d.brands.find(b => b.id === wantBrandId.current) ?? d.brands[0] ?? null)
+        setBrand(prev => prev ?? usable.find(b => b.id === wantBrandId.current) ?? usable[0] ?? null)
       })
       .catch(() => { if (!cancelled) setBrands([]) })
     return () => { cancelled = true }
@@ -182,12 +191,16 @@ export default function DashboardChrome({ title, subtitle, children }: {
   // brand's dates instead of opening on each brand's own latest 30 days of data.
   useEffect(() => {
     if (!orgSlug || !brand) return
+    // A locked tab must not publish its forced platform to the shared filters —
+    // that would silently switch every other tab to Instagram. Carry the stored
+    // choice through untouched instead.
+    const sharedPlatform = lockPlatform ? readFilters(orgSlug)?.platform : platform
     writeFilters(orgSlug, {
       brandId: brand.id,
-      platform,
+      ...(sharedPlatform ? { platform: sharedPlatform } : {}),
       ...(rangeChosen.current && range ? { range } : {}),
     })
-  }, [orgSlug, brand, platform, range])
+  }, [orgSlug, brand, platform, range, lockPlatform])
 
   // Relative modes are re-resolved on every render so the query dates stay right
   // even if the tab sits open past midnight.
@@ -211,22 +224,30 @@ export default function DashboardChrome({ title, subtitle, children }: {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
-            {PLATFORM_FILTERS.map(p => {
-              const active = platform === p
-              return (
-                <button key={p} onClick={() => setPlatform(p)} style={PJ} title={p === 'All' ? 'All platforms' : PLATFORM_META[p].label}
-                  className={`flex items-center justify-center h-7 rounded-md text-[12px] font-semibold transition-colors ${
-                    p === 'All' ? 'px-3' : 'w-9'
-                  } ${active ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'}`}>
-                  {p === 'All'
-                    ? 'All'
-                    : <img src={PLATFORM_META[p].logo} alt={PLATFORM_META[p].label}
-                        className={`w-[17px] h-[17px] object-contain transition-opacity ${active ? 'opacity-100' : 'opacity-55'}`} />}
-                </button>
-              )
-            })}
-          </div>
+          {lockPlatform ? (
+            <div style={PJ} title={`${PLATFORM_META[lockPlatform].label} only`}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#f3f4f6] text-[12px] font-semibold text-[#6b7280]">
+              <img src={PLATFORM_META[lockPlatform].logo} alt={PLATFORM_META[lockPlatform].label} className="w-[17px] h-[17px] object-contain" />
+              {PLATFORM_META[lockPlatform].label}
+            </div>
+          ) : (
+            <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
+              {PLATFORM_FILTERS.map(p => {
+                const active = platform === p
+                return (
+                  <button key={p} onClick={() => setPlatform(p)} style={PJ} title={p === 'All' ? 'All platforms' : PLATFORM_META[p].label}
+                    className={`flex items-center justify-center h-7 rounded-md text-[12px] font-semibold transition-colors ${
+                      p === 'All' ? 'px-3' : 'w-9'
+                    } ${active ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'}`}>
+                    {p === 'All'
+                      ? 'All'
+                      : <img src={PLATFORM_META[p].logo} alt={PLATFORM_META[p].label}
+                          className={`w-[17px] h-[17px] object-contain transition-opacity ${active ? 'opacity-100' : 'opacity-55'}`} />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {range && <DateRangePicker value={range} onChange={handleRange} bounds={bounds} />}
           <button className="w-9 h-9 flex items-center justify-center bg-white border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:text-[#1B8A80] hover:border-[#d1d5db] transition-colors">
             <span className="material-symbols-outlined text-[18px]">refresh</span>
@@ -244,7 +265,11 @@ export default function DashboardChrome({ title, subtitle, children }: {
           ) : (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <span className="material-symbols-outlined text-[40px] text-[#d1d5db] mb-2">storefront</span>
-              <p className="text-[13px] text-[#6b7280]">Belum ada brand di organisasi ini.</p>
+              <p className="text-[13px] text-[#6b7280]">
+                {lockPlatform
+                  ? `Belum ada brand dengan akun ${PLATFORM_META[lockPlatform].label} di organisasi ini.`
+                  : 'Belum ada brand di organisasi ini.'}
+              </p>
             </div>
           )
         ) : (

@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink } from './ui'
 import { BarChart, HBars } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { PLATFORM_META, PALETTE, fmtNum, type PlatformFilter, type Period } from './data'
@@ -100,7 +100,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
         </Card>
 
         <Card className="flex flex-col">
-          <CardHead title="Content Volume by Week" metricKey="brand_metric_daily.post_count" sub="Posts published per week"
+          <CardHead title="Content Volume by Week" metricKey="derived.content_volume_weekly" sub="Posts published per week"
             action={<Badge text="Posts" color={PALETTE[1]} />} />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.contentVolume.length
@@ -144,12 +144,12 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
               const meta = PLATFORM_META[r.platform]
               return (
                 <div key={r.rank}
-                  className={`grid ${TABLE_COLS} gap-2 px-4 py-3 items-center text-[13px] hover:bg-[#fafbfb] ${
+                  className={`group/row grid ${TABLE_COLS} gap-2 px-4 py-3 items-center text-[13px] hover:bg-[#fafbfb] ${
                     i < rows.length - 1 ? 'border-b border-[#f1f3f4]' : ''
                   }`}>
                   <span style={PJ} className="text-[12px] font-bold text-[#9ca3af] tabular-nums">{r.rank}</span>
                   <img src={meta.logo} alt={meta.label} title={meta.label} className="w-[18px] h-[18px] object-contain" />
-                  <span className="text-[#374151] font-medium truncate" title={r.caption}>{r.caption}</span>
+                  <PostLink href={r.link} caption={r.caption} className="text-[#374151] font-medium" />
                   <span className="flex min-w-0 items-center gap-1 text-[12px] text-[#6b7280]" title={r.format}>
                     <span className="material-symbols-outlined shrink-0 text-[15px] text-[#9ca3af]">{FORMAT_ICON[r.format] ?? 'play_circle'}</span>
                     <span className="truncate">{r.format}</span>
@@ -177,7 +177,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       <SectionHeader icon="smart_display">Video Analytics</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Card className="flex flex-col">
-          <CardHead title="TikTok Completion Rate Distribution" metricKey="post_metric.completion_rate" sub="Share of videos by how much of them gets watched" />
+          <CardHead title="TikTok Completion Rate Distribution" metricKey="derived.completion_rate_distribution" sub="Share of videos by how much of them gets watched" />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.completionDist.some(d => d.value > 0)
               ? <BarChart height={200} bars={data.completionDist.map((d, i) => ({
@@ -191,7 +191,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
         </Card>
 
         <Card className="flex flex-col">
-          <CardHead title="Reel Watch Time by Duration" metricKey="post_metric.avg_watch_time" sub="Average watch time and completion by reel length" />
+          <CardHead title="Reel Watch Time by Duration" metricKey="derived.reel_watch_by_duration" sub="Average watch time and completion by reel length" />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.reelWatch.some(d => d.value > 0)
               ? <BarChart height={200} bars={data.reelWatch.map(d => ({

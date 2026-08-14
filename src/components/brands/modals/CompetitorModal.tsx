@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CompetitorAccount, Platform, PLATFORM_CONFIG, PLATFORM_LIST } from '@/lib/brands/types'
+import { CompetitorAccount, Platform, PLATFORM_CONFIG, COMPETITOR_PLATFORM_LIST } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
 import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
@@ -93,7 +93,7 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
               <span className="text-[11px] text-[#9ca3af]">Max {MAX_COMPETITORS_PER_PLATFORM} per platform</span>
             </div>
             <div className="grid grid-cols-5 gap-2">
-              {PLATFORM_LIST.map(p => {
+              {COMPETITOR_PLATFORM_LIST.map(p => {
                 const cfg    = PLATFORM_CONFIG[p]
                 const active = platform === p
                 const used   = usedPerPlatform[p] ?? 0

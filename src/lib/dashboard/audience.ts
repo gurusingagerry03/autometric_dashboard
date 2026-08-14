@@ -345,9 +345,9 @@ async function contributors(orgId: string, platform: PlatformParam, days: number
 async function ugcPosts(orgId: string, w: Window, brandId: string | null) {
   const { rows } = await pool.query<{
     username: string; post_type: string | null; caption: string | null
-    likes: number; comments: number; post_date: Date
+    likes: number; comments: number; post_date: Date; link: string | null
   }>(
-    `SELECT tp.username, tp.post_type, tp.caption,
+    `SELECT tp.username, tp.post_type, tp.caption, tp.link_post AS link,
             COALESCE(tp.like_count,0)::int likes, COALESCE(tp.comment_count,0)::int comments,
             tp.post_date
        FROM l2_gold.ugc_tagged_posts tp
@@ -365,6 +365,7 @@ async function ugcPosts(orgId: string, w: Window, brandId: string | null) {
     caption: (r.caption ?? '').replace(/\s+/g, ' ').trim() || '(tanpa caption)',
     likes: r.likes, comments: r.comments, total: r.likes + r.comments,
     date: fmtShort(new Date(r.post_date)),
+    link: r.link,
   }))
   const avg = ugc.length ? Math.round(ugc.reduce((s, p) => s + p.total, 0) / ugc.length) : 0
   const insight = ugc.length
