@@ -19,6 +19,8 @@ export interface ChartConfig {
   barOrientation?: BarOrientation
   barCategory?: string
   barMetrics?: string[]
+  /** 'content_pillars' only — put previous vs current month side by side per pillar. */
+  barCompare?: 'period'
   competitorIds?: string[]  // 'competitors' bar category only — chosen competitors (undefined = all)
   // wordcloud
   sentiment?: string
@@ -187,7 +189,25 @@ export function resolveLineData(
 /* ── real bar data (shared by preview + PPTX export) ─────────────────────────── */
 
 // A bar series carrying the value-axis scale it should be plotted against.
-export interface BarSeries extends Series { scale: AxisScale }
+// `group` ties several series into ONE mini chart (period comparison: the previous
+// and current month of the same metric). Absent = the series is its own mini chart.
+export interface BarSeries extends Series { scale: AxisScale; group?: string }
+
+/** Bar series grouped into mini charts — series sharing a `group` render together. */
+export function groupBarSeries(series: BarSeries[]): { title: string; series: BarSeries[] }[] {
+  const out: { title: string; series: BarSeries[] }[] = []
+  for (const s of series) {
+    const title = s.group ?? s.name
+    const bucket = out.find(g => g.title === title)
+    if (bucket) bucket.series.push(s)
+    else out.push({ title, series: [s] })
+  }
+  return out
+}
+
+// The previous period reads as a muted bar next to the metric's own color, the
+// convention for "same metric, earlier window".
+const PREV_PERIOD_COLOR = '#c3cbd6'
 
 /**
  * Resolve a bar chart against REAL report data only (no dummy) — a metric with no
@@ -229,6 +249,32 @@ export function resolveBarData(
   const labels = catData?.labels.length ? catData.labels : barCategoryLabels(cat)
   const n = labels.length
   const palette = [colors.primary, colors.accent, colors.secondary, '#d96d6d']
+
+  // Period comparison (content pillars): each metric becomes ONE mini chart holding
+  // two bars per pillar — previous month, then the report month — on a shared axis,
+  // so the deck reads both "pillar vs pillar" and "month over month" at once.
+  if (config.barCompare === 'period' && catData?.metricsPrev) {
+    const months = ctx ? ctx.meta.monthLabels : dimensionLabels('last3months')
+    const prevLabel = months[months.length - 2] ?? 'Previous'
+    const currLabel = months[months.length - 1] ?? 'Current'
+    const series: BarSeries[] = []
+    ids.forEach((id, idx) => {
+      const curr = catData.metrics?.[id]
+      const prev = catData.metricsPrev?.[id]
+      // A metric that ran in only one of the two months still gets its pair — the
+      // month without data reads as a zero bar rather than silently disappearing.
+      if (curr?.length !== n && prev?.length !== n) return
+      const zeros = new Array<number>(n).fill(0)
+      const currData = curr?.length === n ? curr : zeros
+      const prevData = prev?.length === n ? prev : zeros
+      const title = METRIC_LABELS[id] ?? customLabel(id) ?? id
+      const scale = barScale([...currData, ...prevData])
+      series.push({ name: prevLabel, group: title, color: PREV_PERIOD_COLOR, data: prevData, scale })
+      series.push({ name: currLabel, group: title, color: palette[idx % palette.length], data: currData, scale })
+    })
+    return { labels, series }
+  }
+
   // Real data only — a metric/category with no data (e.g. competitors, or an empty
   // period) yields no series → the chart shows an empty state, never dummy bars.
   const series: BarSeries[] = []
@@ -255,7 +301,10 @@ export const SENTIMENT_PALETTES: Record<Sentiment, string[]> = {
 export function chartSummary(c: ChartConfig, labelOf?: (id: string) => string | undefined): string {
   const lbl = (m: string) => METRIC_LABELS[m] ?? labelOf?.(m) ?? m
   if (c.chartType === 'line') return (c.metrics ?? []).map(lbl).join(' · ')
-  if (c.chartType === 'bar') return (c.barMetrics ?? []).map(lbl).join(' · ')
+  if (c.chartType === 'bar') {
+    const metrics = (c.barMetrics ?? []).map(lbl).join(' · ')
+    return c.barCompare === 'period' ? `${metrics} · vs previous month` : metrics
+  }
   return `Word cloud${c.sentiment && c.sentiment !== 'all' ? ` · ${c.sentiment}` : ''}`
 }
 

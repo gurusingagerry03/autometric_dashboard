@@ -33,6 +33,7 @@ interface PostRow {
   likes: number | null; reactions: number | null; comments: number | null; shares: number | null
   saves: number | null; repost_count: number | null; engagement: number | null; engagement_public: number | null
   reach: number | null; views: number | null; impressions: number | null; follows: number | null
+  profile_visits: number | null
   followers_on_post_day: number | null
   avg_watch_time: number | null; duration_s: number | null; completion_rate: string | null
   er_reach: number | null; er_views: number | null; er_impressions: number | null; er_followers: number | null
@@ -59,6 +60,7 @@ interface PostAgg {
   likes: number | null; reactions: number | null; comments: number | null; shares: number | null
   saves: number | null; repost: number | null; eng: number | null; engPub: number | null
   reach: number | null; views: number | null; impr: number | null; follows: number | null
+  profileVisits: number | null      // SUM(unified_post.profile_visits) — profile visits driven by content
   viewsVideoInline: number | null   // FB "Video Views" = views of post_type='video_inline' only
   avgWatch: number | null; avgCompletion: number | null
   erReach: number | null; erViews: number | null; erImpr: number | null; erFollowers: number | null
@@ -124,6 +126,7 @@ function aggPosts(rows: PostRow[]): PostAgg {
     eng: sumOrNull(rows, 'engagement'), engPub: sumOrNull(rows, 'engagement_public'),
     reach: sumOrNull(rows, 'reach'), views: sumOrNull(rows, 'views'), impr: sumOrNull(rows, 'impressions'),
     follows: sumOrNull(rows, 'follows'),
+    profileVisits: sumOrNull(rows, 'profile_visits'),
     viewsVideoInline: sumViewsOfType(rows, 'video_inline'),
     avgWatch: avgWatchSeconds(rows), avgCompletion: avgCompletion(rows),
     erReach: toPct(avgNonNull(rows, 'er_reach')), erViews: toPct(avgNonNull(rows, 'er_views')),
@@ -205,6 +208,7 @@ function contentValue(ch: TableChannel, id: string, a: PostAgg): number | null {
     case 'post_view_time': return null   // ambiguous / no source
     case 'post_completion': return a.avgCompletion
     case 'new_follow_content': return a.follows
+    case 'profile_visit': return a.profileVisits
     default: return null
   }
 }
@@ -215,7 +219,7 @@ function channelValue(ch: TableChannel, id: string, a: PostAgg, g: GoldAgg): num
     case 'followers_net_growth': return g.netGrowth
     case 'new_follows': return g.newFollows
     case 'unfollows': return g.unfollows
-    case 'profile_views': return g.profileViews
+    case 'profile_visit': return g.profileViews   // g.profileViews = gold profile_visit_sum
     case 'profile_reach': return g.profileReach
     case 'avg_er_reach': return a.erReach
     case 'avg_er_views': return a.erViews
@@ -330,8 +334,10 @@ function allContentValues(rows: PostRow[]): Record<string, number | null> {
   const saved = sumOrNull(rows, 'saves')
   const reposts = sumOrNull(rows, 'repost_count')
   const eng = sumOrNull(rows, 'engagement')
+  const profileVisits = sumOrNull(rows, 'profile_visits')
   return {
     new_follow_content: sumOrNull(rows, 'follows'),
+    profile_visit: profileVisits, avg_profile_visit: perPostAvg(profileVisits, cnt),
     reach, avg_reach: perPostAvg(reach, cnt),
     impressions_views: iv, avg_impressions_views: perPostAvg(iv, cnt),
     likes, avg_likes: perPostAvg(likes, cnt),
@@ -343,12 +349,15 @@ function allContentValues(rows: PostRow[]): Record<string, number | null> {
     er_reach_pooled: pooledER(rows, 'reach'), er_reach: toPct(avgNonNull(rows, 'er_reach')),
     er_views_pooled: pooledER(rows, 'views'), er_views: toPct(avgNonNull(rows, 'er_views')),
     er_followers_pooled: pooledER(rows, 'followers_on_post_day'), er_followers: toPct(avgNonNull(rows, 'er_followers')),
+    // Video efficiency across every channel that reports it — the same per-post
+    // averages the per-channel table uses (watch time normalized to seconds).
+    video_watch_time: avgWatchSeconds(rows),
+    post_completion: avgCompletion(rows),
   }
 }
 
 // One window's Channel Performance values, keyed by channel_level.allColumns ids.
-// Averages are per day (distinct gold metric_date count in the window). "Profile
-// Views" has no distinct gold source, so it (and its average) is null → "—".
+// Averages are per day (distinct gold metric_date count in the window).
 // Engagement comes from the post aggregate `a` (same source as the per-channel
 // table's Avg. Engagement), since brand_metric_daily isn't queried for it here.
 function allChannelValues(g: GoldAgg, a: PostAgg, days: number): Record<string, number | null> {
@@ -359,7 +368,6 @@ function allChannelValues(g: GoldAgg, a: PostAgg, days: number): Record<string, 
     new_follows: g.newFollows, avg_new_follows: perDay(g.newFollows),
     unfollows: g.unfollows, avg_unfollows: perDay(g.unfollows),
     profile_reach: g.profileReach, avg_profile_reach: perDay(g.profileReach),
-    profile_views: null, avg_profile_views: null,
     profile_visit: g.profileViews, avg_profile_visit: perDay(g.profileViews), // g.profileViews = profile_visit_sum
     total_posts: a.cnt > 0 ? a.cnt : null,
     eng_owned: a.eng, avg_eng_owned: perDay(a.eng),
@@ -445,7 +453,7 @@ export async function getReportTableMetrics(
     `SELECT p.platform, to_char(p.post_date, 'YYYY-MM-DD') post_date, p.post_type,
             p.likes, p.reactions, p.comments, p.shares, p.saves, p.repost_count,
             p.engagement, p.engagement_public, p.reach, p.views, p.impressions, p.follows,
-            p.followers_on_post_day,
+            p.profile_visits, p.followers_on_post_day,
             p.avg_watch_time, p.duration_s, p.completion_rate,
             p.er_reach, p.er_views, p.er_impressions, p.er_followers
        FROM l1_silver.unified_post p

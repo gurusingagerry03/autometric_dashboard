@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide, SlideChrome } from '@/lib/reports/data/slideModel'
 import SlidePreview from '../slides/SlidePreview'
@@ -8,7 +8,7 @@ import { PJ } from './ui'
 
 export default function SlidesReview({
   slides, colors, isExporting, cover, chromeFor,
-  onAdd, onOpen, onRename, onDelete, onExport, onSaveTemplate, onEditCover,
+  onAdd, onOpen, onRename, onDelete, onMove, onExport, onSaveTemplate, onEditCover,
 }: {
   slides: ContentSlide[]
   colors: CoverColors
@@ -19,12 +19,37 @@ export default function SlidesReview({
   onOpen: (id: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
+  /** Reorder: move the slide at `from` to index `to` (both 0-based in `slides`). */
+  onMove: (from: number, to: number) => void
   onExport: (mode: 'export' | 'export-save') => void
   onSaveTemplate: () => void
   onEditCover: () => void
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  // Reorder state. `dragIndex` = the slide being dragged, `overIndex` = the card it
+  // would drop onto, `posIndex` = the card whose page-number badge is being typed into.
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+  const [posIndex, setPosIndex] = useState<number | null>(null)
+  // A drop fires a trailing click on some browsers — suppress it so reordering a
+  // slide doesn't also open the editor.
+  const droppedRef = useRef(false)
+  // Set when the position input is dismissed with Escape, so its blur doesn't commit.
+  const posCancelRef = useRef(false)
+
+  function openSlide(id: string) {
+    if (droppedRef.current) { droppedRef.current = false; return }
+    onOpen(id)
+  }
+
+  // Commit a typed page number. Cover is page 1, so content slide i is page i + 2.
+  function commitPosition(from: number, raw: string) {
+    setPosIndex(null)
+    const page = Number(raw.trim())
+    if (!Number.isFinite(page)) return
+    onMove(from, Math.round(page) - 2)
+  }
 
   return (
     <div>
@@ -88,7 +113,9 @@ export default function SlidesReview({
       <div className="flex items-end justify-between mb-5">
         <div>
           <h2 style={PJ} className="text-[22px] font-bold text-[#0f172a] tracking-[-0.02em]">Slides</h2>
-          <p className="text-[13px] text-[#94a3b8] mt-0.5">Click a slide to edit. Add as many as you need.</p>
+          <p className="text-[13px] text-[#94a3b8] mt-0.5">
+            Click a slide to edit. Drag a slide to reorder it, or click its page number to move it to a specific position.
+          </p>
         </div>
         <span style={PJ} className="text-[12px] font-semibold text-[#64748b] bg-[#f3f4f6] px-3 py-1.5 rounded-full">
           {slides.length + 1} slide{slides.length + 1 !== 1 ? 's' : ''}
@@ -119,8 +146,30 @@ export default function SlidesReview({
         {slides.map((s, i) => (
           <div
             key={s.id}
-            onClick={() => onOpen(s.id)}
-            className="group cursor-pointer bg-white rounded-2xl border border-[#e5e7eb] overflow-hidden hover:shadow-[0_8px_26px_rgba(15,23,42,0.10)] hover:border-[#1B8A80] hover:-translate-y-0.5 transition-all"
+            draggable={editingId !== s.id && posIndex !== i}
+            onDragStart={e => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move' }}
+            onDragOver={e => { if (dragIndex !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverIndex(i) } }}
+            onDragLeave={() => setOverIndex(o => (o === i ? null : o))}
+            onDrop={e => {
+              e.preventDefault()
+              if (dragIndex !== null && dragIndex !== i) {
+                droppedRef.current = true
+                // Any synthesized click lands in this same interaction task; clearing
+                // on a timer means the flag can never go stale and eat a real click.
+                setTimeout(() => { droppedRef.current = false }, 0)
+                onMove(dragIndex, i)
+              }
+              setDragIndex(null); setOverIndex(null)
+            }}
+            onDragEnd={() => { setDragIndex(null); setOverIndex(null) }}
+            onClick={() => openSlide(s.id)}
+            className={`group cursor-pointer bg-white rounded-2xl border overflow-hidden transition-all ${
+              dragIndex === i
+                ? 'opacity-40 border-[#1B8A80]'
+                : overIndex === i && dragIndex !== null
+                  ? 'border-[#1B8A80] ring-2 ring-[#1B8A80]/40 shadow-[0_8px_26px_rgba(15,23,42,0.10)]'
+                  : 'border-[#e5e7eb] hover:shadow-[0_8px_26px_rgba(15,23,42,0.10)] hover:border-[#1B8A80] hover:-translate-y-0.5'
+            }`}
           >
             <div className="aspect-video relative border-b border-[#f1f3f5] overflow-hidden">
               <SlidePreview slide={s} colors={colors} chrome={chromeFor(i)} />
@@ -129,8 +178,45 @@ export default function SlidesReview({
                   <span className="material-symbols-outlined text-[16px]">edit</span> Edit slide
                 </span>
               </div>
-              <span style={PJ} className="absolute top-2.5 left-2.5 text-[10px] font-bold bg-white/90 text-[#64748b] w-6 h-6 flex items-center justify-center rounded-md">
-                {i + 2}
+              {/* Page number — click to type the position this slide should move to. */}
+              {posIndex === i ? (
+                <input
+                  autoFocus
+                  type="number"
+                  min={2}
+                  max={slides.length + 1}
+                  defaultValue={i + 2}
+                  onClick={e => e.stopPropagation()}
+                  // Blur is the single commit path: committing on Enter as well would
+                  // run twice (the unmount blurs the input) and the second run would
+                  // move whichever slide had drifted into this index.
+                  onBlur={e => {
+                    if (posCancelRef.current) { posCancelRef.current = false; setPosIndex(null); return }
+                    commitPosition(i, e.target.value)
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') { posCancelRef.current = true; e.currentTarget.blur() }
+                  }}
+                  style={PJ}
+                  className="absolute top-2.5 left-2.5 z-10 w-12 h-6 text-[11px] font-bold text-center text-[#0f172a] bg-white border-2 border-[#1B8A80] rounded-md outline-none"
+                />
+              ) : (
+                <button
+                  onClick={e => { e.stopPropagation(); setPosIndex(i) }}
+                  title="Move to position…"
+                  style={PJ}
+                  className="absolute top-2.5 left-2.5 text-[10px] font-bold bg-white/90 text-[#64748b] w-6 h-6 flex items-center justify-center rounded-md hover:bg-white hover:text-[#1B8A80] hover:ring-2 hover:ring-[#1B8A80]/40 transition"
+                >
+                  {i + 2}
+                </button>
+              )}
+              {/* Drag affordance — the whole card is draggable; this marks it. */}
+              <span
+                title="Drag to reorder"
+                className="absolute top-2.5 right-2.5 w-6 h-6 items-center justify-center rounded-md bg-white/90 text-[#94a3b8] cursor-grab active:cursor-grabbing hidden group-hover:flex"
+              >
+                <span className="material-symbols-outlined text-[15px]">drag_indicator</span>
               </span>
             </div>
             <div className="px-4 h-14 flex items-center justify-between gap-2">

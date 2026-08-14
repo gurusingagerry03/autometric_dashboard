@@ -59,7 +59,7 @@ interface PostRow {
   saves: number | null; views: number | null; impressions: number | null
 }
 interface PillarRow {
-  platform: string; content_pillar: string
+  platform: string; content_pillar: string; ym: string   // 'YYYY-MM' bucket (report month or the one before)
   posts: number | null; eng: number | null; er_den: number | null; reach: number | null
 }
 interface SentimentRow {
@@ -241,7 +241,8 @@ const put = (into: Record<string, number[]>, id: string, arr: number[]) => { if 
 
 function buildBars(
   monthDates: string[], monthGroups: string[][], monthLabels: string[],
-  gold: Map<string, GoldVals>, post: Map<string, PostVals>, pillars: Map<string, PillarAgg>,
+  gold: Map<string, GoldVals>, post: Map<string, PostVals>,
+  pillars: Map<string, PillarAgg>, pillarsPrev: Map<string, PillarAgg>,
   p: DashPlatform, customDefs: CustomMetricDef[],
 ): ChannelBarMetrics {
   const out: ChannelBarMetrics = {}
@@ -297,18 +298,37 @@ function buildBars(
     if (Object.keys(m).length) out.last3months_performance = { labels: monthLabels, metrics: m }
   }
 
-  // content_pillars — aggregate the gold pillar rollup over the report month (top 6 by posts)
+  // content_pillars — the gold pillar rollup for the report month, plus the same
+  // pillars for the month before so the chart can compare periods. Labels are the
+  // top 6 pillars by combined post count across both months (a pillar that only ran
+  // in one of the two still shows, with zeros on the other side).
   {
-    const names = [...pillars.entries()].sort((a, b) => b[1].posts - a[1].posts).slice(0, 6).map(e => e[0])
+    const EMPTY: PillarAgg = { posts: 0, eng: 0, erDen: 0, reach: 0 }
+    const totalPosts = (n: string) => (pillars.get(n)?.posts ?? 0) + (pillarsPrev.get(n)?.posts ?? 0)
+    const names = [...new Set([...pillars.keys(), ...pillarsPrev.keys()])]
+      .sort((a, b) => totalPosts(b) - totalPosts(a))
+      .slice(0, 6)
     if (names.length) {
-      const agg = names.map(n => pillars.get(n)!)
+      const pillarMetrics = (src: Map<string, PillarAgg>): Record<string, number[]> => {
+        const agg = names.map(n => src.get(n) ?? EMPTY)
+        return {
+          number_of_posts: agg.map(a => a.posts),
+          engagement: agg.map(a => a.eng),
+          avg_engagements: agg.map(a => (a.posts > 0 ? a.eng / a.posts : 0)),
+          avg_reach: agg.map(a => (a.posts > 0 ? a.reach / a.posts : 0)),
+          avg_er_pct: agg.map(a => (a.erDen > 0 ? (a.eng / a.erDen) * 100 : 0)),
+        }
+      }
+      // Each period keeps its own "has real data" test, so the default (current-only)
+      // chart is unchanged and the comparison can still show a metric that ran in
+      // just one of the two months.
       const m: Record<string, number[]> = {}
-      put(m, 'number_of_posts', agg.map(a => a.posts))
-      put(m, 'engagement', agg.map(a => a.eng))
-      put(m, 'avg_engagements', agg.map(a => (a.posts > 0 ? a.eng / a.posts : 0)))
-      put(m, 'avg_reach', agg.map(a => (a.posts > 0 ? a.reach / a.posts : 0)))
-      put(m, 'avg_er_pct', agg.map(a => (a.erDen > 0 ? (a.eng / a.erDen) * 100 : 0)))
-      if (Object.keys(m).length) out.content_pillars = { labels: names, metrics: m }
+      for (const [id, arr] of Object.entries(pillarMetrics(pillars))) put(m, id, arr)
+      const mPrev: Record<string, number[]> = {}
+      for (const [id, arr] of Object.entries(pillarMetrics(pillarsPrev))) put(mPrev, id, arr)
+      if (Object.keys(m).length || Object.keys(mPrev).length) {
+        out.content_pillars = { labels: names, metrics: m, metricsPrev: mPrev }
+      }
     }
   }
 
@@ -331,6 +351,11 @@ export async function getReportChartMetrics(
     .map(({ y, m }) => eachDate(monthStart(y, m), monthEndExcl(y, m)))
   const monthLabels = [addMonths(year, month, -2), addMonths(year, month, -1), { y: year, m: month }]
     .map(({ m }) => MONTH_ABBR[m - 1])
+  // Month buckets for the content-pillar period comparison ('YYYY-MM' keys).
+  const pillarPrev = addMonths(year, month, -1)
+  const ymKey = (y: number, m: number) => `${y}-${String(m).padStart(2, '0')}`
+  const curYm = ymKey(year, month)
+  const prevYm = ymKey(pillarPrev.y, pillarPrev.m)
 
   const [gold, posts, pillars, sentiment, words, compProfile] = await Promise.all([
     pool.query<GoldRow>(
@@ -361,9 +386,11 @@ export async function getReportChartMetrics(
         GROUP BY p.platform, p.post_date`,
       [orgId, brandId, windowStart, windowEnd],
     ),
-    // Content-pillar rollup (gold) — report month only; NULL pillars excluded upstream.
+    // Content-pillar rollup (gold) — report month AND the month before, bucketed by
+    // month so the chart can compare the two periods. NULL pillars excluded upstream.
     pool.query<PillarRow>(
       `SELECT pp.platform, pp.content_pillar,
+              to_char(date_trunc('month', pp.metric_date), 'YYYY-MM') ym,
               SUM(pp.post_count)::float posts, SUM(pp.engagement_sum)::float eng,
               SUM(pp.er_denominator_sum)::float er_den, SUM(pp.reach_sum)::float reach
          FROM l2_gold.pillar_performance_daily pp
@@ -372,8 +399,8 @@ export async function getReportChartMetrics(
           AND pp.metric_date >= $3 AND pp.metric_date < $4
           AND pp.content_pillar IS NOT NULL
           AND pp.platform IN ('instagram','facebook','tiktok')
-        GROUP BY pp.platform, pp.content_pillar`,
-      [orgId, brandId, monthStart(year, month), windowEnd],
+        GROUP BY pp.platform, pp.content_pillar, date_trunc('month', pp.metric_date)`,
+      [orgId, brandId, monthStart(pillarPrev.y, pillarPrev.m), windowEnd],
     ),
     // Daily comment sentiment (3 lines: pos/neu/neg counts) over the 3-month window.
     pool.query<SentimentRow>(
@@ -446,8 +473,11 @@ export async function getReportChartMetrics(
     const postMap = new Map<string, PostVals>()
     for (const r of posts.rows) if (r.platform === p) postMap.set(r.post_date, r)
     const pillarMap = new Map<string, PillarAgg>()
+    const pillarPrevMap = new Map<string, PillarAgg>()
     for (const r of pillars.rows) if (r.platform === p) {
-      pillarMap.set(r.content_pillar, { posts: Number(r.posts) || 0, eng: Number(r.eng) || 0, erDen: Number(r.er_den) || 0, reach: Number(r.reach) || 0 })
+      const agg: PillarAgg = { posts: Number(r.posts) || 0, eng: Number(r.eng) || 0, erDen: Number(r.er_den) || 0, reach: Number(r.reach) || 0 }
+      if (r.ym === curYm) pillarMap.set(r.content_pillar, agg)
+      else if (r.ym === prevYm) pillarPrevMap.set(r.content_pillar, agg)
     }
 
     const metrics: ChannelChartMetrics = {}
@@ -461,7 +491,7 @@ export async function getReportChartMetrics(
     }
     if (Object.keys(metrics).length) channels[p] = metrics
 
-    const barCats = buildBars(monthDates, monthGroups, monthLabels, goldMap, postMap, pillarMap, p, customDefs)
+    const barCats = buildBars(monthDates, monthGroups, monthLabels, goldMap, postMap, pillarMap, pillarPrevMap, p, customDefs)
     if (Object.keys(barCats).length) bars[p] = barCats
 
     // Sentiment — 3 daily-count series (present if the platform has any comments in the window).

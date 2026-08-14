@@ -70,6 +70,13 @@ export interface CompetitorChartSection { brand: CompetitorChartEntity; competit
 export interface BarCategoryData {
   labels: string[]                          // x-axis groups (weekdays / months / pillar names)
   metrics: Partial<Record<string, number[]>> // metricId → value aligned to labels (absent = no data)
+  /**
+   * The SAME metrics measured over the PREVIOUS month, aligned to the same labels.
+   * Only categories whose labels are period-independent carry this (content_pillars),
+   * so the chart can put "previous vs current" side by side per label. Absent = the
+   * category has no previous-period counterpart.
+   */
+  metricsPrev?: Partial<Record<string, number[]>>
 }
 /** Present bar categories for one channel, keyed by category id. */
 export type ChannelBarMetrics = Partial<Record<BarCategoryId, BarCategoryData>>

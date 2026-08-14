@@ -5,7 +5,7 @@
 // so everything stays editable in PowerPoint.
 import { CoverColors, noHash, tint } from '../cover/colors'
 import { CoverConfig, SLIDE_IN, addCoverSlide, addContainImage, addCoverImage, svgToPng } from './exportCover'
-import { ChartConfig, resolveBarData, resolveLineData, chartSummary, SENTIMENT_PALETTES } from '../data/chartData'
+import { ChartConfig, resolveBarData, resolveLineData, chartSummary, groupBarSeries, SENTIMENT_PALETTES } from '../data/chartData'
 import { TableColumn, TableConfig, TABLE_TYPES, SectionMetrics, SentimentTable, CompetitorSection, PlatformMetrics, ReportTableMetrics, buildTable, columnsForChannel, sentimentTableFor, customColumnsFrom } from '../data/tableTypes'
 import { cloudWordsFrom, type ReportChartMetrics, type CloudWordData } from '../data/chartTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
@@ -108,15 +108,20 @@ async function chartCard(
   if (config.chartType === 'bar') {
     const { labels, series } = resolveBarData(config, chartMetrics ?? null, channel, colors)
     if (!series.length) { noDataText(slide, box.x, box.y, box.w, box.h); return }
+    // One mini chart per group: a plain metric is its own group, while a period
+    // comparison groups that metric's two months into one clustered chart.
+    const groups = groupBarSeries(series)
     const gap = W(1.2), titleH = H(3.2)
-    const subW = (box.w - gap * (series.length - 1)) / series.length
-    series.forEach((s, i) => {
+    const subW = (box.w - gap * (groups.length - 1)) / groups.length
+    groups.forEach((g, i) => {
       const sx = box.x + i * (subW + gap)
-      slide.addText(s.name.toUpperCase(), { x: sx, y: box.y, w: subW, h: titleH, align: 'center', fontSize: FS(1.05), bold: true, color: '64748B', fontFace: PJ })
-      slide.addChart('bar', [{ name: s.name, labels, values: s.data }], {
+      const paired = g.series.length > 1
+      slide.addText(g.title.toUpperCase(), { x: sx, y: box.y, w: subW, h: titleH, align: 'center', fontSize: FS(1.05), bold: true, color: '64748B', fontFace: PJ })
+      slide.addChart('bar', g.series.map(s => ({ name: s.name, labels, values: s.data })), {
         x: sx, y: box.y + titleH, w: subW, h: box.h - titleH,
-        showLegend: false, showTitle: false, ...catAxis, chartColors: [noHash(s.color)],
-        valAxisMinVal: s.scale.min, valAxisMaxVal: s.scale.max,
+        showLegend: paired, legendPos: 'b', legendFontSize: FS(1.0), legendColor: '94A3B8', legendFontFace: PJ,
+        showTitle: false, ...catAxis, chartColors: g.series.map(s => noHash(s.color)),
+        valAxisMinVal: g.series[0].scale.min, valAxisMaxVal: g.series[0].scale.max,
         valGridLine: { style: 'solid', size: 1, color: 'F1F3F5' }, catGridLine: { style: 'none' },
         valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ,
         barDir: config.barOrientation === 'horizontal' ? 'bar' : 'col',

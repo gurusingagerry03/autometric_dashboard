@@ -5,7 +5,7 @@ import { ChartTooltip, useChartTooltip, formatTipValue } from '@/components/ui/C
 import { CoverColors } from '@/lib/reports/cover/colors'
 import {
   ChartConfig, Series, LineSeries, BarSeries, resolveBarData, resolveLineData, chartIcon, chartSummary,
-  SENTIMENT_PALETTES,
+  groupBarSeries, SENTIMENT_PALETTES,
 } from '@/lib/reports/data/chartData'
 import { AxisScale, compactNum, cloudWordsFrom, CloudWordData } from '@/lib/reports/data/chartTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT, type PlacedWord } from '@/lib/reports/data/wordcloudLayout'
@@ -308,16 +308,29 @@ function RenderChart({ config, colors, channel }: { config: ChartConfig; colors:
   if (config.chartType === 'bar') {
     // Small multiples: one mini bar chart per metric (category members on X, its
     // own real value axis) — so mixed-magnitude metrics each read in true units.
+    // In period-comparison mode a metric's two months share one mini chart (and one
+    // axis), giving a previous/current pair of bars per category member.
     const { labels, series } = resolveBarData(config, chartCtx, channel, colors)
     if (!series.length) return <NoData label={noDataLabel} />
+    const groups = groupBarSeries(series)
     return (
       <div className="w-full h-full flex" style={{ gap: '2cqw' }}>
-        {series.map(s => (
-          <div key={s.name} className="flex-1 min-w-0 flex flex-col">
-            <div className="truncate" style={{ fontSize: '1.05cqw', fontWeight: 700, color: '#64748b', textAlign: 'center', marginBottom: '0.8cqh', ...PJ }}>{s.name}</div>
+        {groups.map(g => (
+          <div key={g.title} className="flex-1 min-w-0 flex flex-col">
+            <div className="truncate" style={{ fontSize: '1.05cqw', fontWeight: 700, color: '#64748b', textAlign: 'center', marginBottom: '0.8cqh', ...PJ }}>{g.title}</div>
+            {g.series.length > 1 && (
+              <div className="flex flex-wrap justify-center" style={{ gap: '0.4cqh 1.2cqw', marginBottom: '0.6cqh' }}>
+                {g.series.map(s => (
+                  <div key={s.name} className="flex items-center" style={{ gap: '0.4cqw' }}>
+                    <span style={{ width: '1cqw', height: '1cqw', borderRadius: '999px', background: s.color }} />
+                    <span style={{ fontSize: '0.95cqw', fontWeight: 600, color: '#94a3b8', ...PJ }}>{s.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex-1 min-h-0">
-              <ChartFrame labels={labels} left={{ scale: s.scale, color: '#b6bcc4' }} horizontal={config.barOrientation === 'horizontal'}>
-                <GroupedBars labels={labels} series={[s]} orientation={config.barOrientation ?? 'vertical'} />
+              <ChartFrame labels={labels} left={{ scale: g.series[0].scale, color: '#b6bcc4' }} horizontal={config.barOrientation === 'horizontal'}>
+                <GroupedBars labels={labels} series={g.series} orientation={config.barOrientation ?? 'vertical'} />
               </ChartFrame>
             </div>
           </div>

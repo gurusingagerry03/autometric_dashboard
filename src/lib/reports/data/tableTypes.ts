@@ -101,6 +101,8 @@ export function customColumnsFrom(metrics: ReportTableMetrics | null | undefined
 // pooled SUM (Σengagement ÷ Σdenominator) + mean Avg.; counts are SUM only.
 const CONTENT_ALL_COLUMNS: TableColumn[] = [
   { id: 'new_follow_content', label: 'New Follow from Content', format: 'number' },
+  { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
+  { id: 'avg_profile_visit', label: 'Avg. Profile Visit', format: 'number' },
   { id: 'reach', label: 'Reach', format: 'compact' },
   { id: 'avg_reach', label: 'Avg. Reach', format: 'compact' },
   { id: 'impressions_views', label: 'Impressions/Views', format: 'compact' },
@@ -123,9 +125,14 @@ const CONTENT_ALL_COLUMNS: TableColumn[] = [
   { id: 'er_views', label: 'Avg. ER Views', format: 'percent' },
   { id: 'er_followers_pooled', label: 'ER Followers', format: 'percent' },
   { id: 'er_followers', label: 'Avg. ER Followers', format: 'percent' },
+  // Video efficiency — averaged over the posts that carry the metric on any channel
+  // (Instagram/TikTok watch time, TikTok completion). Off by default: they only apply
+  // to video formats, so on a mixed deck they'd read as "—" more often than not.
+  { id: 'video_watch_time', label: 'Avg. Watch Time', format: 'time' },
+  { id: 'post_completion', label: 'Completion Rate', format: 'percent' },
 ]
 const CONTENT_ALL_DEFAULTS = [
-  'new_follow_content', 'reach', 'impressions_views', 'likes', 'comments', 'shares',
+  'new_follow_content', 'profile_visit', 'reach', 'impressions_views', 'likes', 'comments', 'shares',
   'saved', 'reposts', 'eng_owned', 'er_reach_pooled', 'er_views_pooled', 'er_followers_pooled',
 ]
 const CHANNEL_ALL_COLUMNS: TableColumn[] = [
@@ -138,8 +145,9 @@ const CHANNEL_ALL_COLUMNS: TableColumn[] = [
   { id: 'avg_unfollows', label: 'Avg. Unfollows', format: 'number' },
   { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
   { id: 'avg_profile_reach', label: 'Avg. Profile Reach', format: 'compact' },
-  { id: 'profile_views', label: 'Profile Views', format: 'number' },
-  { id: 'avg_profile_views', label: 'Avg. Profile Views', format: 'number' },
+  // "Profile Views" and "Profile Visit" are the same metric (glossary: Kunjungan
+  // Profil) and share one gold source, so only Profile Visit is offered — the old
+  // `profile_views` id, which had no source and always rendered "—", is aliased.
   { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
   { id: 'avg_profile_visit', label: 'Avg. Profile Visit', format: 'number' },
   { id: 'total_posts', label: 'Total Post', format: 'number' },
@@ -152,9 +160,29 @@ const CHANNEL_ALL_COLUMNS: TableColumn[] = [
 ]
 const CHANNEL_ALL_DEFAULTS = [
   'total_followers', 'followers_net_growth', 'new_follows', 'unfollows',
-  'profile_reach', 'profile_views', 'profile_visit', 'total_posts',
+  'profile_reach', 'profile_visit', 'total_posts',
   'eng_owned', 'avg_eng_owned',
 ]
+
+/**
+ * Renamed column ids. A saved slide or template still stores the old id, so every
+ * selection is normalized through this map before rendering / re-opening the picker
+ * — otherwise the column would silently disappear from an existing report.
+ */
+const COLUMN_ALIASES: Record<string, string> = {
+  profile_views: 'profile_visit',
+  avg_profile_views: 'avg_profile_visit',
+}
+
+/** Map legacy column ids to their current ids, dropping duplicates. */
+export function normalizeColumnIds(ids: string[]): string[] {
+  const out: string[] = []
+  for (const id of ids) {
+    const mapped = COLUMN_ALIASES[id] ?? id
+    if (!out.includes(mapped)) out.push(mapped)
+  }
+  return out
+}
 
 export const TABLE_TYPES: Record<string, TableType> = {
   content_level: {
@@ -187,15 +215,19 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'post_view_time', label: 'Post Avg. View Time', format: 'time', channels: ['tiktok'] },
       { id: 'post_completion', label: 'Post Completion Rate', format: 'percent', channels: ['tiktok'] },
       { id: 'new_follow_content', label: 'New Follow from Content', format: 'number', channels: ['instagram', 'tiktok'] },
+      // Profile visits driven by content = SUM(unified_post.profile_visits) over the
+      // period. Left unrestricted like video_watch_time: the API only fills it for
+      // Instagram, but an FPK/CSV source can supply it for any channel (else "—").
+      { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
     ],
   },
   channel_level: {
     id: 'channel_level', label: 'Channel Level Metric', icon: 'insights',
     description: 'Profile-wide metrics — this period vs last.', rowType: 'comparison', channelScoped: true,
-    defaultColumns: ['total_followers', 'followers_net_growth', 'profile_views', 'total_posts', 'eng_owned', 'avg_eng_owned', 'avg_er_reach'],
+    defaultColumns: ['total_followers', 'followers_net_growth', 'profile_visit', 'total_posts', 'eng_owned', 'avg_eng_owned', 'avg_er_reach'],
     // Cross-channel "all" view (Channel Performance spec) — see CHANNEL_ALL_COLUMNS.
     // Daily profile aggregates: SUM column (period total) + Avg. column (per day).
-    // Followers & Total Post are SUM only. "Profile Views" has no gold source → "—".
+    // Followers & Total Post are SUM only.
     allColumns: CHANNEL_ALL_COLUMNS,
     allDefaultColumns: CHANNEL_ALL_DEFAULTS,
     columns: [
@@ -203,7 +235,9 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'followers_net_growth', label: 'Followers Net Growth', format: 'number' },
       { id: 'new_follows', label: 'New Follows', format: 'number' },
       { id: 'unfollows', label: 'Unfollows', format: 'number' },
-      { id: 'profile_views', label: 'Profile Views', format: 'number' },
+      // Same metric the picker used to call "Profile Views" (gold profile_visit_sum),
+      // renamed for consistency with the All-Channels layout; legacy id is aliased.
+      { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
       { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
       { id: 'avg_er_reach', label: 'Avg. ER Reach', format: 'percent' },
       { id: 'avg_er_views', label: 'Avg. ER Views', format: 'percent', channels: ['instagram', 'tiktok'] },
@@ -451,12 +485,14 @@ export function buildTable(
   platformMetrics?: PlatformMetrics | null,
 ): { header: string; columns: TableColumn[]; rows: TableRow[] } {
   const def = TABLE_TYPES[config.type] ?? TABLE_TYPES.content_level
+  // Selections saved before a column was renamed still carry the old id.
+  const selected = normalizeColumnIds(config.columns)
   // Custom metrics attach to the comparison metric tables only (content/channel level).
-  const extra = def.rowType === 'comparison' ? customCols.filter(c => config.columns.includes(c.id)) : []
+  const extra = def.rowType === 'comparison' ? customCols.filter(c => selected.includes(c.id)) : []
   // Universe = the columns available for this table on the slide's channel (per-channel
   // columns, or the all-channel Content/Channel Performance layout on "all"). Order
   // follows the universe so the all-channel SUM/AVG pairs stay in spec order.
-  const columns = [...availableColumns.filter(c => config.columns.includes(c.id)), ...extra]
+  const columns = [...availableColumns.filter(c => selected.includes(c.id)), ...extra]
 
   // Competitor table: dynamic rows (Brand + chosen competitors by @username).
   // config.competitorIds picks which competitors show (undefined = all). While

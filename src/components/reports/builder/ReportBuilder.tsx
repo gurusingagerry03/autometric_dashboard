@@ -231,6 +231,20 @@ export default function ReportBuilder({
   function deleteSlide(id: string) {
     setSlides(prev => prev.filter(s => s.id !== id))
   }
+  // Reorder: pull the slide out of `from` and re-insert it at `to` (both are
+  // 0-based indexes into `slides`, i.e. deck page number − 2 since the cover is
+  // page 1). Ids are preserved, so the active/edited slide follows its content.
+  function moveSlide(from: number, to: number) {
+    setSlides(prev => {
+      if (from < 0 || from >= prev.length) return prev
+      const target = Math.max(0, Math.min(prev.length - 1, to))
+      if (from === target) return prev
+      const next = [...prev]
+      const [moved] = next.splice(from, 1)
+      next.splice(target, 0, moved)
+      return next
+    })
+  }
   function openSlide(id: string) {
     setActiveSlideId(id)
     setStep('editSlide')
@@ -574,6 +588,7 @@ export default function ReportBuilder({
             onOpen={openSlide}
             onRename={(id, t) => updateSlide({ ...slides.find(s => s.id === id)!, title: t })}
             onDelete={deleteSlide}
+            onMove={moveSlide}
             onExport={handleExport}
             onSaveTemplate={() => setSaveTemplateOpen(true)}
             cover={

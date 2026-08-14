@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   TABLE_TYPES, TableConfig,
-  columnsForChannel, defaultColumnsFor, isTypeEnabledForChannel, typeChannelHint,
+  columnsForChannel, defaultColumnsFor, isTypeEnabledForChannel, normalizeColumnIds, typeChannelHint,
 } from '@/lib/reports/data/tableTypes'
 import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import MetricInfo from '@/components/ui/MetricInfo'
@@ -35,7 +35,7 @@ export default function TableSelectionModal({
 }) {
   const [type, setType] = useState(initial?.type ?? defaultTypeFor(channel))
   const [columns, setColumns] = useState<string[]>(
-    initial?.columns ?? defaultColumnsFor(initial?.type ?? defaultTypeFor(channel), channel),
+    initial ? normalizeColumnIds(initial.columns) : defaultColumnsFor(defaultTypeFor(channel), channel),
   )
   // Chosen competitors (Brand-vs-Competitor table only). Default = all available.
   const allCompIds = availableCompetitors.map(c => c.id)
@@ -54,7 +54,7 @@ export default function TableSelectionModal({
     const valid = initial && TABLE_TYPES[initial.type] && isTypeEnabledForChannel(initial.type, channel) && !TABLE_TYPES[initial.type].disabled
     const t = valid ? initial!.type : defaultTypeFor(channel)
     setType(t)
-    setColumns(valid ? initial!.columns : defaultColumnsFor(t, channel))
+    setColumns(valid ? normalizeColumnIds(initial!.columns) : defaultColumnsFor(t, channel))
     // Default all competitors checked (or the saved selection intersected with what's available).
     setCompetitorIds(
       valid && initial!.competitorIds

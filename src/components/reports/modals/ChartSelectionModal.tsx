@@ -35,6 +35,8 @@ export default function ChartSelectionModal({
   const [orientation, setOrientation] = useState<BarOrientation>('vertical')
   const [barCategory, setBarCategory] = useState<string | null>(null)
   const [barMetrics, setBarMetrics] = useState<string[]>([])
+  // Content Pillars only: put last month's bars next to this month's, per pillar.
+  const [comparePeriod, setComparePeriod] = useState(false)
   const [competitorIds, setCompetitorIds] = useState<string[]>([])
   // Org custom metrics — selectable as line series (created/managed via CustomMetricModal).
   const [customMetrics, setCustomMetrics] = useState<CustomMetricDef[]>([])
@@ -47,12 +49,13 @@ export default function ChartSelectionModal({
   const allCompIds = availableCompetitors.map(c => c.id)
   const reset = () => {
     setStep(1); setCategory(null); setDimension(null); setLineMetrics([])
-    setOrientation('vertical'); setBarCategory(null); setBarMetrics([]); setCompetitorIds([])
+    setOrientation('vertical'); setBarCategory(null); setBarMetrics([])
+    setComparePeriod(false); setCompetitorIds([])
   }
   const close = () => { reset(); onClose() }
 
   const back = () => {
-    if (step === 4) { setStep(3); setBarMetrics([]) }
+    if (step === 4) { setStep(3); setBarMetrics([]); setComparePeriod(false) }
     else if (step === 3) {
       if (category === 'bar') { setStep(2); setBarCategory(null) }
       else { setStep(2); setLineMetrics([]) }
@@ -77,6 +80,7 @@ export default function ChartSelectionModal({
     if (category === 'line') onSelect({ chartType: 'line', dimension: dimension ?? 'daymonth', metrics: lineMetrics })
     else if (category === 'bar') onSelect({
       chartType: 'bar', barOrientation: orientation, barCategory: barCategory ?? undefined, barMetrics,
+      ...(barCategory === 'content_pillars' && comparePeriod ? { barCompare: 'period' as const } : {}),
       ...(barCategory === 'competitors' ? { competitorIds } : {}),
     })
     close()
@@ -296,6 +300,26 @@ export default function ChartSelectionModal({
                 )
               })}
             </div>
+            {/* Content Pillars: compare the report month with the one before it. Each
+                selected metric then shows two bars per pillar instead of one. */}
+            {barCategory === 'content_pillars' && (
+              <button
+                onClick={() => setComparePeriod(v => !v)}
+                style={PJ}
+                className={`w-full p-3 rounded-lg border flex items-center gap-2.5 text-left transition-all ${
+                  comparePeriod ? selected : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#475569]'
+                }`}
+              >
+                <span className={`w-5 h-5 rounded border flex items-center justify-center text-[11px] flex-shrink-0 ${comparePeriod ? 'bg-[#2C3079] border-[#2C3079] text-white' : 'border-[#cbd5e1]'}`}>
+                  {comparePeriod && '✓'}
+                </span>
+                <span className="material-symbols-outlined text-[15px] opacity-60">compare_arrows</span>
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-semibold">Compare with previous month</span>
+                  <span className="block text-[10.5px] text-[#94a3b8]">Each pillar gets a previous-month bar next to this month&rsquo;s</span>
+                </span>
+              </button>
+            )}
             {/* Custom metrics — only for the time-bucketed bar categories (data available). */}
             {(barCategory === 'daily_performance' || barCategory === 'last3months_performance') && (
               customMetrics.length > 0 ? (
