@@ -7,6 +7,7 @@ import CreateOrgModal from './CreateOrgModal';
 import InvitationsModal from '@/components/invitations/InvitationsModal';
 import { Organization } from '@/lib/organizations/types';
 import { Invitation } from '@/lib/invitations/types';
+import { useT } from '@/lib/i18n/LanguageContext'
 
 // The floating cards illustrate three real features. Labels, tiers and colors
 // below mirror the actual dashboards so the hero doesn't promise a product that
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export default function WelcomePage({ hasOrgs, firstOrgSlug, initialInvitations }: Props) {
+  const t = useT()
   const router = useRouter();
 
   const [invites, setInvites] = useState<Invitation[]>(initialInvitations);
@@ -513,7 +515,7 @@ export default function WelcomePage({ hasOrgs, firstOrgSlug, initialInvitations 
                   >
                     Comment Relevance
                   </p>
-                  <span style={{ fontSize: 11, color: '#aaaaaa' }}>Semantic</span>
+                  <span style={{ fontSize: 11, color: '#aaaaaa' }}>{t('Semantic')}</span>
                 </div>
 
                 {/* Distribution — one bar, split by tier */}
@@ -606,7 +608,7 @@ export default function WelcomePage({ hasOrgs, firstOrgSlug, initialInvitations 
                   >
                     Top Commenters
                   </p>
-                  <span style={{ fontSize: 11, color: '#aaaaaa' }}>Leaderboard</span>
+                  <span style={{ fontSize: 11, color: '#aaaaaa' }}>{t('Leaderboard')}</span>
                 </div>
 
                 {TOP_COMMENTERS.map((c) => (
@@ -693,12 +695,11 @@ export default function WelcomePage({ hasOrgs, firstOrgSlug, initialInvitations 
               />
             </div>
 
-            <h1 className="wp-h1">The data is in.</h1>
-            <h1 className="wp-h1-dim">The next move is yours.</h1>
+            <h1 className="wp-h1">{t('The data is in.')}</h1>
+            <h1 className="wp-h1-dim">{t('The next move is yours.')}</h1>
 
             <p className="wp-subtitle">
-              We&rsquo;ve organized your metrics, surfaced the insights, and prepared the reports.
-              Now it&rsquo;s time to decide with confidence.
+              {t('We’ve organized your metrics, surfaced the insights, and prepared the reports. Now it’s time to decide with confidence.')}
             </p>
 
             <div className="wp-cta-row">
@@ -707,14 +708,14 @@ export default function WelcomePage({ hasOrgs, firstOrgSlug, initialInvitations 
                   className="wp-btn-main"
                   onClick={() => router.push(`/organizations/${firstOrgSlug}/dashboard`)}
                 >
-                  Explore Insights
+                  {t('Explore Insights')}
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                     arrow_forward
                   </span>
                 </button>
               ) : (
                 <button className="wp-btn-main" onClick={() => setShowCreate(true)}>
-                  Get Started
+                  {t('Get Started')}
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
                     arrow_forward
                   </span>
@@ -724,7 +725,7 @@ export default function WelcomePage({ hasOrgs, firstOrgSlug, initialInvitations 
               {invites.length > 0 && (
                 <button className="wp-btn-ghost" onClick={() => setShowInvites(true)}>
                   <span className="wp-invite-dot">{invites.length}</span>
-                  Invitations
+                  {t('Invitations')}
                 </button>
               )}
             </div>

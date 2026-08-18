@@ -6,11 +6,12 @@ import { Brand, Platform, SocialAccount } from '@/lib/brands/types'
 import BrandAvatar from '../BrandAvatar'
 import ChannelRow from './ChannelRow'
 import ConnectAccountModal from '../modals/ConnectAccountModal'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 type StatusFilter = 'all' | 'connected' | 'disconnected'
 
 const ACTIVE_PLATFORMS: Platform[] = ['instagram', 'tiktok', 'facebook']
-const COL_HEADERS = ['CHANNEL', 'USERNAME', 'COMPETITORS', 'STATUS', 'CONNECTED AT', 'CREATED AT']
+const COL_HEADERS = ['Channel', 'Username', 'Competitors', 'Status', 'Connected at', 'Created at']
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
 
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function BrandGroup({ brand, orgSlug, statusFilter, defaultOpen = false, onAccountAdded }: Props) {
+  const t = useT()
   const [open,           setOpen]           = useState(defaultOpen)
   const [showAddChannel, setShowAddChannel] = useState(false)
 
@@ -58,12 +60,12 @@ export default function BrandGroup({ brand, orgSlug, statusFilter, defaultOpen =
 
         {disconnectedCount > 0 && (
           <span style={PJB} className="text-[11px] font-medium text-[#dc2626] bg-[#fef2f2] px-2 py-0.5 rounded-full ml-1">
-            {disconnectedCount} disconnected
+            {t('{count} disconnected', { count: disconnectedCount })}
           </span>
         )}
 
         <span style={PJB} className="text-[11px] font-medium text-[#9ca3af] ml-auto">
-          {brand.competitors.length} {brand.competitors.length === 1 ? 'competitor' : 'competitors'}
+          {t('{count} competitors', { count: brand.competitors.length })}
         </span>
       </div>
 
@@ -71,7 +73,7 @@ export default function BrandGroup({ brand, orgSlug, statusFilter, defaultOpen =
         <div>
           <div className="grid grid-cols-[1.6fr_1.4fr_1.2fr_1fr_1.3fr_1.3fr] px-6 py-2 bg-white border-b border-[#e5e7eb]">
             {COL_HEADERS.map(h => (
-              <span key={h} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{h}</span>
+              <span key={h} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{t(h)}</span>
             ))}
           </div>
 
@@ -91,7 +93,7 @@ export default function BrandGroup({ brand, orgSlug, statusFilter, defaultOpen =
               className="w-full flex items-center gap-1.5 px-6 py-2.5 border-b border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors group/add"
             >
               <span className="material-symbols-outlined text-[14px] text-[#d1d5db] group-hover/add:text-[#1B8A80] transition-colors">add</span>
-              <span style={PJB} className="text-[12px] text-[#d1d5db] group-hover/add:text-[#1B8A80] transition-colors">Add channel</span>
+              <span style={PJB} className="text-[12px] text-[#d1d5db] group-hover/add:text-[#1B8A80] transition-colors">{t('Add channel')}</span>
             </button>
           )}
         </div>

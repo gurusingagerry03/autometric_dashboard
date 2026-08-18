@@ -4,9 +4,11 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Platform, PLATFORM_CONFIG, SocialAccount } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
+import PlanLimits from '../PlanLimits'
 import { useOAuthConnect, CONNECT_OPTIONS } from '@/hooks/useOAuthConnect'
 import { CSV_PLATFORMS } from '@/lib/csv/types'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -24,6 +26,7 @@ interface Props {
 }
 
 export default function ConnectAccountModal({ brandId, brandName, usedPlatforms = [], onClose, onConnected }: Props) {
+  const t = useT()
   const { loading, error, pending, connect, reset, save } = useOAuthConnect(brandId)
   const [sessionConnected, setSessionConnected] = useState<SessionAccount[]>([])
 
@@ -70,11 +73,11 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
    */
   async function addCsvAccount() {
     const u = csvInput.trim().replace(/^@/, '')
-    if (!u) { setCsvErr('Isi username-nya dulu.'); return }
+    if (!u) { setCsvErr(t('Enter the username first.')); return }
     // Cermin validasi server — format salah tidak perlu menunggu Apify.
-    if (!isValidHandle(csvPlatform, u)) { setCsvErr(invalidHandleMessage(csvPlatform, u)); return }
+    if (!isValidHandle(csvPlatform, u)) { setCsvErr(invalidHandleMessage(csvPlatform, u, t)); return }
     if (allConnectedPlatforms.includes(csvPlatform)) {
-      setCsvErr(`${PLATFORM_CONFIG[csvPlatform].label} sudah punya akun di brand ini.`)
+      setCsvErr(t('{platform} already has an account on this brand.', { platform: PLATFORM_CONFIG[csvPlatform].label }))
       return
     }
 
@@ -88,14 +91,14 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setCsvErr(json.error ?? 'Gagal mendaftarkan akun.')
+        setCsvErr(json.error ?? t('Failed to register the account.'))
         return
       }
       setSessionConnected(prev => [...prev, { account: json.data as SocialAccount, is_new: !!json.is_new }])
       setCsvInput('')
       setCsvOpen(false)
     } catch {
-      setCsvErr('Gagal menghubungi server.')
+      setCsvErr(t('Failed to reach the server.'))
     } finally {
       setCsvBusy(false)
     }
@@ -110,9 +113,9 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
 
         <div className="relative bg-white rounded-xl w-full max-w-[460px] mx-4 shadow-xl shadow-black/8 border border-[#e5e7eb]">
           <div className="px-6 pt-5 pb-4">
-            <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">Confirm Account</h2>
+            <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('Confirm Account')}</h2>
             <p className="text-[13px] text-[#9ca3af] mt-0.5">
-              Connect this account to <span className="font-medium text-[#374151]">{brandName}</span>?
+              {t('Connect this account to')} <span className="font-medium text-[#374151]">{brandName}</span>?
             </p>
           </div>
           <div className="border-t border-[#f3f4f6]" />
@@ -145,7 +148,7 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
           <div className="px-6 py-4 flex justify-between items-center">
             <button type="button" onClick={reset} disabled={loading} style={PJB}
               className="h-8 px-3.5 text-[13px] font-medium text-[#6b7280] hover:text-[#111827] hover:bg-[#f9fafb] rounded-lg transition-colors disabled:opacity-40">
-              Ganti Akun
+              {t('Change Account')}
             </button>
 
             <button type="button" disabled={loading} style={PJB}
@@ -157,9 +160,9 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
               {loading ? (
                 <>
                   <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Menghubungkan...
+                  {t('Connecting…')}
                 </>
-              ) : 'Connect'}
+              ) : t('Connect')}
             </button>
           </div>
         </div>
@@ -177,14 +180,15 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
 
       <div className="relative bg-white rounded-xl w-full max-w-[460px] mx-4 shadow-xl shadow-black/8 border border-[#e5e7eb]">
         <div className="px-6 pt-5 pb-4">
-          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">Connect Account</h2>
+          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('Connect Account')}</h2>
           <p className="text-[13px] text-[#9ca3af] mt-0.5">
-            Link a social account to <span className="font-medium text-[#374151]">{brandName}</span>
+            {t('Link a social account to')} <span className="font-medium text-[#374151]">{brandName}</span>
           </p>
         </div>
         <div className="border-t border-[#f3f4f6]" />
 
         <div className="px-6 py-5 flex flex-col gap-2">
+          <PlanLimits className="mb-1" />
           {CONNECT_OPTIONS.map(opt => {
             const taken = allConnectedPlatforms.includes(opt.platform)
             // Platform yang baru didaftarkan sebagai CSV juga 'taken', tapi
@@ -204,13 +208,13 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
                   </span>
                   {taken ? (
                     <span style={PJB} className="text-[11px] text-[#9ca3af] flex-shrink-0">
-                      {takenByCsv ? 'Terdaftar via CSV' : 'Already connected'}
+                      {takenByCsv ? t('Registered via CSV') : t('Already connected')}
                     </span>
                   ) : (
                     <button type="button" disabled={loading} style={PJB}
                       onClick={() => connect(opt.method)}
                       className="flex items-center gap-0.5 text-[12.5px] font-semibold text-[#1B8A80] disabled:opacity-40 flex-shrink-0">
-                      Connect
+                      {t('Connect')}
                       <span className="material-symbols-outlined text-[15px]">chevron_right</span>
                     </button>
                   )}
@@ -228,15 +232,15 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
               <span className="material-symbols-outlined text-[26px] text-[#6b7280]">upload_file</span>
               <div className="flex-1 min-w-0">
                 <p style={PJB} className="text-[13px] font-semibold text-[#111827] leading-tight">
-                  Data manual (upload CSV)
+                  {t('Manual data (CSV upload)')}
                 </p>
                 <p className="text-[11px] text-[#9ca3af] mt-0.5 truncate">
-                  Tidak punya akses akun resmi? Daftarkan username-nya di sini.
+                  {t('No access to the official account? Register the username here.')}
                 </p>
               </div>
               <button type="button" onClick={() => setCsvOpen(o => !o)} style={PJB}
                 className="flex items-center gap-0.5 text-[12.5px] font-semibold text-[#1B8A80] flex-shrink-0">
-                Tambah
+                {t('Add')}
                 <span className="material-symbols-outlined text-[15px]">
                   {csvOpen ? 'expand_less' : 'chevron_right'}
                 </span>
@@ -253,7 +257,7 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
                         key={p}
                         type="button"
                         disabled={taken || csvBusy}
-                        title={taken ? `${PLATFORM_CONFIG[p].label} sudah punya akun di brand ini` : undefined}
+                        title={taken ? t('{platform} already has an account on this brand', { platform: PLATFORM_CONFIG[p].label }) : undefined}
                         onClick={() => { setCsvPlatform(p); setCsvErr('') }}
                         className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg border transition-all ${
                           taken
@@ -279,27 +283,30 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
                     disabled={csvBusy}
                     onChange={e => { setCsvInput(e.target.value); setCsvErr('') }}
                     onKeyDown={e => e.key === 'Enter' && !csvBusy && addCsvAccount()}
-                    placeholder={`@username di ${PLATFORM_CONFIG[csvPlatform].label}`}
+                    placeholder={t('@username on {platform}', { platform: PLATFORM_CONFIG[csvPlatform].label })}
                     className="flex-1 h-8 px-3 text-[12.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border border-[#e5e7eb] rounded-lg outline-none focus:border-[#1B8A80] focus:ring-2 focus:ring-[#1B8A80]/10 transition-all disabled:bg-[#fafafa] disabled:text-[#9ca3af]"
                   />
                   <button type="button" onClick={addCsvAccount} disabled={csvBusy} style={PJB}
                     className="h-8 px-3 bg-[#f3f4f6] hover:bg-[#e5e7eb] text-[12.5px] font-semibold text-[#374151] rounded-lg transition-colors flex-shrink-0 disabled:opacity-60 flex items-center gap-1.5">
                     {csvBusy && <span className="w-3 h-3 border-2 border-[#9ca3af]/40 border-t-[#6b7280] rounded-full animate-spin" />}
-                    {csvBusy ? 'Memeriksa…' : 'Tambah'}
+                    {csvBusy ? t('Checking…') : t('Add')}
                   </button>
                 </div>
                 {csvBusy && (
                   // Angkanya terukur, bukan karangan: run profil Apify ~32 detik
                   // untuk Instagram, ~10 detik untuk Facebook.
                   <p className="text-[11px] text-[#9ca3af]">
-                    Memeriksa akun @{csvInput.trim().replace(/^@/, '')} di {PLATFORM_CONFIG[csvPlatform].label} —
-                    biasanya {csvPlatform === 'instagram' ? '±30 detik' : '±10 detik'}. Jangan tutup jendela ini.
+                    {t('Checking @{username} on {platform} — usually about {seconds} seconds. Keep this window open.', {
+                      username: csvInput.trim().replace(/^@/, ''),
+                      platform: PLATFORM_CONFIG[csvPlatform].label,
+                      seconds: csvPlatform === 'instagram' ? 30 : 10,
+                    })}
                   </p>
                 )}
                 {csvErr && <p className="text-[11px] text-red-500">{csvErr}</p>}
                 {!csvBusy && !csvErr && (
                   <p className="text-[11px] text-[#9ca3af]">
-                    Filenya diupload nanti di tab <span className="font-semibold text-[#6b7280]">Data Sources</span> pada halaman brand.
+                    {t('The file gets uploaded later, in the')} <span className="font-semibold text-[#6b7280]">{t('Data Sources')}</span> {t('tab on the brand page.')}
                   </p>
                 )}
               </div>
@@ -329,14 +336,14 @@ export default function ConnectAccountModal({ brandId, brandName, usedPlatforms 
         <div className="px-6 py-4 flex justify-between items-center">
           <button type="button" onClick={closeAndHandOff} style={PJB}
             className="h-8 px-3.5 text-[13px] font-medium text-[#6b7280] hover:text-[#111827] hover:bg-[#f9fafb] rounded-lg transition-colors">
-            {sessionConnected.length > 0 ? 'Tutup' : 'Close'}
+            {t('Close')}
           </button>
 
           {sessionConnected.length > 0 && (
             <button type="button" style={PJB}
               onClick={closeAndHandOff}
               className="h-8 px-4 text-[13px] font-semibold bg-[#1B8A80] text-white rounded-lg hover:bg-[#177A70] transition-colors flex items-center gap-1.5">
-              Simpan
+              {t('Save')}
               <span className="material-symbols-outlined text-[14px]">check</span>
             </button>
           )}

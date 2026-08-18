@@ -6,6 +6,7 @@ import LoginForm from './LoginForm'
 import RegisterForm from './RegisterForm'
 import ForgotPasswordForm from './ForgotPasswordForm'
 import GoogleOneTap from './GoogleOneTap'
+import LanguageSwitcher from '@/components/layout/LanguageSwitcher'
 
 export type Mode = 'login' | 'register' | 'forgot-password'
 
@@ -13,8 +14,15 @@ export default function AuthPage() {
   const [mode, setMode] = useState<Mode>('login')
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#f0f1f8' }}>
+    <div className="relative flex h-screen overflow-hidden" style={{ background: '#f0f1f8' }}>
       <GoogleOneTap />
+
+      {/* Sign-in happens before there is a sidebar to hold the language control,
+          so it floats over the form panel — a reader who cannot follow the English
+          copy needs the switch on the very first screen, not after logging in. */}
+      <div className="absolute top-5 right-6 z-20">
+        <LanguageSwitcher />
+      </div>
 
       <LeftPanel mode={mode} />
 

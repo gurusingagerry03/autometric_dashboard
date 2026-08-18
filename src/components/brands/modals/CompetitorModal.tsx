@@ -5,6 +5,7 @@ import { CompetitorAccount, Platform, PLATFORM_CONFIG, COMPETITOR_PLATFORM_LIST 
 import PlatformIcon from '../PlatformIcon'
 import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function CompetitorModal({ brandName, competitors, onClose, onAdded }: Props) {
+  const t = useT()
   const [platform, setPlatform] = useState<Platform | null>(null)
   const [username, setUsername] = useState('')
   const [error,    setError]    = useState('')
@@ -40,13 +42,13 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!platform) { setError('Select a platform.'); return }
-    if (selectedFull) { setError(competitorQuotaMessage(PLATFORM_CONFIG[platform].label)); return }
+    if (!platform) { setError(t('Select a platform.')); return }
+    if (selectedFull) { setError(competitorQuotaMessage(PLATFORM_CONFIG[platform].label, t)); return }
     const trimmed = username.trim().replace(/^@/, '')
-    if (!trimmed) { setError('Enter a username.'); return }
+    if (!trimmed) { setError(t('Enter a username.')); return }
     // Cermin validasi server: handle berspasi bikin actor Apify menolak start-run.
     if (!isValidHandle(platform, trimmed)) {
-      setError(invalidHandleMessage(platform, trimmed)); return
+      setError(invalidHandleMessage(platform, trimmed, t)); return
     }
 
     setLoading(true)
@@ -58,13 +60,13 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
       if (outcome === 'not_found') {
         // Barisnya sudah dilepas server. Modal tetap terbuka, username dibiarkan
         // supaya cukup diperbaiki lalu Add lagi.
-        setError(`Akun @${trimmed} tidak ditemukan di ${PLATFORM_CONFIG[platform].label}. ` +
-                 `Periksa lagi penulisannya.`)
+        setError(t('Account @{username} was not found on {platform}. Check the spelling.',
+          { username: trimmed, platform: PLATFORM_CONFIG[platform].label }))
         return
       }
       onClose() // 'verified' atau 'timeout' — sisanya diurus di latar
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError(err instanceof Error ? err.message : t('Something went wrong.'))
     } finally {
       setLoading(false)
       setChecking(false)
@@ -78,9 +80,9 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
       <div className="relative bg-white rounded-xl w-full max-w-[460px] mx-4 shadow-xl shadow-black/8 border border-[#e5e7eb]">
 
         <div className="px-6 pt-5 pb-4 sticky top-0 bg-white border-b border-[#f3f4f6] z-10">
-          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">Add Competitor Account</h2>
+          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('Add Competitor Account')}</h2>
           <p className="text-[13px] text-[#9ca3af] mt-0.5">
-            Track a competitor account for <span className="font-medium text-[#374151]">{brandName}</span>
+            {t('Track a competitor account for')} <span className="font-medium text-[#374151]">{brandName}</span>
           </p>
         </div>
 
@@ -89,8 +91,8 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
           {/* Platform */}
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between">
-              <label style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#6b7280]">Platform</label>
-              <span className="text-[11px] text-[#9ca3af]">Max {MAX_COMPETITORS_PER_PLATFORM} per platform</span>
+              <label style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#6b7280]">{t('Platform')}</label>
+              <span className="text-[11px] text-[#9ca3af]">{t('Max {max} per platform', { max: MAX_COMPETITORS_PER_PLATFORM })}</span>
             </div>
             <div className="grid grid-cols-5 gap-2">
               {COMPETITOR_PLATFORM_LIST.map(p => {
@@ -100,7 +102,7 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
                 const full   = used >= MAX_COMPETITORS_PER_PLATFORM
                 return (
                   <button key={p} type="button" disabled={full}
-                    title={full ? competitorQuotaMessage(cfg.label) : undefined}
+                    title={full ? competitorQuotaMessage(cfg.label, t) : undefined}
                     onClick={() => { setPlatform(p); setError('') }}
                     className={`flex flex-col items-center gap-1.5 py-3 rounded-lg border-2 transition-all ${
                       full     ? 'border-[#f3f4f6] bg-[#fafafa] opacity-45 cursor-not-allowed' :
@@ -124,7 +126,7 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
           {/* Username */}
           <div className="flex flex-col gap-1.5">
             <label style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#6b7280]">
-              Competitor Username
+              {t('Competitor Username')}
             </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] text-[#9ca3af]">@</span>
@@ -132,7 +134,7 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
                 type="text"
                 value={username.replace(/^@/, '')}
                 onChange={e => { setUsername(e.target.value); setError('') }}
-                placeholder={platform ? `competitor.${platform}.handle` : 'select a platform first'}
+                placeholder={platform ? `competitor.${platform}.handle` : t('select a platform first')}
                 disabled={!platform || busy}
                 maxLength={60}
                 className="w-full h-9 pl-7 pr-3 text-[13.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border border-[#e5e7eb] rounded-lg outline-none transition-all focus:border-[#1B8A80] focus:ring-2 focus:ring-[#1B8A80]/10 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -148,9 +150,9 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
                 progress_activity
               </span>
               <p className="text-[12px] text-[#22615c] leading-relaxed">
-                Memeriksa apakah akun ini benar-benar ada… biasanya 10–60 detik.
+                {t('Checking whether this account really exists… usually 10–60 seconds.')}
                 <span className="block text-[11px] text-[#5c8a84] mt-0.5">
-                  Jangan tutup jendela ini kalau ingin tahu hasilnya.
+                  {t('Keep this window open if you want to see the result.')}
                 </span>
               </p>
             </div>
@@ -165,11 +167,11 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
             className="h-8 px-3.5 text-[13px] font-medium text-[#6b7280] hover:text-[#111827] hover:bg-[#f9fafb] rounded-lg transition-colors">
             {/* Tetap aktif saat memeriksa: competitor-nya sudah tersimpan, dan
                 verifikasi jalan terus di latar walau modalnya ditutup. */}
-            {busy ? 'Tutup' : 'Cancel'}
+            {busy ? t('Close') : t('Cancel')}
           </button>
           <button onClick={handleSubmit} disabled={!platform || selectedFull || !username.trim() || busy} style={PJB}
             className="h-8 px-4 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-semibold rounded-lg transition-colors">
-            {checking ? 'Memeriksa…' : loading ? 'Adding…' : 'Add Competitor'}
+            {checking ? t('Checking…') : loading ? t('Adding…') : t('Add Competitor')}
           </button>
         </div>
       </div>

@@ -1,9 +1,12 @@
+'use client'
+
 import Link from 'next/link'
 import OrgSwitcher from './OrgSwitcher'
 import OrgNav from './OrgNav'
 import UserMenu from './UserMenu'
 import SidebarToggle from './SidebarToggle'
 import { Organization } from '@/lib/organizations/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 interface Props {
   fallbackOrgSlug: string
@@ -12,6 +15,7 @@ interface Props {
 }
 
 export default function Sidebar({ fallbackOrgSlug, hasOrgs, initialOrgs }: Props) {
+  const t = useT()
   return (
     <aside className="h-screen w-[280px] flex flex-col bg-white border-r-2 border-[#e2e8f0]">
       <div className="h-16 flex items-center justify-between gap-2 px-4 border-b border-[#e5e7eb] flex-shrink-0">
@@ -36,7 +40,7 @@ export default function Sidebar({ fallbackOrgSlug, hasOrgs, initialOrgs }: Props
               <span className="material-symbols-outlined text-[18px] flex-shrink-0 text-[#1B8A80]">
                 corporate_fare
               </span>
-              Organizations
+              {t('Organizations')}
             </Link>
           </div>
         </div>

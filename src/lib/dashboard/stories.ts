@@ -1,6 +1,8 @@
 import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi, TrendSeries } from '@/components/dashboard/data'
+import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Gold-layer data access for the Stories dashboard, scoped to one organization.
@@ -31,14 +33,8 @@ const FUNNEL_COLORS: Record<string, string> = {
   Exits: '#d6556f', Replies: '#d23f6f', 'Swipe-Up': '#5fa783',
 }
 const TYPE_LABEL: Record<string, string> = { IMAGE: 'Static Image', VIDEO: 'Video' }
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function fmtNum(n: number): string {
-  const a = Math.abs(n)
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (a >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.round(n))
-}
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0)
 function deltaStr(cur: number, prev: number): { delta: string; good: boolean } {
   if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: cur >= 0 }
@@ -119,21 +115,21 @@ async function dailySparks(orgId: string, platform: PlatformParam, w: Window, br
   }
 }
 
-function buildKpis(cur: Totals, prev: Totals, s: Awaited<ReturnType<typeof dailySparks>>): OverviewKpi[] {
+function buildKpis(cur: Totals, prev: Totals, s: Awaited<ReturnType<typeof dailySparks>>, t: Translator): OverviewKpi[] {
   const avgReachCur = cur.stories > 0 ? cur.reach / cur.stories : 0
   const avgReachPrev = prev.stories > 0 ? prev.reach / prev.stories : 0
   const swipeCur = pct(cur.swipe, cur.reach), swipePrev = pct(prev.swipe, prev.reach)
   const exitCur = pct(cur.exits, cur.views), exitPrev = pct(prev.exits, prev.views)
   return [
-    { key: 's-pub', label: 'Stories Published', icon: 'amp_stories', value: fmtNum(cur.stories), ...deltaStr(cur.stories, prev.stories), spark: s.stories.length ? s.stories : [0] },
-    { key: 's-reach', label: 'Avg. Story Reach', icon: 'ads_click', value: fmtNum(avgReachCur), ...deltaStr(avgReachCur, avgReachPrev), spark: s.avgReach.length ? s.avgReach : [0] },
-    { key: 's-swipe', label: 'Swipe-Up Rate', icon: 'swipe_up', value: `${swipeCur.toFixed(1)}%`, ...ptsStr(swipeCur, swipePrev), spark: s.swipeRate.length ? s.swipeRate : [0] },
-    { key: 's-exit', label: 'Exit Rate (avg)', icon: 'logout', value: `${Math.round(exitCur)}%`, ...ptsStr(exitCur, exitPrev, true), spark: s.exitRate.length ? s.exitRate : [0] },
+    { key: 's-pub', label: t('Stories Published'), icon: 'amp_stories', ...compact(cur.stories), ...deltaStr(cur.stories, prev.stories), spark: s.stories.length ? s.stories : [0] },
+    { key: 's-reach', label: t('Avg. Story Reach'), icon: 'ads_click', ...compact(avgReachCur), ...deltaStr(avgReachCur, avgReachPrev), spark: s.avgReach.length ? s.avgReach : [0] },
+    { key: 's-swipe', label: t('Swipe-Up Rate'), icon: 'swipe_up', value: `${swipeCur.toFixed(1)}%`, ...ptsStr(swipeCur, swipePrev), spark: s.swipeRate.length ? s.swipeRate : [0] },
+    { key: 's-exit', label: t('Exit Rate (avg)'), icon: 'logout', value: `${Math.round(exitCur)}%`, ...ptsStr(exitCur, exitPrev, true), spark: s.exitRate.length ? s.exitRate : [0] },
   ]
 }
 
-async function funnel(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
-  const t = await totals(orgId, platform, w, brandId)
+async function funnel(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
+  const tot = await totals(orgId, platform, w, brandId)
   const { rows } = await pool.query<{ taps_back: number; taps_fwd: number; replies: number }>(
     `SELECT COALESCE(SUM(s.taps_back_sum),0)::float taps_back,
             COALESCE(SUM(s.taps_fwd_sum),0)::float  taps_fwd,
@@ -147,21 +143,23 @@ async function funnel(orgId: string, platform: PlatformParam, w: Window, brandId
   )
   const r = rows[0]
   const steps: StoryFunnelStep[] = [
-    { label: 'Views', value: Math.round(t.views), color: FUNNEL_COLORS.Views },
+    { label: 'Views', value: Math.round(tot.views), color: FUNNEL_COLORS.Views },
     { label: 'Taps Back', value: Math.round(r.taps_back), color: FUNNEL_COLORS['Taps Back'] },
     { label: 'Taps Fwd', value: Math.round(r.taps_fwd), color: FUNNEL_COLORS['Taps Fwd'] },
-    { label: 'Exits', value: Math.round(t.exits), color: FUNNEL_COLORS.Exits },
+    { label: 'Exits', value: Math.round(tot.exits), color: FUNNEL_COLORS.Exits },
     { label: 'Replies', value: Math.round(r.replies), color: FUNNEL_COLORS.Replies },
-    { label: 'Swipe-Up', value: Math.round(t.swipe), color: FUNNEL_COLORS['Swipe-Up'] },
+    { label: 'Swipe-Up', value: Math.round(tot.swipe), color: FUNNEL_COLORS['Swipe-Up'] },
   ]
-  const fwdRate = pct(r.taps_fwd, t.views)
-  const insight = t.views > 0
-    ? `${Math.round(fwdRate)}% tap-forward${fwdRate >= 40 ? ' — story banyak dilewati; perkuat hook di frame pertama atau pendekkan sekuens.' : ' — retensi sekuens sehat.'}`
-    : 'Belum ada data story pada periode ini.'
+  const fwdRate = pct(r.taps_fwd, tot.views)
+  const insight = tot.views > 0
+    ? (fwdRate >= 40
+        ? t('{pct}% tap-forward — stories are being skipped. Sharpen the first-frame hook or shorten the sequence.', { pct: Math.round(fwdRate) })
+        : t('{pct}% tap-forward — sequence retention is healthy.', { pct: Math.round(fwdRate) }))
+    : t('No story data in this period yet.')
   return { funnel: steps, funnelInsight: insight }
 }
 
-async function typePerf(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function typePerf(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ story_type: string; reach: number; replies: number; cnt: number }>(
     `SELECT s.story_type,
             COALESCE(SUM(s.reach_sum),0)::float   reach,
@@ -177,23 +175,23 @@ async function typePerf(orgId: string, platform: PlatformParam, w: Window, brand
     [orgId, platform, w.start, w.end, brandId],
   )
   const types: StoryTypeRow[] = rows.map(r => ({
-    type: TYPE_LABEL[r.story_type] ?? r.story_type,
+    type: t(TYPE_LABEL[r.story_type] ?? r.story_type),
     reach: Math.round(r.cnt > 0 ? r.reach / r.cnt : 0),
     replies: Math.round(r.cnt > 0 ? r.replies / r.cnt : 0),
   }))
   // finding: type with the highest replies-per-reach (interaction efficiency)
   const ranked = rows
-    .map(r => ({ label: TYPE_LABEL[r.story_type] ?? r.story_type, rate: pct(r.replies, r.reach) }))
+    .map(r => ({ label: t(TYPE_LABEL[r.story_type] ?? r.story_type), rate: pct(r.replies, r.reach) }))
     .sort((a, b) => b.rate - a.rate)
   const insight = ranked[0]
-    ? `${ranked[0].label} menghasilkan rasio reply-per-reach tertinggi — format story dengan interaksi paling kuat.`
-    : 'Belum ada data tipe story pada periode ini.'
+    ? t('{type} produces the highest reply-per-reach ratio — the story format with the strongest interaction.', { type: ranked[0].label })
+    : t('No story type data in this period yet.')
   return { typePerf: types, typeInsight: insight }
 }
 
-const fmtDateLabel = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
+const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.split('-'); return `${+d} ${t(MONTH_ABBR[+m - 1])}` }
 
-async function overTime(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function overTime(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ wk: string; views: number; exits: number; swipe: number }>(
     `SELECT to_char(date_trunc('week', s.metric_date), 'YYYY-MM-DD') wk,
             COALESCE(SUM(s.views_sum),0)::float    views,
@@ -208,7 +206,7 @@ async function overTime(orgId: string, platform: PlatformParam, w: Window, brand
       ORDER BY date_trunc('week', s.metric_date)`,
     [orgId, platform, w.start, w.end, brandId],
   )
-  const labels = rows.map(r => fmtDateLabel(r.wk))
+  const labels = rows.map(r => fmtDateLabel(r.wk, t))
   const series: TrendSeries[] = [
     { name: 'Views', color: '#d23f6f', data: rows.map(r => Math.round(r.views)) },
     { name: 'Exits', color: '#e0a458', data: rows.map(r => Math.round(r.exits)) },
@@ -220,6 +218,9 @@ async function overTime(orgId: string, platform: PlatformParam, w: Window, brand
 export async function getStoriesData(
   orgId: string, platform: PlatformParam, days: number, brandId: string | null = null,
   custom: CustomRange | null = null,
+  // Insight sentences and KPI labels are composed here, so the language has to
+  // reach this far in — the client cannot translate a sentence it did not build.
+  t: Translator = (k: string) => k,
 ): Promise<StoriesPayload> {
   const win = await resolveWindows(orgId, platform, days, brandId, custom)
   if (!win) {
@@ -232,12 +233,12 @@ export async function getStoriesData(
     totals(orgId, platform, win.cur, brandId),
     totals(orgId, platform, win.prev, brandId),
     dailySparks(orgId, platform, win.cur, brandId),
-    funnel(orgId, platform, win.cur, brandId),
-    typePerf(orgId, platform, win.cur, brandId),
-    overTime(orgId, platform, win.cur, brandId),
+    funnel(orgId, platform, win.cur, brandId, t),
+    typePerf(orgId, platform, win.cur, brandId, t),
+    overTime(orgId, platform, win.cur, brandId, t),
   ])
   return {
-    kpis: buildKpis(curT, prevT, sparks),
+    kpis: buildKpis(curT, prevT, sparks, t),
     ...fun,
     ...types,
     ...ot,

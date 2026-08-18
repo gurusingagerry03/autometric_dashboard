@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useParams, usePathname } from 'next/navigation'
 import { Organization } from '@/lib/organizations/types'
 import CreateOrgModal from '@/components/organizations/CreateOrgModal'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 function OrgAvatar({ name, size = 28 }: { name: string; size?: number }) {
   const colors = ['#1B8A80', '#7c5cbf', '#d97706', '#059669', '#dc2626']
@@ -28,6 +29,7 @@ export default function OrgSwitcher({ fallbackOrgSlug, initialOrgs }: Props) {
   const params   = useParams()
   const pathname = usePathname()
   const router   = useRouter()
+  const t        = useT()
   const orgSlug  = (params?.orgSlug as string | undefined) ?? fallbackOrgSlug
 
   const [orgs,       setOrgs]       = useState<Organization[]>(initialOrgs)
@@ -85,7 +87,7 @@ export default function OrgSwitcher({ fallbackOrgSlug, initialOrgs }: Props) {
               </span>
             </>
           ) : (
-            <span className="flex-1 text-left text-[13.5px] text-[#9ca3af]">Select organization</span>
+            <span className="flex-1 text-left text-[13.5px] text-[#9ca3af]">{t('Select organization')}</span>
           )}
           <span className="material-symbols-outlined text-[18px] text-[#9ca3af]">unfold_more</span>
         </button>

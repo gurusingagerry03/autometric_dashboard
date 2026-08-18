@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Organization } from '@/lib/organizations/types'
 import OrgAvatar from './OrgAvatar'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function OrgSettingsPage({ org }: Props) {
+  const t = useT()
   const router = useRouter()
   const isAdmin = org.role === 'ADMIN'
 
@@ -45,13 +47,13 @@ export default function OrgSettingsPage({ org }: Props) {
         body: JSON.stringify({ name: trimmed }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) { setSaveErr(json.error ?? 'Something went wrong.'); return }
+      if (!res.ok) { setSaveErr(json.error ?? t('Something went wrong.')); return }
       setSavedName(trimmed)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
       router.refresh()
     } catch {
-      setSaveErr('Network error. Please try again.')
+      setSaveErr(t('Network error. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -66,9 +68,9 @@ export default function OrgSettingsPage({ org }: Props) {
         return
       }
       const json = await res.json().catch(() => ({}))
-      setDeleteErr(json.error ?? 'Something went wrong.')
+      setDeleteErr(json.error ?? t('Something went wrong.'))
     } catch {
-      setDeleteErr('Network error. Please try again.')
+      setDeleteErr(t('Network error. Please try again.'))
     } finally {
       setDeleting(false)
     }
@@ -80,13 +82,13 @@ export default function OrgSettingsPage({ org }: Props) {
       {/* ── General ── */}
       <div className="w-full border-b border-[#e5e7eb] pb-6">
         <div className="py-5">
-          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">General</span>
+          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('General')}</span>
         </div>
 
         <div className="flex items-center gap-3 mb-6">
           <OrgAvatar name={name || org.name} size={48} />
           <div>
-            <p style={PJB} className="text-[16px] font-bold text-[#111827]">{name || 'Organization name'}</p>
+            <p style={PJB} className="text-[16px] font-bold text-[#111827]">{name || t('Organization name')}</p>
             <p className="text-[12px] text-[#9ca3af] mt-0.5">
               {org.member_count} member{org.member_count !== 1 ? 's' : ''} · {org.brand_count} brand{org.brand_count !== 1 ? 's' : ''}
             </p>
@@ -94,7 +96,7 @@ export default function OrgSettingsPage({ org }: Props) {
         </div>
 
         <div className="w-full mb-5">
-          <label style={PJB} className="block text-[12px] font-semibold text-[#374151] mb-1.5">Organization Name</label>
+          <label style={PJB} className="block text-[12px] font-semibold text-[#374151] mb-1.5">{t('Organization Name')}</label>
           <input
             type="text"
             value={name}
@@ -121,24 +123,24 @@ export default function OrgSettingsPage({ org }: Props) {
                 : 'bg-[#f3f4f6] text-[#9ca3af] cursor-not-allowed'
             }`}>
             {saved
-              ? <><span className="material-symbols-outlined text-[15px]">check</span> Saved</>
-              : <><span className="material-symbols-outlined text-[15px]">save</span> {saving ? 'Saving…' : 'Save Changes'}</>
+              ? <><span className="material-symbols-outlined text-[15px]">check</span> {t('Saved')}</>
+              : <><span className="material-symbols-outlined text-[15px]">save</span> {saving ? t('Saving…') : t('Save Changes')}</>
             }
           </button>
         ) : (
-          <p className="text-[12.5px] text-[#9ca3af]">Only Admins can change these settings.</p>
+          <p className="text-[12.5px] text-[#9ca3af]">{t('Only Admins can change these settings.')}</p>
         )}
       </div>
 
       {/* ── Danger Zone ── */}
       {isAdmin && (
         <div className="py-5">
-          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#dc2626]">Danger Zone</span>
+          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#dc2626]">{t('Danger Zone')}</span>
 
           <div className="mt-4 border border-[#fca5a5] rounded-xl px-5 py-4">
             <div className="flex items-start justify-between gap-6">
               <div className="flex-1 min-w-0">
-                <p style={PJB} className="text-[13.5px] font-semibold text-[#111827]">Delete this organization</p>
+                <p style={PJB} className="text-[13.5px] font-semibold text-[#111827]">{t('Delete this organization')}</p>
                 <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
                   Removes <span className="font-medium text-[#6b7280]">{savedName}</span> and revokes access for every
                   member. Historical analytics are retained but become unreachable.
@@ -189,7 +191,7 @@ export default function OrgSettingsPage({ org }: Props) {
                   </button>
                   <button onClick={handleDelete} disabled={!canDelete || deleting} style={PJB}
                     className="h-8 px-3 text-[12px] font-semibold text-white bg-[#dc2626] hover:bg-[#b91c1c] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors">
-                    {deleting ? 'Deleting…' : 'Delete Organization'}
+                    {deleting ? t('Deleting…') : t('Delete Organization')}
                   </button>
                 </div>
               </div>

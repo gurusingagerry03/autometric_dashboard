@@ -6,6 +6,7 @@ import { Platform, PLATFORM_CONFIG } from '@/lib/brands/types'
 import { CSV_PLATFORMS, DetectedFile, IngestResult } from '@/lib/csv/types'
 import type { CategoryCatalog } from '@/lib/csv/engine'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 const PLATFORM_LABEL = (p: Platform) => PLATFORM_CONFIG[p]?.label ?? p
@@ -53,6 +54,7 @@ function fmtBytes(n: number | null | undefined) {
 export default function CsvUploadPanel({
   brandId, accounts, onDone, onCancel, compact = false,
 }: Props) {
+  const t = useT()
   const [phase,   setPhase]   = useState<Phase>('pick')
   const [rows,    setRows]    = useState<Row[]>([])
   const [error,   setError]   = useState('')
@@ -87,7 +89,7 @@ export default function CsvUploadPanel({
     try {
       const res  = await fetch(`/api/brands/${brandId}/csv/preview`, { method: 'POST', body: form })
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Gagal membaca file.'); setPhase('pick'); return }
+      if (!res.ok) { setError(json.error ?? t('Failed to read the file.')); setPhase('pick'); return }
 
       const detected: (DetectedFile & { platform_guessed?: boolean })[] = json.data.files
       const byName = new Map(detected.map(d => [d.filename, d]))
@@ -103,7 +105,7 @@ export default function CsvUploadPanel({
       }))
       setPhase('review')
     } catch {
-      setError('Gagal menghubungi server.')
+      setError(t('Failed to reach the server.'))
       setPhase('pick')
     }
   }
@@ -149,7 +151,7 @@ export default function CsvUploadPanel({
     try {
       const res  = await fetch(`/api/brands/${brandId}/csv/ingest`, { method: 'POST', body: form })
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Gagal memproses file.'); setPhase('review'); return }
+      if (!res.ok) { setError(json.error ?? t('Failed to process the file.')); setPhase('review'); return }
       setResults(json.data.results ?? [])
       if (dryRun) {
         setPhase('review')
@@ -158,7 +160,7 @@ export default function CsvUploadPanel({
         onDone?.(json.data.results ?? [])
       }
     } catch {
-      setError('Gagal menghubungi server.')
+      setError(t('Failed to reach the server.'))
       setPhase('review')
     }
   }
@@ -182,16 +184,16 @@ export default function CsvUploadPanel({
           {phase === 'detecting' ? (
             <>
               <span className="material-symbols-outlined text-[30px] text-[#1B8A80] animate-spin">progress_activity</span>
-              <p style={PJB} className="text-[13px] font-semibold text-[#374151]">Mengenali file…</p>
+              <p style={PJB} className="text-[13px] font-semibold text-[#374151]">{t('Recognising the file…')}</p>
             </>
           ) : (
             <>
               <span className="material-symbols-outlined text-[30px] text-[#cbd1d8]">upload_file</span>
               <p style={PJB} className="text-[13px] font-semibold text-[#374151]">
-                Tarik file ke sini, atau klik untuk memilih
+                {t('Drag files here, or click to choose')}
               </p>
               <p className="text-[12px] text-[#9ca3af]">
-                Export Fanpage Karma — CSV atau XLSX, bisa banyak file sekaligus
+                {t('Fanpage Karma export — CSV or XLSX, several files at once')}
               </p>
             </>
           )}
@@ -200,8 +202,7 @@ export default function CsvUploadPanel({
         </div>
 
         <p className="text-[11.5px] text-[#9ca3af] leading-relaxed">
-          Platform dan jenis data dikenali otomatis dari isi file — Anda hanya perlu
-          mengoreksi kalau ada yang salah. Twitter/X belum didukung.
+          {t('Platform and data type are detected from the file contents — you only need to correct them if something is wrong. Twitter/X is not supported yet.')}
         </p>
 
         {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -209,7 +210,7 @@ export default function CsvUploadPanel({
           <div className="flex justify-end">
             <button type="button" onClick={onCancel} style={PJB}
               className="h-8 px-3.5 text-[13px] font-medium text-[#6b7280] hover:text-[#111827] hover:bg-[#f9fafb] rounded-lg transition-colors">
-              Tutup
+              {t('Close')}
             </button>
           </div>
         )}
@@ -235,8 +236,8 @@ export default function CsvUploadPanel({
           <div>
             <p style={PJB} className="text-[14px] font-bold text-[#111827]">
               {failed.length
-                ? `${ok.length} file berhasil, ${failed.length} gagal`
-                : `${ok.length} file berhasil diproses`}
+                ? t('{ok} files succeeded, {failed} failed', { ok: ok.length, failed: failed.length })
+                : t('{ok} files processed successfully', { ok: ok.length })}
             </p>
             <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
               {rowsIn.toLocaleString('en-US')} baris masuk. Dashboard terisi setelah
@@ -293,16 +294,16 @@ export default function CsvUploadPanel({
       <div className="flex items-center justify-between">
         <div>
           <p style={PJB} className="text-[13px] font-semibold text-[#111827]">
-            {rows.length} file siap diproses
+            {t('{count} files ready to process', { count: rows.length })}
           </p>
           <p className="text-[12px] text-[#9ca3af] mt-0.5">
-            Periksa platform dan jenis datanya. Baris bertanda kuning perlu Anda pastikan.
+            {t('Check the platform and data type. Rows marked yellow need your confirmation.')}
           </p>
         </div>
         <button type="button" onClick={() => inputRef.current?.click()} style={PJB}
           className="flex items-center gap-1 h-8 px-3 border border-[#e5e7eb] text-[12.5px] font-semibold text-[#374151] rounded-lg hover:bg-[#f9fafb] transition-colors">
           <span className="material-symbols-outlined text-[15px]">add</span>
-          Tambah file
+          {t('Add file')}
         </button>
         <input ref={inputRef} type="file" accept={ACCEPT} multiple hidden
           onChange={e => e.target.files && handleFiles([...rows.map(r => r.file), ...Array.from(e.target.files)])} />
@@ -310,8 +311,8 @@ export default function CsvUploadPanel({
 
       <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
         <div className="grid grid-cols-[1fr_130px_170px_64px_36px] gap-x-3 px-3 py-2 bg-[#fafafa] border-b border-[#e5e7eb]">
-          {['File', 'Platform', 'Jenis data', 'Baris', ''].map((h, i) => (
-            <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{h}</span>
+          {['File', 'Platform', 'Data type', 'Rows', ''].map((h, i) => (
+            <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{t(h)}</span>
           ))}
         </div>
 
@@ -343,7 +344,7 @@ export default function CsvUploadPanel({
                     value={r.platform}
                     onChange={e => patch(i, { platform: e.target.value as Platform, category: '' })}
                     className="flex-1 h-8 px-1.5 text-[12px] text-[#111827] bg-white border border-[#e5e7eb] rounded-lg outline-none focus:border-[#1B8A80]">
-                    <option value="">Pilih…</option>
+                    <option value="">{t('Choose…')}</option>
                     {CSV_PLATFORMS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
@@ -352,7 +353,7 @@ export default function CsvUploadPanel({
                   value={r.category}
                   onChange={e => patch(i, { category: e.target.value })}
                   className="h-8 px-1.5 text-[12px] text-[#111827] bg-white border border-[#e5e7eb] rounded-lg outline-none focus:border-[#1B8A80]">
-                  <option value="">Pilih…</option>
+                  <option value="">{t('Choose…')}</option>
                   {catsFor(r.platform).map(c => (
                     <option key={c.category} value={c.category}>{c.label}</option>
                   ))}
@@ -366,7 +367,7 @@ export default function CsvUploadPanel({
                   {r.detected?.rows?.toLocaleString('en-US') ?? '—'}
                 </span>
 
-                <button type="button" title="Keluarkan dari daftar"
+                <button type="button" title={t('Remove from the list')}
                   onClick={() => setRows(prev => prev.filter((_, idx) => idx !== i))}
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-[#c4c9d4] hover:text-[#ef4444] hover:bg-[#fee2e2] transition-colors">
                   <span className="material-symbols-outlined text-[15px]">close</span>
@@ -381,11 +382,10 @@ export default function CsvUploadPanel({
       {missingAccountPlatforms.length > 0 && (
         <div className="flex flex-col gap-2 rounded-xl border border-[#e5e7eb] bg-[#fafafa] px-4 py-3">
           <p style={PJB} className="text-[12px] font-semibold text-[#374151]">
-            Username akun
+            {t('Account username')}
           </p>
           <p className="text-[11.5px] text-[#9ca3af] -mt-1">
-            Brand ini belum punya akun untuk platform di bawah. Isi username-nya supaya
-            datanya punya pemilik yang jelas.
+            {t('This brand has no account for the platforms below. Fill in the username so the data has a clear owner.')}
           </p>
           {missingAccountPlatforms.map(p => {
             const idx = rows.findIndex(r => r.platform === p)
@@ -396,7 +396,7 @@ export default function CsvUploadPanel({
                   type="text"
                   value={usernameByPlatform.get(p) ?? ''}
                   onChange={e => patch(idx, { username: e.target.value })}
-                  placeholder={`@username di ${p}`}
+                  placeholder={t('@username on {platform}', { platform: p })}
                   className="flex-1 h-8 px-2.5 text-[12.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border border-[#e5e7eb] rounded-lg outline-none focus:border-[#1B8A80]"
                 />
               </div>
@@ -409,7 +409,7 @@ export default function CsvUploadPanel({
       {dryResults.length > 0 && (
         <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
           <p style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af] px-4 pt-3 pb-2">
-            Pratinjau tujuan
+            {t('Destination preview')}
           </p>
           <div className="divide-y divide-[#f3f4f6]">
             {dryResults.map((r, i) => (
@@ -419,7 +419,7 @@ export default function CsvUploadPanel({
                   ? (r.planned_writes ?? []).map((w, k) => (
                       <p key={k} className="text-[11.5px] text-[#6b7280] mt-0.5">
                         → <span className="font-medium text-[#374151]">{w.schema}.{w.table}</span>
-                        {' '}· {w.rows.toLocaleString('en-US')} baris · key {w.key_cols.join(' + ')}
+                        {' '}· {t('{rows} rows', { rows: w.rows.toLocaleString('en-US') })} · {t('key')} {w.key_cols.join(' + ')}
                       </p>
                     ))
                   : <p className="text-[11.5px] text-red-500 mt-0.5 break-words">{r.error}</p>
@@ -436,7 +436,7 @@ export default function CsvUploadPanel({
           keterangan, dan username berspasi adalah penyebab paling sering. */}
       {badUsername.length > 0 && (
         <p className="text-[12px] text-red-500">
-          {invalidHandleMessage(badUsername[0], (usernameByPlatform.get(badUsername[0]) ?? '').replace(/^@/, ''))}
+          {invalidHandleMessage(badUsername[0], (usernameByPlatform.get(badUsername[0]) ?? '').replace(/^@/, ''), t)}
         </p>
       )}
       {badUsername.length === 0 && missingUsername.length > 0 && (
@@ -468,8 +468,8 @@ export default function CsvUploadPanel({
           <button type="button" onClick={() => send(false)} disabled={!canSend || phase === 'sending'} style={PJB}
             className="h-9 px-4 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-2">
             {phase === 'sending'
-              ? <><span className="material-symbols-outlined text-[15px] animate-spin">progress_activity</span> Memproses…</>
-              : <>Proses {rows.length} file</>
+              ? <><span className="material-symbols-outlined text-[15px] animate-spin">progress_activity</span> {t('Processing…')}</>
+              : <>{t('Process {count} files', { count: rows.length })}</>
             }
           </button>
         </div>

@@ -5,6 +5,7 @@ import { ContentSlide, ConfigBlock } from '@/lib/reports/data/slideModel'
 import { PJ, AiInsightBlock } from './parts'
 import { ChartBlock } from './charts'
 import { TableBlock } from './TableBlock'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 function ChooserButton({ icon, label, editable, onClick }: { icon: string; label: string; editable: boolean; onClick?: () => void }) {
   return (
@@ -23,10 +24,11 @@ function ChooserButton({ icon, label, editable, onClick }: { icon: string; label
 }
 
 function SwitchButton({ onClick }: { onClick?: () => void }) {
+  const t = useT()
   return (
     <button
       onClick={onClick}
-      title="Switch visualization type"
+      title={t('Switch visualization type')}
       className="absolute z-10 flex items-center justify-center rounded-[0.5cqw] bg-white border border-[#e2e8f0] text-[#94a3b8] hover:text-[#2C3079] hover:border-[#cbd5e1] shadow-sm transition-colors"
       style={{ top: '0.6cqh', right: '0.6cqw', width: '2.6cqw', height: '2.6cqw' }}
     >

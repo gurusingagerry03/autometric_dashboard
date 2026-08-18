@@ -6,6 +6,7 @@ import OrgAvatar from './OrgAvatar'
 import RenameOrgModal from './RenameOrgModal'
 import DeleteOrgModal from './DeleteOrgModal'
 import { Organization } from '@/lib/organizations/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const roleMeta: Record<Organization['role'], { label: string; color: string }> = {
   ADMIN:  { label: 'Admin',  color: '#1B8A80' },
@@ -27,6 +28,7 @@ export default function OrgListItem({ org, onRename, onDelete }: Props) {
   const [showRename, setShowRename] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const t = useT()
   const role = roleMeta[org.role]
 
   useEffect(() => {
@@ -51,7 +53,7 @@ export default function OrgListItem({ org, onRename, onDelete }: Props) {
 
         <div className="flex items-center gap-6 flex-shrink-0">
           <span style={{ color: role.color }} className="text-[11px] font-semibold uppercase tracking-wide w-12 text-right">
-            {role.label}
+            {t(role.label)}
           </span>
 
           <div className="flex items-center gap-1 text-[#9ca3af] w-16 justify-end">

@@ -6,6 +6,7 @@ import { ContentSlide } from '@/lib/reports/data/slideModel'
 import { POST_COUNTS, POST_FILTERS, POST_METRICS, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
 import { useReportPosts } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 function hue(id: number) { return (id * 47) % 360 }
 
@@ -85,6 +86,7 @@ export default function VisualSlide({
   editable: boolean
   onChange?: (next: ContentSlide) => void
 }) {
+  const t = useT()
   const [cfgOpen, setCfgOpen] = useState(false)
   const ctx = useReportPosts()
   const count = slide.postCount
@@ -137,7 +139,7 @@ export default function VisualSlide({
         {editable && (
           <button
             onClick={() => setCfgOpen(true)}
-            title="Content settings"
+            title={t('Content settings')}
             className="absolute z-10 flex items-center justify-center rounded-[0.5cqw] bg-white border border-[#e2e8f0] text-[#94a3b8] hover:text-[#2C3079] hover:border-[#cbd5e1] shadow-sm transition-colors"
             style={{ top: '-3cqh', right: 0, width: '2.6cqw', height: '2.6cqw' }}
           >
@@ -147,7 +149,7 @@ export default function VisualSlide({
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: '#94a3b8' }}>
             <span className="material-symbols-outlined animate-spin" style={{ fontSize: '2.6cqw' }}>progress_activity</span>
-            <p className="mt-[0.5cqh]" style={{ fontSize: '1.1cqw', ...PJ }}>Loading posts…</p>
+            <p className="mt-[0.5cqh]" style={{ fontSize: '1.1cqw', ...PJ }}>{t('Loading posts…')}</p>
           </div>
         ) : !hasData ? (
           <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: '#94a3b8' }}>
@@ -157,7 +159,7 @@ export default function VisualSlide({
         ) : posts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: '#94a3b8' }}>
             <span className="material-symbols-outlined" style={{ fontSize: '3cqw' }}>filter_alt_off</span>
-            <p className="mt-[0.5cqh]" style={{ fontSize: '1.1cqw', ...PJ }}>No posts match these filters</p>
+            <p className="mt-[0.5cqh]" style={{ fontSize: '1.1cqw', ...PJ }}>{t('No posts match these filters')}</p>
           </div>
         ) : (
           <div className="h-full" style={{ display: 'grid', gridTemplateColumns: cols, gap: count === 4 ? '1.2cqw' : count === 6 ? '0.9cqw' : '0.7cqw' }}>
@@ -179,7 +181,7 @@ export default function VisualSlide({
           <div onClick={e => e.stopPropagation()} className="relative w-full max-w-[460px] max-h-[85vh] overflow-y-auto bg-white rounded-2xl shadow-[0_24px_60px_rgba(15,23,42,0.30)] p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">Visual content</h3>
+                <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{t('Visual content')}</h3>
                 <p className="text-[12px] text-[#94a3b8] mt-0.5">Order, format, pillar &amp; metrics — from live data.</p>
               </div>
               <button onClick={() => setCfgOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
@@ -187,7 +189,7 @@ export default function VisualSlide({
               </button>
             </div>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">Order</p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Order')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {POST_FILTERS.map(f => (
                 <button key={f.id} onClick={() => onChange?.({ ...slide, postFilter: f.id })} style={PJ}
@@ -197,13 +199,13 @@ export default function VisualSlide({
               ))}
             </div>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">Rank by (metric)</p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Rank by (metric)')}</p>
             <select value={sortMetric} onChange={e => onChange?.({ ...slide, postSortMetric: e.target.value })} style={PJ}
               className="w-full mb-4 h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
               {POST_METRICS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">Format</p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Format')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {formatOptions.map(f => (
                 <button key={f.id} onClick={() => onChange?.({ ...slide, postFormat: f.id })} style={PJ}
@@ -213,13 +215,13 @@ export default function VisualSlide({
               ))}
             </div>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">Content pillar</p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Content pillar')}</p>
             <select value={postPillar} onChange={e => onChange?.({ ...slide, postPillar: e.target.value })} style={PJ}
               className="w-full mb-4 h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
               {pillarOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">Posts</p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Posts')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {POST_COUNTS.map(n => (
                 <button key={n} onClick={() => onChange?.({ ...slide, postCount: n })} style={PJ}
@@ -229,7 +231,7 @@ export default function VisualSlide({
               ))}
             </div>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">Metrics <span className="text-[#cbd5e1] normal-case font-medium">· shown on each card</span></p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Metrics')} <span className="text-[#cbd5e1] normal-case font-medium">· {t('shown on each card')}</span></p>
             <div className="grid grid-cols-3 gap-2">
               {POST_METRICS.map(m => {
                 const on = slide.postMetrics.includes(m.id)

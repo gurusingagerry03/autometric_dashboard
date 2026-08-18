@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useBrandDetail } from './BrandDetailContext'
 import { PLATFORM_CONFIG } from '@/lib/brands/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -30,6 +31,7 @@ function formatDate(d: string) {
 }
 
 export default function BrandDetailRightPanel() {
+  const t = useT()
   const { brand, orgName } = useBrandDetail()
   const params  = useParams()
   const orgSlug = params?.orgSlug as string
@@ -56,17 +58,17 @@ export default function BrandDetailRightPanel() {
 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
-            <span style={PJB} className="text-[12px] text-[#9ca3af] flex-shrink-0">Organization</span>
+            <span style={PJB} className="text-[12px] text-[#9ca3af] flex-shrink-0">{t('Organization')}</span>
             <span style={PJB} className="text-[12px] font-semibold text-[#374151] truncate text-right">{orgName}</span>
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <span style={PJB} className="text-[12px] text-[#9ca3af] flex-shrink-0">Created</span>
+            <span style={PJB} className="text-[12px] text-[#9ca3af] flex-shrink-0">{t('Created')}</span>
             <span style={PJB} className="text-[12px] text-[#374151]">{formatDate(brand.created_at)}</span>
           </div>
 
           <div className="flex items-center justify-between gap-2">
-            <span style={PJB} className="text-[12px] text-[#9ca3af] flex-shrink-0">Competitors</span>
+            <span style={PJB} className="text-[12px] text-[#9ca3af] flex-shrink-0">{t('Competitors')}</span>
             <span style={PJB} className="text-[12px] font-semibold text-[#374151]">{brand.competitors.length}</span>
           </div>
 

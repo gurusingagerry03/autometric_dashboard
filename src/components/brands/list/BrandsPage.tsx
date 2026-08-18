@@ -8,11 +8,10 @@ import ChannelGroup from './ChannelGroup'
 import StatusGroup, { AccountEntry } from './StatusGroup'
 import CreateBrandModal from '../modals/CreateBrandModal'
 import { MAX_BRANDS_PER_ORG } from '@/lib/quotas'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 const ACTIVE_PLATFORMS: Platform[] = ['instagram', 'tiktok', 'facebook']
-const BRAND_LIMIT_TITLE = `Batas ${MAX_BRANDS_PER_ORG} brand per organization sudah tercapai`
-
 type GroupBy      = 'brand' | 'channel' | 'status'
 type StatusFilter = 'all' | 'connected' | 'disconnected'
 
@@ -35,6 +34,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 ]
 
 export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
+  const t       = useT()
   const params  = useParams()
   const orgSlug = params?.orgSlug as string
 
@@ -78,12 +78,12 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
       <div className="px-6 pt-7 pb-5 border-b border-[#f0f0f0]">
         <div className="flex items-center justify-between">
           <div>
-            <h1 style={PJB} className="text-[22px] font-bold text-[#111827] tracking-tight">Brands</h1>
+            <h1 style={PJB} className="text-[22px] font-bold text-[#111827] tracking-tight">{t('Brands')}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {[
-                { val: `${brands.length}/${MAX_BRANDS_PER_ORG}`, label: 'brands' },
-                { val: totalChannels,    label: 'channels'    },
-                { val: totalCompetitors, label: 'competitors' },
+                { val: `${brands.length}/${MAX_BRANDS_PER_ORG}`, label: t('brands') },
+                { val: totalChannels,    label: t('channels')    },
+                { val: totalCompetitors, label: t('competitors') },
               ].map((s, i) => (
                 <span key={i} className="flex items-center gap-1 text-[12.5px] text-[#9ca3af]">
                   {i > 0 && <span className="text-[#e5e7eb] mr-1">·</span>}
@@ -93,7 +93,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
               <span className="text-[#e5e7eb]">·</span>
               <span className="flex items-center gap-1 text-[12.5px] text-[#9ca3af]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-                <span style={PJB} className="font-bold text-[#374151]">{totalConnected}</span> connected
+                <span style={PJB} className="font-bold text-[#374151]">{totalConnected}</span> {t('connected')}
               </span>
             </div>
           </div>
@@ -101,7 +101,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
           <button
             onClick={() => !brandsMaxed && setShowCreate(true)}
             disabled={brandsMaxed}
-            title={brandsMaxed ? BRAND_LIMIT_TITLE : undefined}
+            title={brandsMaxed ? t('The limit of {max} brands per organization has been reached', { max: MAX_BRANDS_PER_ORG }) : undefined}
             style={PJB}
             className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold transition-colors ${
               brandsMaxed
@@ -110,7 +110,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
             }`}
           >
             <span className="material-symbols-outlined text-[16px]">add</span>
-            New Brand
+            {t('New Brand')}
           </button>
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
             }`}
           >
             <span className="material-symbols-outlined text-[14px]">{currentGroup.icon}</span>
-            Group: {currentGroup.label}
+            {t('Group: {group}', { group: t(currentGroup.label) })}
             <span className="material-symbols-outlined text-[14px] text-[#9ca3af]">arrow_drop_down</span>
           </button>
 
@@ -142,7 +142,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
                   }`}
                 >
                   <span className="material-symbols-outlined text-[14px]">{o.icon}</span>
-                  {o.label}
+                  {t(o.label)}
                   {groupBy === o.value && <span className="material-symbols-outlined text-[13px] ml-auto">check</span>}
                 </button>
               ))}
@@ -164,7 +164,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
             >
               <span className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ background: statusFilter === 'connected' ? '#10b981' : statusFilter === 'disconnected' ? '#ef4444' : '#d1d5db' }} />
-              {currentStatus.label}
+              {t(currentStatus.label)}
               <span className="material-symbols-outlined text-[14px] text-[#9ca3af]">arrow_drop_down</span>
             </button>
 
@@ -179,7 +179,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0"
                       style={{ background: o.value === 'connected' ? '#10b981' : o.value === 'disconnected' ? '#ef4444' : '#d1d5db' }} />
-                    {o.label}
+                    {t(o.label)}
                     {statusFilter === o.value && <span className="material-symbols-outlined text-[13px] ml-auto">check</span>}
                   </button>
                 ))}
@@ -192,14 +192,14 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
           <button onClick={() => { setSearch(''); setStatusFilter('all') }}
             style={PJB} className="flex items-center gap-1 h-8 px-2.5 text-[12px] font-medium text-[#9ca3af] hover:text-[#374151] hover:bg-[#f9fafb] rounded-md transition-colors">
             <span className="material-symbols-outlined text-[14px]">filter_alt_off</span>
-            Clear
+            {t('Clear')}
           </button>
         )}
 
         {/* Search — pojok kanan */}
         <div className="relative ml-auto">
           <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[15px] text-[#c4c9d4] pointer-events-none">search</span>
-          <input type="text" placeholder="Search brands…" value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder={t('Search brands…')} value={search} onChange={e => setSearch(e.target.value)}
             style={PJB}
             className="h-8 w-[200px] pl-8 pr-3 text-[12.5px] border border-[#e5e7eb] rounded-md bg-white focus:outline-none focus:border-[#1B8A80] focus:ring-1 focus:ring-[#1B8A80]/20 placeholder:text-[#d1d5db] transition"
           />
@@ -219,19 +219,19 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
         {brands.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32">
             <span className="material-symbols-outlined text-[48px] text-[#e5e7eb] mb-4">storefront</span>
-            <p style={PJB} className="text-[16px] font-bold text-[#374151]">No brands yet</p>
-            <p className="text-[13px] text-[#9ca3af] mt-1 mb-5">Create your first brand to start tracking</p>
+            <p style={PJB} className="text-[16px] font-bold text-[#374151]">{t('No brands yet')}</p>
+            <p className="text-[13px] text-[#9ca3af] mt-1 mb-5">{t('Create your first brand to start tracking')}</p>
             <button onClick={() => setShowCreate(true)} style={PJB}
               className="flex items-center gap-1.5 h-9 px-4 bg-[#1B8A80] hover:bg-[#177A70] text-white text-[13px] font-semibold rounded-lg transition-colors">
               <span className="material-symbols-outlined text-[15px]">add</span>
-              New Brand
+              {t('New Brand')}
             </button>
           </div>
         ) : filteredBrands.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-28">
             <span className="material-symbols-outlined text-[40px] text-[#e5e7eb] mb-3">search_off</span>
-            <p style={PJB} className="text-[14px] font-bold text-[#374151]">No results</p>
-            <p className="text-[12.5px] text-[#9ca3af] mt-1">Try adjusting your search or filters</p>
+            <p style={PJB} className="text-[14px] font-bold text-[#374151]">{t('No results')}</p>
+            <p className="text-[12.5px] text-[#9ca3af] mt-1">{t('Try adjusting your search or filters')}</p>
           </div>
         ) : groupBy === 'brand' ? (
           filteredBrands.map(brand => (

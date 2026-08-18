@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react'
 import { ORG_NAV_ITEMS } from '@/lib/organizations/nav'
 import { logout } from '@/lib/auth/actions'
 import { useSidebar } from './SidebarContext'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -22,6 +23,7 @@ export default function CollapsedRail({
   hasOrgs: boolean
 }) {
   const { toggle } = useSidebar()
+  const t = useT()
   const pathname = usePathname()
   const params = useParams()
   const { data: session } = useSession()
@@ -36,7 +38,7 @@ export default function CollapsedRail({
       {/* Expand */}
       <button
         onClick={toggle}
-        title="Buka sidebar"
+        title={t('Expand sidebar')}
         style={PJ}
         className="w-10 h-10 rounded-xl flex items-center justify-center text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151] transition-colors"
       >
@@ -55,7 +57,7 @@ export default function CollapsedRail({
               <Link
                 key={item.path}
                 href={href}
-                title={item.label}
+                title={t(item.label)}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
                   active
                     ? 'bg-[#f0f7fa] text-[#1B8A80]'
@@ -69,7 +71,7 @@ export default function CollapsedRail({
         ) : (
           <Link
             href="/organizations"
-            title="Organizations"
+            title={t('Organizations')}
             className="w-10 h-10 rounded-xl flex items-center justify-center text-[#9ca3af] hover:bg-[#f9fafb] hover:text-[#374151] transition-colors"
           >
             <span className="material-symbols-outlined text-[20px]">corporate_fare</span>
@@ -81,7 +83,7 @@ export default function CollapsedRail({
       <form action={logout} className="mt-2 pt-2 border-t border-[#f0f0ee] w-full flex justify-center">
         <button
           type="submit"
-          title="Sign out"
+          title={t('Log out')}
           className="w-10 h-10 rounded-xl flex items-center justify-center text-[#9ca3af] hover:bg-[#fef2f2] hover:text-[#dc2626] transition-colors"
         >
           <span className="material-symbols-outlined text-[20px]">logout</span>

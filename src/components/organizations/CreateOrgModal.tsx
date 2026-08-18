@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Organization } from '@/lib/organizations/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 interface Props {
   onClose: () => void
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function CreateOrgModal({ onClose, onCreated }: Props) {
+  const t = useT()
   const [name,    setName]    = useState('')
   const [error,   setError]   = useState('')
   const [loading, setLoading] = useState(false)
@@ -20,7 +22,7 @@ export default function CreateOrgModal({ onClose, onCreated }: Props) {
     e.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('Organization name is required.')
+      setError(t('Organization name is required.'))
       return
     }
 
@@ -37,14 +39,14 @@ export default function CreateOrgModal({ onClose, onCreated }: Props) {
       const json = await res.json()
 
       if (!res.ok) {
-        setError(json.error ?? 'Something went wrong.')
+        setError(json.error ?? t('Something went wrong.'))
         return
       }
 
       onCreated(json.data as Organization)
       onClose()
     } catch {
-      setError('Network error. Please try again.')
+      setError(t('Network error. Please try again.'))
     } finally {
       setLoading(false)
     }
@@ -56,7 +58,7 @@ export default function CreateOrgModal({ onClose, onCreated }: Props) {
 
       <div className="relative bg-white rounded-lg w-full max-w-[440px] mx-4 shadow-xl shadow-black/5 border border-[#e5e7eb]">
         <div className="px-6 pt-5 pb-4">
-          <h2 className="text-[15px] font-semibold text-[#111827]">New Organization</h2>
+          <h2 className="text-[15px] font-semibold text-[#111827]">{t('New Organization')}</h2>
           <p className="text-[13px] text-[#9ca3af] mt-0.5">
             Give your organization a name. You can change this later.
           </p>
@@ -73,7 +75,7 @@ export default function CreateOrgModal({ onClose, onCreated }: Props) {
             type="text"
             value={name}
             onChange={e => { setName(e.target.value); setError('') }}
-            placeholder="e.g. Acme Corp"
+            placeholder={t('e.g. Acme Corp')}
             maxLength={100}
             disabled={loading}
             className={`h-9 px-3 text-[13.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border rounded-md outline-none transition-all disabled:opacity-60 ${
@@ -101,7 +103,7 @@ export default function CreateOrgModal({ onClose, onCreated }: Props) {
             disabled={!name.trim() || loading}
             className="h-8 px-3.5 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-medium rounded-md transition-colors"
           >
-            {loading ? 'Creating…' : 'Create Organization'}
+            {loading ? t('Creating…') : t('Create Organization')}
           </button>
         </div>
       </div>

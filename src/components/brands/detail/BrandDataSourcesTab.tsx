@@ -6,6 +6,7 @@ import { useBrandDetail } from './BrandDetailContext'
 import PlatformIcon from '../PlatformIcon'
 import CsvUploadPanel, { type ExistingAccount } from '../csv/CsvUploadPanel'
 import { BrandDataSource, CsvUploadLog, CSV_PLATFORMS } from '@/lib/csv/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -27,6 +28,7 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 export default function BrandDataSourcesTab() {
+  const t = useT()
   const { brand } = useBrandDetail()
   const [sources, setSources] = useState<BrandDataSource[]>([])
   const [history, setHistory] = useState<CsvUploadLog[]>([])
@@ -38,12 +40,12 @@ export default function BrandDataSourcesTab() {
     try {
       const res  = await fetch(`/api/brands/${brand.id}/csv/sources`)
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Gagal memuat data.'); return }
+      if (!res.ok) { setError(json.error ?? t('Failed to load data.')); return }
       setSources(json.data.sources ?? [])
       setHistory(json.data.history ?? [])
       setError('')
     } catch {
-      setError('Gagal memuat data.')
+      setError(t('Failed to load data.'))
     } finally {
       setLoading(false)
     }
@@ -68,7 +70,7 @@ export default function BrandDataSourcesTab() {
 
       <div className="flex items-center justify-between py-4 border-b border-[#e5e7eb]">
         <div>
-          <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">Data Sources</h2>
+          <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">{t('Data Sources')}</h2>
           <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
             Dari mana data brand ini berasal — akun resmi, atau upload manual.
           </p>
@@ -83,7 +85,7 @@ export default function BrandDataSourcesTab() {
       {loading ? (
         <div className="flex items-center gap-2 py-10 text-[#9ca3af]">
           <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-          <span className="text-[13px]">Memuat…</span>
+          <span className="text-[13px]">{t('Loading…')}</span>
         </div>
       ) : (
         <>
@@ -98,7 +100,7 @@ export default function BrandDataSourcesTab() {
             {sources.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[#e5e7eb] bg-[#fafafa] px-4 py-8 flex flex-col items-center gap-1.5 text-center">
                 <span className="material-symbols-outlined text-[28px] text-[#cbd1d8]">database</span>
-                <p style={PJB} className="text-[13px] font-semibold text-[#374151]">Belum ada sumber data</p>
+                <p style={PJB} className="text-[13px] font-semibold text-[#374151]">{t('No data sources yet')}</p>
                 <p className="text-[12px] text-[#9ca3af]">
                   Hubungkan akun resmi di tab Accounts, atau upload file export di sini.
                 </p>
@@ -106,8 +108,8 @@ export default function BrandDataSourcesTab() {
             ) : (
               <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
                 <div className="grid grid-cols-[28px_1fr_120px_110px_70px] gap-x-3 px-3 py-2 bg-[#fafafa] border-b border-[#e5e7eb]">
-                  {['', 'Akun', 'Sumber', 'Data s/d', 'Upload'].map((h, i) => (
-                    <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{h}</span>
+                  {['', 'Account', 'Source', 'Data through', 'Upload'].map((h, i) => (
+                    <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{t(h)}</span>
                   ))}
                 </div>
                 <div className="divide-y divide-[#f3f4f6]">
@@ -127,7 +129,7 @@ export default function BrandDataSourcesTab() {
                         <span className="material-symbols-outlined text-[12px]">
                           {s.data_source === 'csv' ? 'upload_file' : 'sync'}
                         </span>
-                        {s.data_source === 'csv' ? 'Upload CSV' : 'Akun resmi'}
+                        {s.data_source === 'csv' ? t('CSV upload') : t('Official account')}
                       </span>
                       <span className="text-[12px] text-[#6b7280] tabular-nums">
                         {s.data_source === 'csv' ? fmtDate(s.data_through) : 'otomatis'}
@@ -143,7 +145,7 @@ export default function BrandDataSourcesTab() {
 
             {unusedPlatforms.length > 0 && (
               <p className="text-[11.5px] text-[#9ca3af] mt-2">
-                Belum ada sumber untuk: {unusedPlatforms.join(', ')}.
+                {t('No source yet for: {platforms}.', { platforms: unusedPlatforms.join(', ') })}
               </p>
             )}
           </div>
@@ -156,8 +158,8 @@ export default function BrandDataSourcesTab() {
               </p>
               <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
                 <div className="grid grid-cols-[1fr_100px_150px_80px_88px] gap-x-3 px-3 py-2 bg-[#fafafa] border-b border-[#e5e7eb]">
-                  {['File', 'Platform', 'Jenis data', 'Baris', 'Waktu'].map((h, i) => (
-                    <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{h}</span>
+                  {['File', 'Platform', 'Data type', 'Rows', 'Time'].map((h, i) => (
+                    <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{t(h)}</span>
                   ))}
                 </div>
                 <div className="divide-y divide-[#f3f4f6] max-h-[420px] overflow-y-auto">
@@ -169,7 +171,7 @@ export default function BrandDataSourcesTab() {
                         </p>
                         <span style={PJB} className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 ${
                           STATUS_STYLE[h.status] ?? STATUS_STYLE.skipped}`}>
-                          {h.status === 'success' ? 'Berhasil' : h.status === 'failed' ? 'Gagal' : 'Dilewati'}
+                          {h.status === 'success' ? t('Succeeded') : h.status === 'failed' ? t('Failed') : t('Skipped')}
                         </span>
                         {h.status === 'failed' && h.error_message && (
                           <p className="text-[11px] text-red-500 mt-1 break-words">{h.error_message}</p>
@@ -197,7 +199,7 @@ export default function BrandDataSourcesTab() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[720px] max-h-[88vh] overflow-y-auto">
             <div className="px-6 pt-5 pb-4 border-b border-[#f3f4f6]">
-              <h3 style={PJB} className="text-[15px] font-bold text-[#111827]">Upload data</h3>
+              <h3 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('Upload data')}</h3>
               <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
                 File export Fanpage Karma untuk {brand.name}.
               </p>

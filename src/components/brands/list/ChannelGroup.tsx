@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import { Brand, Platform, PLATFORM_CONFIG } from '@/lib/brands/types'
 import BrandInChannelRow from './BrandInChannelRow'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 type StatusFilter = 'all' | 'connected' | 'disconnected'
 
-const COL_HEADERS = ['BRAND', 'USERNAME', 'COMPETITORS', 'STATUS', 'CONNECTED AT', 'CREATED AT']
+const COL_HEADERS = ['Brand', 'Username', 'Competitors', 'Status', 'Connected at', 'Created at']
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
 const PLATFORM_LOGO: Partial<Record<Platform, string>> = {
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function ChannelGroup({ platform, brands, orgSlug, statusFilter, defaultOpen = false }: Props) {
+  const t = useT()
   const [open, setOpen] = useState(defaultOpen)
   const cfg  = PLATFORM_CONFIG[platform]
   const logo = PLATFORM_LOGO[platform]
@@ -66,12 +68,12 @@ export default function ChannelGroup({ platform, brands, orgSlug, statusFilter, 
           {/* Column headers */}
           <div className="grid grid-cols-[1.6fr_1.4fr_1.2fr_1fr_1.3fr_1.3fr] px-6 py-2 bg-white border-b border-[#e5e7eb]">
             {COL_HEADERS.map(h => (
-              <span key={h} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{h}</span>
+              <span key={h} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{t(h)}</span>
             ))}
           </div>
 
           {filteredBrands.length === 0 ? (
-            <div className="px-6 py-4 text-[13px] text-[#9ca3af] border-b border-[#f3f4f6]" style={PJB}>No brands match this filter</div>
+            <div className="px-6 py-4 text-[13px] text-[#9ca3af] border-b border-[#f3f4f6]" style={PJB}>{t('No brands match this filter')}</div>
           ) : (
             filteredBrands.map(brand => (
               <BrandInChannelRow key={brand.id} brand={brand} platform={platform} orgSlug={orgSlug} />
@@ -80,7 +82,7 @@ export default function ChannelGroup({ platform, brands, orgSlug, statusFilter, 
 
           <div className="flex items-center gap-1.5 px-6 py-2.5 border-b border-[#f3f4f6]">
             <span className="material-symbols-outlined text-[14px] text-[#d1d5db]">add</span>
-            <span style={PJB} className="text-[12px] text-[#d1d5db]">Add brand</span>
+            <span style={PJB} className="text-[12px] text-[#d1d5db]">{t('Add brand')}</span>
           </div>
         </div>
       )}

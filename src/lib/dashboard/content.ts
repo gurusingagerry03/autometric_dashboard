@@ -1,6 +1,8 @@
 ﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi, DashPlatform, TopPostRow } from '@/components/dashboard/data'
+import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Gold/silver data access for the Content Overview dashboard, scoped to one org.
@@ -60,12 +62,6 @@ function postFormatLabel(format: string | null, postType: string | null): string
 }
 
 // ── formatters ──────────────────────────────────────────────────────────────
-function fmtNum(n: number): string {
-  const a = Math.abs(n)
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (a >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.round(n))
-}
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0)
 function deltaStr(cur: number, prev: number): { delta: string; good: boolean } {
   if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: cur >= 0 }
@@ -208,18 +204,19 @@ function buildKpis(
   curG: GoldKpiTotals, prevG: GoldKpiTotals,
   curS: { tkCompl: number; fbClicks: number }, prevS: { tkCompl: number; fbClicks: number },
   sg: Awaited<ReturnType<typeof goldKpiDaily>>, ss: Awaited<ReturnType<typeof silverKpiDaily>>,
+  t: Translator,
 ): OverviewKpi[] {
   const savesCur = pct(curG.igSaves, curG.igErden), savesPrev = pct(prevG.igSaves, prevG.igErden)
   return [
-    { key: 'posts', label: 'Total Posts (Period)', icon: 'grid_view', value: fmtNum(curG.posts), ...deltaStr(curG.posts, prevG.posts), spark: sg.posts.length ? sg.posts : [0] },
-    { key: 'saves', label: 'Avg. Saves Rate (IG)', icon: 'bookmark', value: `${savesCur.toFixed(2)}%`, ...ptsStr(savesCur, savesPrev), spark: sg.savesRate.length ? sg.savesRate : [0] },
-    { key: 'compl', label: 'Avg. Completion Rate (TT)', icon: 'smart_display', value: `${Math.round(curS.tkCompl)}%`, ...ptsStr(curS.tkCompl, prevS.tkCompl), spark: ss.completion.length ? ss.completion : [0] },
-    { key: 'clicks', label: 'Link Clicks (FB)', icon: 'ads_click', value: fmtNum(curS.fbClicks), ...deltaStr(curS.fbClicks, prevS.fbClicks), spark: ss.clicks.length ? ss.clicks : [0] },
+    { key: 'posts', label: t('Total Posts (Period)'), icon: 'grid_view', ...compact(curG.posts), ...deltaStr(curG.posts, prevG.posts), spark: sg.posts.length ? sg.posts : [0] },
+    { key: 'saves', label: t('Avg. Saves Rate (IG)'), icon: 'bookmark', value: `${savesCur.toFixed(2)}%`, ...ptsStr(savesCur, savesPrev), spark: sg.savesRate.length ? sg.savesRate : [0] },
+    { key: 'compl', label: t('Avg. Completion Rate (TT)'), icon: 'smart_display', value: `${Math.round(curS.tkCompl)}%`, ...ptsStr(curS.tkCompl, prevS.tkCompl), spark: ss.completion.length ? ss.completion : [0] },
+    { key: 'clicks', label: t('Link Clicks (FB)'), icon: 'ads_click', ...compact(curS.fbClicks), ...deltaStr(curS.fbClicks, prevS.fbClicks), spark: ss.clicks.length ? ss.clicks : [0] },
   ]
 }
 
 // ── Post Type Performance — IG avg reach by format (silver) ───────────────────
-async function postTypePerf(orgId: string, w: Window, brandId: string | null) {
+async function postTypePerf(orgId: string, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ format: string; reach: number }>(
     `SELECT p.format, AVG(p.reach)::float reach
        FROM l2_gold.post_metric p
@@ -234,20 +231,21 @@ async function postTypePerf(orgId: string, w: Window, brandId: string | null) {
     [orgId, w.start, w.end, brandId],
   )
   const bars: NamedBar[] = rows.map((r, i) => ({
-    label: IG_FORMAT_LABEL[r.format] ?? r.format, value: Math.round(r.reach), color: PALETTE[i % PALETTE.length],
+    label: t(IG_FORMAT_LABEL[r.format] ?? r.format), value: Math.round(r.reach), color: PALETTE[i % PALETTE.length],
   }))
   // finding: top format vs the next one
   const [top, second] = bars
   const insight = top
     ? second && second.value > 0
-      ? `${top.label} rata-rata mencatat reach ${(top.value / second.value).toFixed(1)}× lebih tinggi dari ${second.label} — format dengan distribusi terkuat di Instagram.`
-      : `${top.label} adalah format dengan rata-rata reach tertinggi di Instagram.`
-    : 'Belum ada data format Instagram pada periode ini.'
+      ? t('{top} averages {mult}× more reach than {second} — the strongest distribution format on Instagram.',
+          { top: top.label, mult: (top.value / second.value).toFixed(1), second: second.label })
+      : t('{top} is the format with the highest average reach on Instagram.', { top: top.label })
+    : t('No Instagram format data in this period yet.')
   return { postTypePerf: bars, postTypeInsight: insight }
 }
 
 // ── Content Volume by Week (gold post_count, bucketed weekly) ──────────────────
-async function contentVolume(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function contentVolume(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ wk: string; posts: number }>(
     `SELECT to_char(date_trunc('week', bmd.metric_date), 'YYYY-MM-DD') wk,
             SUM(bmd.post_count)::int posts
@@ -271,15 +269,16 @@ async function contentVolume(orgId: string, platform: PlatformParam, w: Window, 
     }
   }
   const insight = worst.i >= 0 && worst.drop >= 0.15
-    ? `${volume[worst.i].label} mengalami penurunan volume posting ${Math.round(worst.drop * 100)}% dibanding minggu sebelumnya — audiens menghukum inkonsistensi, jaga ritme posting.`
+    ? t('{week} saw posting volume drop {pct}% against the week before — audiences punish inconsistency, so keep the rhythm.',
+        { week: volume[worst.i].label, pct: Math.round(worst.drop * 100) })
     : volume.length
-      ? 'Volume posting relatif konsisten antar minggu pada periode ini.'
-      : 'Belum ada data volume posting pada periode ini.'
+      ? t('Posting volume is fairly consistent week to week in this period.')
+      : t('No posting volume data in this period yet.')
   return { contentVolume: volume, contentVolumeInsight: insight }
 }
 
 // ── Top Posts table (silver, ranked by engagement_rate) ───────────────────────
-async function topPosts(orgId: string, platform: PlatformParam, w: Window, brandId: string | null): Promise<TopPostRow[]> {
+async function topPosts(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator): Promise<TopPostRow[]> {
   const { rows } = await pool.query<{
     platform: DashPlatform; caption: string | null; format: string | null; post_type: string | null
     reach: number; views: number; likes: number; comments: number; shares: number; er: number | null; boosted: boolean
@@ -305,7 +304,7 @@ async function topPosts(orgId: string, platform: PlatformParam, w: Window, brand
     return {
       rank: i + 1,
       platform: r.platform,
-      caption: (r.caption || '(tanpa caption)').replace(/\s+/g, ' ').trim(),
+      caption: (r.caption || t('(no caption)')).replace(/\s+/g, ' ').trim(),
       format: postFormatLabel(r.format, r.post_type),
       reach: r.reach, views: r.views, likes: r.likes, comments: r.comments,
       shares: r.shares,
@@ -317,7 +316,7 @@ async function topPosts(orgId: string, platform: PlatformParam, w: Window, brand
 }
 
 // ── TikTok completion-rate distribution (silver) ──────────────────────────────
-async function completionDist(orgId: string, w: Window, brandId: string | null) {
+async function completionDist(orgId: string, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ b1: number; b2: number; b3: number; b4: number; total: number }>(
     `WITH cr AS (
         SELECT ${CR_NUM.replace('{col}', 'p')} v
@@ -339,23 +338,25 @@ async function completionDist(orgId: string, w: Window, brandId: string | null) 
     [orgId, w.start, w.end, brandId],
   )
   const r = rows[0] ?? { b1: 0, b2: 0, b3: 0, b4: 0, total: 0 }
-  const t = r.total || 1
+  const total = r.total || 1
   const dist = [
-    { label: '0–25%', value: Math.round(pct(r.b1, t)) },
-    { label: '25–50%', value: Math.round(pct(r.b2, t)) },
-    { label: '50–75%', value: Math.round(pct(r.b3, t)) },
-    { label: '75–100%', value: Math.round(pct(r.b4, t)) },
+    { label: '0–25%', value: Math.round(pct(r.b1, total)) },
+    { label: '25–50%', value: Math.round(pct(r.b2, total)) },
+    { label: '50–75%', value: Math.round(pct(r.b3, total)) },
+    { label: '75–100%', value: Math.round(pct(r.b4, total)) },
   ]
-  const pastHalf = Math.round(pct(r.b3 + r.b4, t))
+  const pastHalf = Math.round(pct(r.b3 + r.b4, total))
   const insight = r.total
-    ? `${pastHalf}% video ditonton melewati titik tengah${pastHalf >= 50 ? ' — di atas benchmark retensi 50%.' : ', masih di bawah benchmark retensi 50%.'}`
-    : 'Belum ada data completion rate TikTok pada periode ini.'
+    ? (pastHalf >= 50
+        ? t('{pct}% of videos are watched past the halfway point — above the 50% retention benchmark.', { pct: pastHalf })
+        : t('{pct}% of videos are watched past the halfway point, still under the 50% retention benchmark.', { pct: pastHalf }))
+    : t('No TikTok completion rate data in this period yet.')
   return { completionDist: dist, completionInsight: insight }
 }
 
 // ── Reel watch time by duration (silver, IG) ──────────────────────────────────
 const DUR_BUCKETS = ['0–15s', '15–30s', '30–45s', '45–60s', '60s+']
-async function reelWatch(orgId: string, w: Window, brandId: string | null) {
+async function reelWatch(orgId: string, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ bucket: string; comp: number }>(
     `SELECT
         CASE
@@ -382,8 +383,12 @@ async function reelWatch(orgId: string, w: Window, brandId: string | null) {
   const best = present.slice().sort((a, b) => b.value - a.value)[0]
   const worst = present.slice().sort((a, b) => a.value - b.value)[0]
   const insight = best
-    ? `Reel ${best.label} menahan rata-rata completion ${best.value}%${worst && worst !== best ? `, sementara ${worst.label} turun ke ${worst.value}%` : ''} — durasi pendek mempertahankan penonton lebih baik.`
-    : 'Belum ada data watch time reel pada periode ini.'
+    ? (worst && worst !== best
+        ? t('{best} reels hold {bestPct}% average completion while {worst} drops to {worstPct}% — shorter runtimes retain viewers better.',
+            { best: best.label, bestPct: best.value, worst: worst.label, worstPct: worst.value })
+        : t('{best} reels hold {bestPct}% average completion — shorter runtimes retain viewers better.',
+            { best: best.label, bestPct: best.value }))
+    : t('No reel watch-time data in this period yet.')
   return { reelWatch: reel, reelWatchInsight: insight }
 }
 
@@ -391,6 +396,9 @@ async function reelWatch(orgId: string, w: Window, brandId: string | null) {
 export async function getContentOverviewData(
   orgId: string, platform: PlatformParam, days: number, brandId: string | null = null,
   custom: CustomRange | null = null,
+  // Insight sentences and KPI labels are composed here, so the language has to
+  // reach this far in — the client cannot translate a sentence it did not build.
+  t: Translator = (k: string) => k,
 ): Promise<ContentOverviewPayload> {
   const win = await resolveWindows(orgId, platform, days, brandId, custom)
   if (!win) {
@@ -406,15 +414,15 @@ export async function getContentOverviewData(
     silverKpiTotals(orgId, platform, win.prev, brandId),
     goldKpiDaily(orgId, platform, win.cur, brandId),
     silverKpiDaily(orgId, platform, win.cur, brandId),
-    postTypePerf(orgId, win.cur, brandId),
-    contentVolume(orgId, platform, win.cur, brandId),
-    topPosts(orgId, platform, win.cur, brandId),
-    completionDist(orgId, win.cur, brandId),
-    reelWatch(orgId, win.cur, brandId),
+    postTypePerf(orgId, win.cur, brandId, t),
+    contentVolume(orgId, platform, win.cur, brandId, t),
+    topPosts(orgId, platform, win.cur, brandId, t),
+    completionDist(orgId, win.cur, brandId, t),
+    reelWatch(orgId, win.cur, brandId, t),
   ])
 
   return {
-    kpis: buildKpis(curG, prevG, curS, prevS, sg, ss),
+    kpis: buildKpis(curG, prevG, curS, prevS, sg, ss, t),
     ...ptp,
     ...vol,
     topPosts: top,

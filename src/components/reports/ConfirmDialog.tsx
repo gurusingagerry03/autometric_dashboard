@@ -1,10 +1,11 @@
 'use client'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
 /** In-app confirmation dialog (replaces browser confirm()). */
 export default function ConfirmDialog({
-  open, title, message, confirmLabel = 'Delete', cancelLabel = 'Cancel', danger = true, busy = false, onConfirm, onCancel,
+  open, title, message, confirmLabel, cancelLabel, danger = true, busy = false, onConfirm, onCancel,
 }: {
   open: boolean
   title: string
@@ -16,6 +17,7 @@ export default function ConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const t = useT()
   if (!open) return null
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && onCancel()}>
@@ -26,13 +28,13 @@ export default function ConfirmDialog({
         <div className="flex items-center justify-end gap-2 mt-5">
           <button type="button" onClick={onCancel} disabled={busy}
             className="h-9 px-4 text-[13px] font-semibold text-[#6b7280] bg-white border border-[#e5e7eb] rounded-lg hover:border-[#d1d5db] disabled:opacity-40 transition-colors">
-            {cancelLabel}
+            {cancelLabel ?? t('Cancel')}
           </button>
           <button type="button" onClick={onConfirm} disabled={busy}
             className={`h-9 px-4 text-[13px] font-bold text-white rounded-lg transition-colors disabled:opacity-60 ${
               danger ? 'bg-[#dc2626] hover:bg-[#b91c1c]' : 'bg-[#2C3079] hover:bg-[#20224F]'
             }`}>
-            {busy ? 'Menghapus…' : confirmLabel}
+            {busy ? t('Deleting…') : (confirmLabel ?? t('Delete'))}
           </button>
         </div>
       </div>

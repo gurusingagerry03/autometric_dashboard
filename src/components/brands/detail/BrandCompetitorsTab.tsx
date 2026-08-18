@@ -7,11 +7,12 @@ import PlatformIcon from '../PlatformIcon'
 import CompetitorModal from '../modals/CompetitorModal'
 import { COMPETITOR_ADD_ENABLED } from '@/lib/featureFlags'
 import { MAX_COMPETITORS_PER_PLATFORM } from '@/lib/quotas'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
-const ADD_DISABLED_TITLE = 'Penambahan competitor dinonaktifkan sementara'
 
 export default function BrandCompetitorsTab() {
+  const t = useT()
   const {
     brand, addCompetitor, awaitCompetitorVerification, removeCompetitor,
     competitorNotice, clearCompetitorNotice,
@@ -34,7 +35,7 @@ export default function BrandCompetitorsTab() {
           <div className={`flex items-start gap-2.5 mt-4 px-4 py-3 ${c.bg} border ${c.border} rounded-lg`}>
             <span className={`material-symbols-outlined text-[18px] ${c.icon} flex-shrink-0`}>{c.glyph}</span>
             <p className={`text-[12.5px] ${c.text} flex-1 leading-relaxed`}>{competitorNotice.text}</p>
-            <button onClick={clearCompetitorNotice} title="Tutup"
+            <button onClick={clearCompetitorNotice} title={t('Close')}
               className={`w-6 h-6 flex items-center justify-center rounded ${c.icon} ${c.hover} flex-shrink-0`}>
               <span className="material-symbols-outlined text-[16px]">close</span>
             </button>
@@ -44,7 +45,7 @@ export default function BrandCompetitorsTab() {
 
       <div className="flex items-center justify-between py-4 border-b border-[#e5e7eb]">
         <div>
-          <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">Competitors</h2>
+          <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">{t('Competitors')}</h2>
           <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
             {brand.competitors.length === 0
               ? `No competitors tracked yet. Up to ${MAX_COMPETITORS_PER_PLATFORM} per platform.`
@@ -52,7 +53,7 @@ export default function BrandCompetitorsTab() {
           </p>
         </div>
         <button onClick={() => COMPETITOR_ADD_ENABLED && toggleAdd(true)} disabled={!COMPETITOR_ADD_ENABLED} style={PJB}
-          title={COMPETITOR_ADD_ENABLED ? undefined : ADD_DISABLED_TITLE}
+          title={COMPETITOR_ADD_ENABLED ? undefined : t('Adding competitors is temporarily disabled')}
           className={`flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold rounded-lg transition-colors ${
             COMPETITOR_ADD_ENABLED ? 'bg-[#1B8A80] hover:bg-[#177A70] text-white' : 'bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed'
           }`}>
@@ -64,17 +65,17 @@ export default function BrandCompetitorsTab() {
       {brand.competitors.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <span className="material-symbols-outlined text-[44px] text-[#e5e7eb]">flag</span>
-          <p style={PJB} className="text-[14px] font-bold text-[#374151]">No competitors yet</p>
-          <p className="text-[13px] text-[#9ca3af]">Track competitor accounts to benchmark your brand's performance</p>
+          <p style={PJB} className="text-[14px] font-bold text-[#374151]">{t('No competitors yet')}</p>
+          <p className="text-[13px] text-[#9ca3af]">{t("Track competitor accounts to benchmark your brand's performance")}</p>
           <button onClick={() => COMPETITOR_ADD_ENABLED && toggleAdd(true)} disabled={!COMPETITOR_ADD_ENABLED} style={PJB}
-            title={COMPETITOR_ADD_ENABLED ? undefined : ADD_DISABLED_TITLE}
+            title={COMPETITOR_ADD_ENABLED ? undefined : t('Adding competitors is temporarily disabled')}
             className={`mt-1 flex items-center gap-1.5 h-9 px-4 text-[13px] font-semibold rounded-lg transition-colors ${
               COMPETITOR_ADD_ENABLED ? 'bg-[#1B8A80] hover:bg-[#177A70] text-white' : 'bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed'
             }`}>
             <span className="material-symbols-outlined text-[15px]">add</span>
             Add Competitor
           </button>
-          {!COMPETITOR_ADD_ENABLED && <p className="text-[11.5px] text-[#bcc2c9]">Fitur ini dinonaktifkan sementara.</p>}
+          {!COMPETITOR_ADD_ENABLED && <p className="text-[11.5px] text-[#bcc2c9]">{t('This feature is temporarily disabled.')}</p>}
         </div>
       ) : (
         brand.competitors.map(comp => (
@@ -106,12 +107,12 @@ export default function BrandCompetitorsTab() {
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
               {comp.profile_url && (
                 <a href={comp.profile_url} target="_blank" rel="noopener noreferrer"
-                  title="View profile"
+                  title={t('View profile')}
                   className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#e0f0f5] transition-colors text-[#9ca3af] hover:text-[#1B8A80]">
                   <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                 </a>
               )}
-              <button onClick={() => removeCompetitor(comp.social_account_id)} title="Remove competitor"
+              <button onClick={() => removeCompetitor(comp.social_account_id)} title={t('Remove competitor')}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#fee2e2] transition-colors text-[#9ca3af] hover:text-[#ef4444]">
                 <span className="material-symbols-outlined text-[16px]">delete</span>
               </button>

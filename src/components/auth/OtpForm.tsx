@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 interface Props {
   email: string
@@ -13,6 +14,7 @@ const OTP_LENGTH = 6
 const RESEND_COOLDOWN = 60
 
 export default function OtpForm({ email, onBack, onResend, onSubmit }: Props) {
+  const t = useT()
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -60,7 +62,7 @@ export default function OtpForm({ email, onBack, onResend, onSubmit }: Props) {
     e.preventDefault()
     const otp = digits.join('')
     if (otp.length < OTP_LENGTH) {
-      setError('Please enter the complete 6-digit code.')
+      setError(t('Please enter the complete 6-digit code.'))
       return
     }
 
@@ -70,7 +72,7 @@ export default function OtpForm({ email, onBack, onResend, onSubmit }: Props) {
     try {
       await onSubmit(otp)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed.')
+      setError(err instanceof Error ? err.message : t('Verification failed.'))
       setDigits(Array(OTP_LENGTH).fill(''))
       inputs.current[0]?.focus()
     } finally {
@@ -87,7 +89,7 @@ export default function OtpForm({ email, onBack, onResend, onSubmit }: Props) {
       setDigits(Array(OTP_LENGTH).fill(''))
       inputs.current[0]?.focus()
     } catch {
-      setError('Failed to resend OTP. Please try again.')
+      setError(t('Failed to resend OTP. Please try again.'))
     } finally {
       setResending(false)
     }
@@ -110,11 +112,11 @@ export default function OtpForm({ email, onBack, onResend, onSubmit }: Props) {
         className="flex items-center gap-1.5 text-on-surface-variant hover:text-on-surface transition-colors w-fit"
       >
         <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-        <span className="font-body-md text-body-md">Back</span>
+        <span className="font-body-md text-body-md">{t('Back')}</span>
       </button>
 
       <div>
-        <h2 className="font-h2 text-h2 text-on-surface mb-1">Check your email</h2>
+        <h2 className="font-h2 text-h2 text-on-surface mb-1">{t('Check your email')}</h2>
         <p className="font-body-md text-body-md text-on-surface-variant">
           We sent a 6-digit code to{' '}
           <span className="font-semibold text-on-surface">{email}</span>
@@ -178,7 +180,7 @@ export default function OtpForm({ email, onBack, onResend, onSubmit }: Props) {
             disabled={resending}
             className="font-semibold text-primary-container hover:text-primary transition-colors disabled:opacity-60"
           >
-            {resending ? 'Sending...' : 'Resend code'}
+            {resending ? t('Sending…') : t('Resend code')}
           </button>
         )}
       </p>

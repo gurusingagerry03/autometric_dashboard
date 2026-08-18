@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useBrandDetail } from './BrandDetailContext'
 import BrandAvatar from '../BrandAvatar'
 import BrandDetailRightPanel from './BrandDetailRightPanel'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function BrandDetailShell({ orgSlug, children }: Props) {
+  const t = useT()
   const { brand } = useBrandDetail()
   const pathname  = usePathname()
 
@@ -67,7 +69,7 @@ export default function BrandDetailShell({ orgSlug, children }: Props) {
                 <span className={`material-symbols-outlined text-[15px] ${active ? 'text-[#1B8A80]' : 'text-[#9ca3af]'}`}>
                   {tab.icon}
                 </span>
-                {tab.label}
+                {t(tab.label)}
               </Link>
             )
           })}

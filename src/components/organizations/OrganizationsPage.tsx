@@ -8,6 +8,7 @@ import CreateOrgModal from '@/components/organizations/CreateOrgModal'
 import OrgAvatar from '@/components/organizations/OrgAvatar'
 import { Organization } from '@/lib/organizations/types'
 import { Invitation } from '@/lib/invitations/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function OrganizationsPage({ initialOrgs, initialInvitations }: Props) {
+  const t = useT()
   const router = useRouter()
   const [orgs,         setOrgs]         = useState<Organization[]>(initialOrgs)
   const [invites,      setInvites]      = useState<Invitation[]>(initialInvitations)
@@ -88,7 +90,7 @@ export default function OrganizationsPage({ initialOrgs, initialInvitations }: P
             className="flex items-center gap-2 h-10 px-5 bg-[#1B8A80] hover:bg-[#177A70] active:bg-[#2C3079] text-white text-[13.5px] font-semibold rounded-lg transition-colors shadow-[0_2px_10px_rgba(61,126,150,0.28)]"
           >
             <span className="material-symbols-outlined text-[16px]">add</span>
-            New Organization
+            {t('New Organization')}
           </button>
         </div>
       </div>
@@ -97,7 +99,7 @@ export default function OrganizationsPage({ initialOrgs, initialInvitations }: P
       {hasInvites && (
         <div className="px-8 pt-6 pb-2">
           <div className="flex items-center gap-2 mb-3">
-            <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Invitations</span>
+            <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('Invitations')}</span>
             <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#1B8A80] text-white text-[10px] font-bold flex items-center justify-center">
               {invites.length}
             </span>
@@ -111,7 +113,7 @@ export default function OrganizationsPage({ initialOrgs, initialInvitations }: P
                     {invite.org_name}
                   </p>
                   <p className="text-[11.5px] text-[#9ca3af] mt-0.5">
-                    Invited by <span className="text-[#6b7280] font-medium">{invite.invited_by}</span>
+                    {t('Invited by')} <span className="text-[#6b7280] font-medium">{invite.invited_by}</span>
                     {' · '}{formatDate(invite.invited_at)}
                   </p>
                 </div>
@@ -124,14 +126,14 @@ export default function OrganizationsPage({ initialOrgs, initialInvitations }: P
                     onClick={() => handleDecline(invite.id)}
                     className="h-8 px-3.5 text-[12px] font-medium text-[#6b7280] hover:text-[#111827] border border-[#e5e7eb] hover:border-[#d1d5db] rounded-lg transition-colors"
                   >
-                    Decline
+                    {t('Decline')}
                   </button>
                   <button
                     onClick={() => handleAccept(invite)}
                     style={PJB}
                     className="h-8 px-3.5 text-[12px] font-semibold bg-[#1B8A80] hover:bg-[#177A70] text-white rounded-lg transition-colors"
                   >
-                    Accept
+                    {t('Accept')}
                   </button>
                 </div>
               </div>
@@ -157,7 +159,7 @@ export default function OrganizationsPage({ initialOrgs, initialInvitations }: P
                   : 'border-b-transparent text-[#6b7280] hover:text-[#374151] hover:bg-[#f3f4f6]'
               }`}
             >
-              {tab.label}
+              {t(tab.label)}
               <span className={`text-[11px] font-bold ${active ? 'text-[#1B8A80]' : 'text-[#b0b8c4]'}`}>
                 {count}
               </span>

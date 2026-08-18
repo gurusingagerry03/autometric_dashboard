@@ -2,8 +2,21 @@
 
 import { useId, useRef, useState } from 'react'
 import { ChartTooltip, useChartTooltip, formatTipValue } from '@/components/ui/ChartTooltip'
+import ExactValue from '@/components/ui/ExactValue'
 
 /* ---------- helpers ---------- */
+
+/**
+ * The single colour every non-comparison chart draws in.
+ *
+ * A palette that changes hue per bar implies the bars are different KINDS of
+ * thing; in a ranking ("reach by format", "followers by age band") they are one
+ * measure sliced up, and the colour carries no information — it only competes
+ * with the lengths the reader is meant to compare. Charts that genuinely
+ * contrast series (brand vs brand, female vs male, gained vs lost, platform
+ * share) keep their own colours and pass them in explicitly.
+ */
+export const SERIES = '#1B8A80'
 
 function buildPath(data: number[], w: number, h: number, pad: number) {
   const min = Math.min(...data)
@@ -395,10 +408,15 @@ export function ComboBarLine({ labels, bars, line, barColor = '#e7a6bd', lineCol
 
 /* ---------- Donut ---------- */
 
-export function Donut({ segments, size = 140, thickness = 18, centerLabel, centerSub, legend = true, fmt = defaultFmt }: {
+export function Donut({ segments, size = 140, thickness = 18, centerLabel, centerExact, centerSub, legend = true, fmt = defaultFmt, valueLabel = 'Value' }: {
+  /** `value` is the segment's real magnitude — the ring derives each share from it. */
   segments: { label: string; value: number; color: string }[]
   size?: number; thickness?: number; centerLabel?: string; centerSub?: string; legend?: boolean
+  /** Exact figure behind a compacted `centerLabel`, revealed on hover. */
+  centerExact?: string
   fmt?: (n: number) => string
+  /** Names the magnitude in the hover ("Reach", "Followers"…), above its share. */
+  valueLabel?: string
 }) {
   const total = segments.reduce((s, x) => s + x.value, 0) || 1
   const r = (size - thickness) / 2
@@ -407,7 +425,7 @@ export function Donut({ segments, size = 140, thickness = 18, centerLabel, cente
   const { tip, show, hide } = useChartTooltip()
 
   const lines = (s: { label: string; value: number; color: string }) => [
-    { label: 'Value', value: fmt(s.value), color: s.color },
+    { label: valueLabel, value: fmt(s.value), color: s.color },
     { label: 'Share', value: `${Math.round((s.value / total) * 100)}%` },
   ]
 
@@ -432,8 +450,12 @@ export function Donut({ segments, size = 140, thickness = 18, centerLabel, cente
         })}
       </svg>
       {centerLabel && (
+        // The ring itself owns the pointer, so the centre block stays inert —
+        // except the total, which needs its own hover to reveal the exact figure.
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-3 pointer-events-none">
-          <span className="text-[22px] font-bold text-[#111827] leading-none" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{centerLabel}</span>
+          <ExactValue display={centerLabel} exact={centerExact}
+            className="pointer-events-auto text-[22px] font-bold text-[#111827] leading-none"
+            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
           {centerSub && <span className="text-[10px] text-[#9ca3af] mt-1 leading-tight">{centerSub}</span>}
         </div>
       )}
@@ -464,26 +486,32 @@ export function Donut({ segments, size = 140, thickness = 18, centerLabel, cente
 
 /* ---------- Vertical bars ---------- */
 
-export function BarChart({ bars, height = 180 }: {
-  bars: { label: string; value: number; color: string; display: string }[]
+export function BarChart({ bars, height = 180, color = SERIES }: {
+  /** `exact` is the unrounded figure the hover adds behind a compacted `display`. */
+  bars: { label: string; value: number; display: string; exact?: string }[]
   height?: number
+  /** One colour for the whole set — see HBars. */
+  color?: string
 }) {
   const max = Math.max(...bars.map(b => b.value)) || 1
   const { tip, show, hide } = useChartTooltip()
+
+  const lines = (b: { display: string; exact?: string }) =>
+    [{ value: b.exact ?? b.display, color }]
 
   return (
     <div className="flex items-end gap-4 w-full" style={{ height }}>
       {bars.map(b => (
         <div
           key={b.label} className="flex-1 flex flex-col items-center justify-end h-full cursor-pointer"
-          onMouseEnter={e => show(e, b.label, [{ value: b.display, color: b.color }])}
-          onMouseMove={e => show(e, b.label, [{ value: b.display, color: b.color }])}
+          onMouseEnter={e => show(e, b.label, lines(b))}
+          onMouseMove={e => show(e, b.label, lines(b))}
           onMouseLeave={hide}
         >
           <span className="text-[11px] font-semibold text-[#374151] mb-1.5">{b.display}</span>
           <div className="w-full rounded-t-md transition-all hover:opacity-80" style={{
             height: `${Math.max(4, (b.value / max) * (height - 44))}px`,
-            background: b.color,
+            background: color,
           }} />
           <span className="text-[11px] text-[#9ca3af] mt-2">{b.label}</span>
         </div>
@@ -517,33 +545,65 @@ export function ShareBar({ value, color, track = '#f3f4f6', label, display }: {
 
 /* ---------- Labeled horizontal bars ---------- */
 
-export function HBars({ items }: {
-  items: { label: string; value: number; display: string; color: string; icon?: string }[]
+export function HBars({ items, color = SERIES, showShare = true }: {
+  /**
+   * `display` is what sits next to the bar; `exact` is the fuller figure the
+   * hover adds — the headcount behind a share, or the unrounded number behind a
+   * compacted one. Without it the hover would only repeat the visible label.
+   */
+  items: {
+    label: string; value: number; display: string
+    exact?: string; exactLabel?: string; icon?: string
+    /** Per-bar colour — only for charts that genuinely contrast entities. */
+    color?: string
+  }[]
+  /** One colour for the whole set: these bars rank one measure, they don't compare series. */
+  color?: string
+  /**
+   * Whether the hover repeats the share sitting next to the bar.
+   *
+   * On most bars the pair is the point — the share is the ranking, the exact
+   * figure is the magnitude behind it. Where the reader asked for the count and
+   * nothing else (age distribution), pass `false`: the percentage is already
+   * printed against the bar, so echoing it in the hover only buries the number
+   * they hovered to find.
+   */
+  showShare?: boolean
 }) {
   const max = Math.max(...items.map(i => i.value)) || 1
   const { tip, show, hide } = useChartTooltip()
 
+  const lines = (it: { display: string; exact?: string; exactLabel?: string; color?: string }) => {
+    const c = it.color ?? color
+    if (!it.exact) return [{ value: it.display, color: c }]
+    const exact = [{ label: it.exactLabel ?? 'Total', value: it.exact, color: c }]
+    return showShare ? [...exact, { label: 'Share', value: it.display }] : exact
+  }
+
   return (
     <div className="flex flex-col gap-3.5">
-      {items.map(it => (
-        <div
-          key={it.label} className="cursor-pointer"
-          onMouseEnter={e => show(e, it.label, [{ value: it.display, color: it.color }])}
-          onMouseMove={e => show(e, it.label, [{ value: it.display, color: it.color }])}
-          onMouseLeave={hide}
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#374151]">
-              {it.icon && <span className="material-symbols-outlined text-[16px]" style={{ color: it.color }}>{it.icon}</span>}
-              {it.label}
-            </span>
-            <span className="text-[12px] font-bold text-[#111827]">{it.display}</span>
+      {items.map(it => {
+        const c = it.color ?? color
+        return (
+          <div
+            key={it.label} className="cursor-pointer"
+            onMouseEnter={e => show(e, it.label, lines(it))}
+            onMouseMove={e => show(e, it.label, lines(it))}
+            onMouseLeave={hide}
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#374151]">
+                {it.icon && <span className="material-symbols-outlined text-[16px]" style={{ color: c }}>{it.icon}</span>}
+                {it.label}
+              </span>
+              <span className="text-[12px] font-bold text-[#111827]">{it.display}</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-[#f3f4f6] overflow-hidden">
+              <div className="h-full rounded-full transition-all hover:opacity-80" style={{ width: `${(it.value / max) * 100}%`, background: c }} />
+            </div>
           </div>
-          <div className="w-full h-2 rounded-full bg-[#f3f4f6] overflow-hidden">
-            <div className="h-full rounded-full transition-all hover:opacity-80" style={{ width: `${(it.value / max) * 100}%`, background: it.color }} />
-          </div>
-        </div>
-      ))}
+        )
+      })}
       <ChartTooltip tip={tip} />
     </div>
   )

@@ -7,6 +7,8 @@ import { signIn } from 'next-auth/react'
 import GoogleButton from './GoogleButton'
 import OtpForm from './OtpForm'
 import PasswordInput from './PasswordInput'
+import { useT } from '@/lib/i18n/LanguageContext'
+import type { Translator } from '@/lib/i18n/translate'
 
 interface Props {
   onSwitch: () => void
@@ -28,30 +30,31 @@ interface FormErrors {
 
 type Step = 'form' | 'otp'
 
-function validate(form: FormState): FormErrors {
+function validate(form: FormState, t: Translator): FormErrors {
   const errs: FormErrors = {}
   if (!form.name.trim()) {
-    errs.name = 'Full name is required.'
+    errs.name = t('Full name is required.')
   }
   if (!form.email.trim()) {
-    errs.email = 'Email is required.'
+    errs.email = t('Email is required.')
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-    errs.email = 'Enter a valid email address.'
+    errs.email = t('Enter a valid email address.')
   }
   if (!form.password) {
-    errs.password = 'Password is required.'
+    errs.password = t('Password is required.')
   } else if (form.password.length < 8) {
-    errs.password = 'Password must be at least 8 characters.'
+    errs.password = t('Password must be at least 8 characters.')
   }
   if (!form.confirmPassword) {
-    errs.confirmPassword = 'Please confirm your password.'
+    errs.confirmPassword = t('Please confirm your password.')
   } else if (form.password !== form.confirmPassword) {
-    errs.confirmPassword = 'Passwords do not match.'
+    errs.confirmPassword = t('Passwords do not match.')
   }
   return errs
 }
 
 export default function RegisterForm({ onSwitch }: Props) {
+  const t = useT()
   const router = useRouter()
   const [step, setStep] = useState<Step>('form')
   const [form, setForm] = useState<FormState>({ name: '', email: '', password: '', confirmPassword: '' })
@@ -73,14 +76,14 @@ export default function RegisterForm({ onSwitch }: Props) {
       body: JSON.stringify(form),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed to send OTP.')
+    if (!res.ok) throw new Error(data.error || t('Failed to send OTP.'))
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setApiError('')
 
-    const errs = validate(form)
+    const errs = validate(form, t)
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
       return
@@ -91,7 +94,7 @@ export default function RegisterForm({ onSwitch }: Props) {
       await sendOtp()
       setStep('otp')
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong.'
+      const message = err instanceof Error ? err.message : t('Something went wrong.')
       if (message.toLowerCase().includes('email')) {
         setErrors(prev => ({ ...prev, email: message }))
       } else {
@@ -115,7 +118,7 @@ export default function RegisterForm({ onSwitch }: Props) {
             body: JSON.stringify({ email: form.email, otp }),
           })
           const data = await res.json()
-          if (!res.ok) throw new Error(data.error || 'Verification failed.')
+          if (!res.ok) throw new Error(data.error || t('Verification failed.'))
 
           const result = await signIn('credentials', {
             email: form.email,
@@ -140,15 +143,15 @@ export default function RegisterForm({ onSwitch }: Props) {
       </div>
 
       <div>
-        <h2 className="font-h2 text-h2 text-on-surface mb-1">Create account</h2>
-        <p className="font-body-md text-body-md text-on-surface-variant">Start tracking your brand performance today.</p>
+        <h2 className="font-h2 text-h2 text-on-surface mb-1">{t('Create account')}</h2>
+        <p className="font-body-md text-body-md text-on-surface-variant">{t('Start tracking your brand performance today.')}</p>
       </div>
 
-      <GoogleButton label="Sign up with Google" />
+      <GoogleButton label={t('Sign up with Google')} />
 
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-outline-variant" />
-        <span className="text-[12px] font-body-md text-on-surface-variant">or with email</span>
+        <span className="text-[12px] font-body-md text-on-surface-variant">{t('or with email')}</span>
         <div className="flex-1 h-px bg-outline-variant" />
       </div>
 
@@ -163,7 +166,7 @@ export default function RegisterForm({ onSwitch }: Props) {
             id="reg-name"
             name="name"
             type="text"
-            placeholder="Enter your full name"
+            placeholder={t('Enter your full name')}
             value={form.name}
             onChange={handleChange}
             className={`w-full h-11 px-4 bg-surface-container-lowest border rounded-xl font-body-md text-body-md text-on-surface placeholder:text-outline focus:outline-none focus:ring-2 transition-all ${

@@ -1,4 +1,7 @@
+'use client'
+
 import type { Mode } from './AuthPage';
+import { useT } from '@/lib/i18n/LanguageContext'
 
 // Palette lifted from public/logo/[KEPIAI] LOGO GUIDELINE.pdf — do not eyeball
 // replacements. GRADIENT_CORE is the measured peak of the deck's background
@@ -10,6 +13,7 @@ const TEAL = '#4BBE9D';
 const CYAN = '#3CC1D8';
 
 export default function LeftPanel({ mode }: { mode: Mode }) {
+  const t = useT()
   return (
     <div
       className="hidden lg:flex w-1/2 h-full flex-col relative overflow-hidden"
@@ -68,10 +72,10 @@ export default function LeftPanel({ mode }: { mode: Mode }) {
                 color: 'transparent',
               }}
             >
-              Chill.
+              {t('Chill.')}
             </span>
             <br />
-            <span style={{ color: '#ffffff' }}>We&rsquo;ve Got The Metrics.</span>
+            <span style={{ color: '#ffffff' }}>{t('We’ve Got The Metrics.')}</span>
           </h1>
           <p
             className="mt-6"
@@ -83,10 +87,7 @@ export default function LeftPanel({ mode }: { mode: Mode }) {
               maxWidth: 520,
             }}
           >
-            Every platform gives you metrics, while KepiAi gives you clarity. We bring your
-            performance, content, audience, and campaigns into one intelligent workspace, reveal
-            what actually drives results, and turn days of reporting into minutes, so you can spend
-            less time explaining the numbers and more time acting on them.
+            {t('Every platform gives you metrics, while KepiAi gives you clarity. We bring your performance, content, audience, and campaigns into one intelligent workspace, reveal what actually drives results, and turn days of reporting into minutes, so you can spend less time explaining the numbers and more time acting on them.')}
           </p>
         </div>
 
@@ -99,7 +100,7 @@ export default function LeftPanel({ mode }: { mode: Mode }) {
             fontFamily: 'Inter, sans-serif',
           }}
         >
-          &copy; 2026 Kepiai. All rights reserved.
+          &copy; 2026 Kepiai. {t('All rights reserved.')}
         </p>
       </div>
     </div>

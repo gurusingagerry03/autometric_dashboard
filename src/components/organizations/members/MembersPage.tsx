@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { OrgMember } from '@/lib/organizations/members'
 import InviteMemberModal from './InviteMemberModal'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -37,6 +38,7 @@ function RoleDropdown({
   memberId: string; orgId: string; currentRole: 'ADMIN' | 'MEMBER'
   canEdit: boolean; onChanged: (id: string, role: 'ADMIN' | 'MEMBER') => void; onError: (msg: string) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -54,12 +56,12 @@ function RoleDropdown({
       const res  = await fetch(`/api/organizations/${orgId}/members/${memberId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }),
       })
-      if (!res.ok) { const j = await res.json(); onError(j.error ?? 'Failed to update role.') }
+      if (!res.ok) { const j = await res.json(); onError(j.error ?? t('Failed to update role.')) }
       else onChanged(memberId, role)
     } finally { setBusy(false) }
   }
 
-  const label = currentRole === 'ADMIN' ? 'Admin' : 'Member'
+  const label = currentRole === 'ADMIN' ? t('Admin') : t('Member')
 
   if (!canEdit) {
     return (
@@ -89,7 +91,7 @@ function RoleDropdown({
                 r === currentRole ? 'bg-[#f0f7ff] text-[#3b5bdb] font-semibold' : 'text-[#334155] hover:bg-[#e9eef4] font-medium'
               }`}
             >
-              {r === 'ADMIN' ? 'Admin' : 'Member'}
+              {r === 'ADMIN' ? t('Admin') : t('Member')}
               {r === currentRole && <span className="material-symbols-outlined text-[14px]">check</span>}
             </button>
           ))}
@@ -106,6 +108,7 @@ function KebabMenu({
   member: OrgMember; orgId: string; isSelf: boolean; isAdmin: boolean
   onAction: (type: 'kick' | 'leave' | 'cancel', memberId: string) => void
 }) {
+  const t = useT()
   const [open, setBusy_open] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -121,12 +124,12 @@ function KebabMenu({
   const items: { label: string; icon: string; action: 'kick' | 'leave' | 'cancel'; danger: boolean }[] = []
 
   if (isSelf) {
-    items.push({ label: 'Leave organization', icon: 'logout', action: 'leave', danger: true })
+    items.push({ label: t('Leave organization'), icon: 'logout', action: 'leave', danger: true })
   } else if (isAdmin) {
     if (isPending) {
-      items.push({ label: 'Cancel invitation', icon: 'cancel_schedule_send', action: 'cancel', danger: false })
+      items.push({ label: t('Cancel invitation'), icon: 'cancel_schedule_send', action: 'cancel', danger: false })
     } else {
-      items.push({ label: 'Kick member', icon: 'person_remove', action: 'kick', danger: true })
+      items.push({ label: t('Kick member'), icon: 'person_remove', action: 'kick', danger: true })
     }
   }
 
@@ -173,6 +176,7 @@ interface Props {
 }
 
 export default function MembersPage({ orgId, orgName, currentRole, currentUserId, initialMembers }: Props) {
+  const t = useT()
   const router     = useRouter()
   const [members,    setMembers]    = useState<OrgMember[]>(initialMembers)
   const [showInvite, setShowInvite] = useState(false)
@@ -200,7 +204,7 @@ export default function MembersPage({ orgId, orgName, currentRole, currentUserId
     setBusy(memberId)
     try {
       const res = await fetch(`/api/organizations/${orgId}/members/${memberId}`, { method: 'DELETE' })
-      if (!res.ok) { const j = await res.json(); showToast(j.error ?? 'Action failed.'); return }
+      if (!res.ok) { const j = await res.json(); showToast(j.error ?? t('Action failed.')); return }
       if (type === 'leave') {
         router.push('/organizations')
       } else {
@@ -224,7 +228,7 @@ export default function MembersPage({ orgId, orgName, currentRole, currentUserId
 
       {/* ════ Header — title only ════ */}
       <div className="px-10 pt-7 pb-5 border-b-2 border-[#e2e8f0]">
-        <p className="text-[12.5px] text-[#94a3b8] mb-1.5 tracking-wide" style={PJB}>Manage members access</p>
+        <p className="text-[12.5px] text-[#94a3b8] mb-1.5 tracking-wide" style={PJB}>{t('Manage members access')}</p>
         <h1 style={PJB} className="text-[36px] font-bold text-[#0f172a] tracking-[-0.04em] leading-none">
           Members
         </h1>
@@ -244,7 +248,7 @@ export default function MembersPage({ orgId, orgName, currentRole, currentUserId
             <div className="relative flex items-center">
               <span className="material-symbols-outlined text-[15px] text-[#94a3b8] absolute left-3 pointer-events-none">search</span>
               <input
-                type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search"
+                type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t('Search')}
                 className="h-9 pl-8 pr-10 w-44 text-[13px] text-[#334155] placeholder:text-[#94a3b8] bg-white border border-[#e2e8f0] rounded-lg outline-none focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/10 transition-all"
                 style={PJB}
               />
@@ -264,10 +268,10 @@ export default function MembersPage({ orgId, orgName, currentRole, currentUserId
             <div className="py-20 text-center">
               <span className="material-symbols-outlined text-[44px] text-[#e2e8f0] mb-3 block">group</span>
               <p style={PJB} className="text-[14px] font-semibold text-[#334155]">
-                {search ? 'No members found' : 'No members yet'}
+                {search ? t('No members found') : t('No members yet')}
               </p>
               <p className="text-[13px] text-[#94a3b8] mt-1">
-                {search ? 'Try a different search.' : 'Invite someone to collaborate.'}
+                {search ? t('Try a different search.') : t('Invite someone to collaborate.')}
               </p>
             </div>
           ) : (
@@ -328,7 +332,7 @@ export default function MembersPage({ orgId, orgName, currentRole, currentUserId
 
         {/* Access control */}
         <div className="w-[260px] flex-shrink-0 px-7 pt-8 pb-10">
-          <h2 style={PJB} className="text-[16px] font-bold text-[#0f172a] mb-3">Access control</h2>
+          <h2 style={PJB} className="text-[16px] font-bold text-[#0f172a] mb-3">{t('Access control')}</h2>
           <p className="text-[13px] text-[#64748b] leading-[1.65] mb-6">
             Manage team members of your organization and set their access level. You can invite new members to join{' '}
             <span className="font-semibold text-[#334155]">{orgName}</span>.

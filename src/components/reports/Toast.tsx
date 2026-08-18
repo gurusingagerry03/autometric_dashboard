@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -22,6 +23,7 @@ const STYLES: Record<ToastKind, { icon: string; ring: string; color: string }> =
 }
 
 export function ToastHost({ toast, onClose }: { toast: ToastState | null; onClose: () => void }) {
+  const t = useT()
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(onClose, toast.kind === 'error' ? 6000 : 3800)
@@ -36,7 +38,7 @@ export function ToastHost({ toast, onClose }: { toast: ToastState | null; onClos
         className={`pointer-events-auto flex items-start gap-2.5 w-[360px] max-w-[calc(100vw-2.5rem)] bg-white border ${s.ring} rounded-xl shadow-lg shadow-black/[0.10] px-4 py-3`}>
         <span className="material-symbols-outlined text-[20px] flex-shrink-0 mt-[1px]" style={{ color: s.color }}>{s.icon}</span>
         <p className="text-[13px] leading-snug text-[#1f2937] whitespace-pre-line flex-1 min-w-0">{toast.message}</p>
-        <button onClick={onClose} aria-label="Tutup"
+        <button onClick={onClose} aria-label={t('Close')}
           className="material-symbols-outlined text-[16px] text-[#9ca3af] hover:text-[#374151] flex-shrink-0 -mr-1 -mt-0.5">close</button>
       </div>
     </div>

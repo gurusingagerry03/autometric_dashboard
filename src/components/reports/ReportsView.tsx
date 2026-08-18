@@ -10,6 +10,7 @@ import type { ReportTemplateRecord } from '@/lib/reports/data/slideModel'
 import ReportBuilder from './builder/ReportBuilder'
 import { useToast, ToastHost, type ToastKind } from './Toast'
 import ConfirmDialog from './ConfirmDialog'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 type ShowToast = (kind: ToastKind, message: string) => void
@@ -73,6 +74,7 @@ function ReportsIndex({
   history: ReportRecord[]
   onCreate: (templateId?: string) => void
 }) {
+  const t = useT()
   const [search, setSearch] = useState('')
   const [brandFilter, setBrandFilter] = useState('all')
   const { toast, showToast, clearToast } = useToast()
@@ -140,8 +142,8 @@ function ReportsIndex({
                 <span className="material-symbols-outlined text-[19px]">auto_awesome</span>
               </span>
               <div>
-                <h2 style={PJ} className="text-[15px] font-bold text-[#0f172a] tracking-[-0.01em]">Start from a cover style</h2>
-                <p className="text-[12px] text-[#73858c] mt-0.5">Pick a cover style to jump into the builder — you can change it later</p>
+                <h2 style={PJ} className="text-[15px] font-bold text-[#0f172a] tracking-[-0.01em]">{t('Start from a cover style')}</h2>
+                <p className="text-[12px] text-[#73858c] mt-0.5">{t('Pick a cover style to jump into the builder — you can change it later')}</p>
               </div>
             </div>
             <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
@@ -170,7 +172,7 @@ function ReportsIndex({
           {/* History */}
           <section>
             <div className="flex items-center justify-between gap-4">
-              <SectionHead title="Recent exports" hint={`${filtered.length} of ${total} reports`} />
+              <SectionHead title={t('Recent exports')} hint={t('{shown} of {total} reports', { shown: filtered.length, total })} />
               <div className="flex items-center gap-2.5 flex-shrink-0">
                 <select
                   value={brandFilter}
@@ -178,13 +180,13 @@ function ReportsIndex({
                   style={PJ}
                   className="h-9 text-[12.5px] font-semibold text-[#334155] bg-white border border-[#e2e8f0] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none"
                 >
-                  <option value="all">All brands</option>
+                  <option value="all">{t('All brands')}</option>
                   {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
                 <div className="relative flex items-center">
                   <span className="material-symbols-outlined text-[15px] text-[#94a3b8] absolute left-3 pointer-events-none">search</span>
                   <input
-                    type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search reports"
+                    type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t('Search reports')}
                     style={PJ}
                     className="h-9 pl-8 pr-3 w-48 text-[13px] text-[#334155] placeholder:text-[#94a3b8] bg-white border border-[#e2e8f0] rounded-lg outline-none focus:border-[#1B8A80] focus:ring-2 focus:ring-[#1B8A80]/10 transition-all"
                   />
@@ -195,8 +197,8 @@ function ReportsIndex({
             {filtered.length === 0 ? (
               <div className="py-16 text-center border-2 border-dashed border-[#e2e8f0] rounded-2xl mt-4">
                 <span className="material-symbols-outlined text-[44px] text-[#e2e8f0] mb-2 block">folder_off</span>
-                <p style={PJ} className="text-[14px] font-semibold text-[#334155]">No reports found</p>
-                <p className="text-[13px] text-[#94a3b8] mt-1">Try a different brand or search term.</p>
+                <p style={PJ} className="text-[14px] font-semibold text-[#334155]">{t('No reports found')}</p>
+                <p className="text-[13px] text-[#94a3b8] mt-1">{t('Try a different brand or search term.')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-4 mt-4">
@@ -208,7 +210,7 @@ function ReportsIndex({
 
         {/* ════ Right info column ════ */}
         <div className="w-[280px] flex-shrink-0 px-7 pt-8 pb-10 border-l border-[#eef2f6]">
-            <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a] mb-3">About reports</h2>
+            <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a] mb-3">{t('About reports')}</h2>
             <p className="text-[13px] text-[#64748b] leading-[1.65] mb-6">
               Build polished, on-brand PowerPoint reports from your social analytics in minutes. Pick a cover, drop in your
               logo, and export an editable <span className="font-semibold text-[#334155]">.pptx</span> for{' '}
@@ -216,23 +218,23 @@ function ReportsIndex({
             </p>
 
             <div className="flex flex-col gap-5">
-              <InfoRow title="Branded covers"
-                body="Six cover templates that tint automatically from your uploaded logo's colors." />
-              <InfoRow title="Fully editable"
-                body="Titles and text export as native PowerPoint elements, so they stay editable after download." />
-              <InfoRow title="Fast exports"
-                body="No server round-trips — covers render and export right in your browser." />
+              <InfoRow title={t('Branded covers')}
+                body={t("Six cover templates that tint automatically from your uploaded logo's colors.")} />
+              <InfoRow title={t('Fully editable')}
+                body={t('Titles and text export as native PowerPoint elements, so they stay editable after download.')} />
+              <InfoRow title={t('Fast exports')}
+                body={t('No server round-trips — covers render and export right in your browser.')} />
             </div>
 
             <div className="mt-7 pt-6 border-t border-[#e2e8f0] space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[12.5px] text-[#94a3b8]">Last export</span>
+                <span className="text-[12.5px] text-[#94a3b8]">{t('Last export')}</span>
                 <span style={PJ} className="text-[13px] font-semibold text-[#334155]">
                   {total ? relativeDate(history[0].exportedAt) : '—'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[12.5px] text-[#94a3b8]">Format</span>
+                <span className="text-[12.5px] text-[#94a3b8]">{t('Format')}</span>
                 <span style={PJ} className="text-[13px] font-semibold text-[#334155]">PPTX</span>
               </div>
             </div>
@@ -285,6 +287,7 @@ const FALLBACK_BRAND: DashBrand = {
 }
 
 function ReportCard({ record, orgId, brands, showToast }: { record: ReportRecord; orgId: string; brands: DashBrand[]; showToast: ShowToast }) {
+  const t = useT()
   const router = useRouter()
   const [deleting, setDeleting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -303,7 +306,7 @@ function ReportCard({ record, orgId, brands, showToast }: { record: ReportRecord
       router.refresh()
     } catch (e) {
       console.error(e)
-      showToast('error', 'Gagal menghapus report ini.')
+      showToast('error', t('Could not delete this report.'))
       setDeleting(false)
       setConfirmOpen(false)
     }
@@ -332,7 +335,7 @@ function ReportCard({ record, orgId, brands, showToast }: { record: ReportRecord
         <button
           onClick={e => { e.preventDefault(); setConfirmOpen(true) }}
           disabled={deleting}
-          title="Delete report"
+          title={t('Delete report')}
           className="absolute top-2.5 left-2.5 w-7 h-7 flex items-center justify-center rounded-md bg-white/90 text-[#94a3b8] hover:text-[#dc2626] hover:bg-white opacity-0 group-hover:opacity-100 transition disabled:opacity-50"
         >
           <span className="material-symbols-outlined text-[16px]">{deleting ? 'hourglass_empty' : 'delete'}</span>
@@ -358,9 +361,9 @@ function ReportCard({ record, orgId, brands, showToast }: { record: ReportRecord
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Hapus report?"
-        message={`"${record.title}" akan dihapus permanen — termasuk file .pptx yang tersimpan.`}
-        confirmLabel="Hapus" cancelLabel="Batal" busy={deleting}
+        title={t('Delete report?')}
+        message={t('“{title}” will be permanently deleted — including the stored .pptx file.', { title: record.title })}
+        confirmLabel={t('Delete')} cancelLabel={t('Cancel')} busy={deleting}
         onConfirm={doDelete}
         onCancel={() => setConfirmOpen(false)}
       />

@@ -1,6 +1,8 @@
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
+import { useT } from '@/lib/i18n/LanguageContext'
 
 export default function ComingSoon({ title, icon, desc }: { title: string; icon: string; desc: string }) {
+  const t = useT()
   return (
     <div className="min-h-screen bg-[#f7f8f9]">
       <header className="bg-white border-b border-[#e5e7eb] px-7 py-3.5">
@@ -12,7 +14,7 @@ export default function ComingSoon({ title, icon, desc }: { title: string; icon:
         </div>
         <h2 style={PJ} className="text-[16px] font-bold text-[#111827] mt-1">{title}</h2>
         <p className="text-[13px] text-[#6b7280] max-w-sm leading-relaxed">{desc}</p>
-        <span className="text-[10.5px] font-bold uppercase tracking-widest text-[#9ca3af] mt-2">Next up · after Overview is locked</span>
+        <span className="text-[10.5px] font-bold uppercase tracking-widest text-[#9ca3af] mt-2">{t('Next up · after Overview is locked')}</span>
       </div>
     </div>
   )

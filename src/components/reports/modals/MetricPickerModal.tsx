@@ -7,6 +7,7 @@ import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
 import CustomMetricModal from './CustomMetricModal'
 import MetricInfo from '@/components/ui/MetricInfo'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -21,6 +22,7 @@ export default function MetricPickerModal({
   onSelect: (key: string) => void
   onCustomMetricsChanged?: () => void
 }) {
+  const t = useT()
   const kpi = useReportKpi()
   const table = useReportMetrics()
   // Full custom-metric defs (with terms) for the builder; the picker OPTIONS + values come
@@ -42,7 +44,7 @@ export default function MetricPickerModal({
       <div onClick={e => e.stopPropagation()} className="relative w-full max-w-[520px] bg-white rounded-2xl shadow-[0_24px_60px_rgba(15,23,42,0.30)] overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#f0f1f2]">
           <div>
-            <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a]">Select metric</h2>
+            <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{t('Select metric')}</h2>
             <p className="text-[12px] text-[#94a3b8] mt-0.5">Metrics available for {channel} — live from your data.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">

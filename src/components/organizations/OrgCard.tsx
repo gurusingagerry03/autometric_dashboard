@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import OrgAvatar from './OrgAvatar'
 import { Organization } from '@/lib/organizations/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const roleMeta: Record<Organization['role'], { label: string; color: string; bg: string }> = {
   ADMIN:  { label: 'Admin',  color: '#2C3079', bg: '#e0f0f6' },
@@ -28,6 +29,7 @@ export default function OrgCard({ org }: Props) {
   const router = useRouter()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const t = useT()
   const role = roleMeta[org.role]
   const extraMembers = org.member_count - org.members_preview.length
 
@@ -78,11 +80,11 @@ export default function OrgCard({ org }: Props) {
           <div className="flex items-center gap-2 mt-1.5">
             <span style={{ color: role.color, background: role.bg, fontFamily: "'Plus Jakarta Sans', sans-serif" }}
               className="inline-flex items-center h-[18px] px-2 rounded-full text-[10.5px] font-bold">
-              {role.label}
+              {t(role.label)}
             </span>
             <div className="flex items-center gap-1 text-[#b0b8c4]">
               <span className="material-symbols-outlined text-[12px]">storefront</span>
-              <span className="text-[11px]">{org.brand_count} brands</span>
+              <span className="text-[11px]">{t('{count} brands', { count: org.brand_count })}</span>
             </div>
           </div>
         </div>
@@ -105,7 +107,7 @@ export default function OrgCard({ org }: Props) {
               </div>
             )}
           </div>
-          <span className="text-[12px] text-[#9ca3af]">{org.member_count} members</span>
+          <span className="text-[12px] text-[#9ca3af]">{t('{count} members', { count: org.member_count })}</span>
         </div>
         <span className="text-[12px] text-[#9ca3af] tabular-nums">{formatDate(org.created_at)}</span>
       </div>

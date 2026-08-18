@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
-import { HBars, ComboBarLine, MultiLineChart } from './charts'
+import { HBars, ComboBarLine, MultiLineChart, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
-import { PALETTE, fmtNum, type PlatformFilter, type Period } from './data'
+import { fmtNum, fmtInt, type PlatformFilter, type Period } from './data'
+import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import type { StoriesPayload } from '@/lib/dashboard/stories'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -23,14 +24,17 @@ function niceMax(n: number) {
 }
 
 export default function StoriesDashboard({ orgId }: { orgId: string }) {
+  const t = useT()
   return (
-    <DashboardChrome title="Instagram Stories" subtitle="Instagram story performance" lockPlatform="instagram">
+    <DashboardChrome title={t('Instagram Stories')} subtitle={t('Instagram story performance')} lockPlatform="instagram">
       {(state) => <StoriesBody orgId={orgId} brandId={state.brand.id} platform={state.platform} period={state.period} start={state.start} end={state.end} />}
     </DashboardChrome>
   )
 }
 
 function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: string; brandId: string; platform: ChromeState['platform']; period: Period; start: string | null; end: string | null }) {
+  const t = useT()
+  const { lang } = useLanguage()
   const [data, setData] = useState<StoriesPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,19 +42,19 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     let cancelled = false
     setData(null); setError(null)
     const range = start && end ? `&start=${start}&end=${end}` : ''
-    const url = `/api/organizations/${orgId}/dashboard/stories?platform=${platformParam(platform)}&period=${encodeURIComponent(period)}${range}&brand=${encodeURIComponent(brandId)}`
+    const url = `/api/organizations/${orgId}/dashboard/stories?platform=${platformParam(platform)}&period=${encodeURIComponent(period)}${range}&brand=${encodeURIComponent(brandId)}&lang=${lang}`
     fetch(url)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: StoriesPayload) => { if (!cancelled) setData(d) })
       .catch(e => { if (!cancelled) setError(String(e.message ?? e)) })
     return () => { cancelled = true }
-  }, [orgId, brandId, platform, period, start, end])
+  }, [orgId, brandId, platform, period, start, end, lang])
 
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[40px] text-[#d1d5db] mb-2">error</span>
-        <p className="text-[13px] text-[#6b7280]">Gagal memuat data: {error}</p>
+        <p className="text-[13px] text-[#6b7280]">{t('Failed to load data: {error}', { error })}</p>
       </div>
     )
   }
@@ -58,7 +62,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-        <p className="text-[13px] text-[#9ca3af]">Loading data…</p>
+        <p className="text-[13px] text-[#9ca3af]">{t('Loading data…')}</p>
       </div>
     )
   }
@@ -66,7 +70,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <span className="material-symbols-outlined text-[40px] text-[#d1d5db] mb-2">database</span>
-        <p className="text-[13px] text-[#6b7280]">Belum ada data story untuk filter ini.</p>
+        <p className="text-[13px] text-[#6b7280]">{t('No story data for this filter yet.')}</p>
       </div>
     )
   }
@@ -76,62 +80,62 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
 
   return (
     <>
-      <SectionHeader icon="amp_stories" first>Performance</SectionHeader>
+      <SectionHeader icon="amp_stories" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map((k, i) => <FlexKpiCard key={k.key} kpi={k} color={PALETTE[i % PALETTE.length]} />)}
+        {data.kpis.map(k => <FlexKpiCard key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <Card className="flex flex-col">
-          <CardHead title="Story Retention Funnel" metricKey="story_metric_daily.taps_fwd_sum" sub="How audiences navigate through your story sequences"
-            action={<FieldTag>Taps forward · Taps back · Exits</FieldTag>} />
+          <CardHead title={t('Story Retention Funnel')} metricKey="story_metric_daily.taps_fwd_sum" sub={t('How audiences navigate through your story sequences')}
+            action={<FieldTag>{t('Taps forward · Taps back · Exits')}</FieldTag>} />
           <div className="px-4 pb-4 pt-3">
             {data.funnel.some(f => f.value > 0)
               ? <HBars items={data.funnel.map(f => ({
-                  label: f.label, value: f.value, display: fmtNum(f.value), color: f.color,
+                  label: t(f.label), value: f.value, display: fmtNum(f.value), exact: fmtInt(f.value),
                 }))} />
-              : <div className="py-10 text-center text-[12px] text-[#9ca3af]">Tidak ada data funnel story.</div>}
+              : <div className="py-10 text-center text-[12px] text-[#9ca3af]">{t('No story funnel data.')}</div>}
           </div>
           <div className="mx-4 mb-4 mt-auto">
-            <Callout tone="warning" title="Forward Tap Rate High">{data.funnelInsight}</Callout>
+            <Callout tone="warning" title={t('Forward Tap Rate High')}>{data.funnelInsight}</Callout>
           </div>
         </Card>
 
         <Card className="flex flex-col">
-          <CardHead title="Story Type Performance" metricKey="story_type_daily.story_type" action={<FieldTag>By story type</FieldTag>} />
+          <CardHead title={t('Story Type Performance')} metricKey="story_type_daily.story_type" action={<FieldTag>{t('By story type')}</FieldTag>} />
           <div className="flex items-center justify-center gap-6 pb-1">
-            <Badge text="Avg Reach" color="#e7a6bd" />
-            <Badge text="Avg Replies" color="#6c4cd6" />
+            <Badge text={t('Avg Reach')} color="#e7a6bd" />
+            <Badge text={t('Avg Replies')} color="#6c4cd6" />
           </div>
           <div className="px-2 pb-3 pt-1">
             {data.typePerf.length
               ? <ComboBarLine
-                  labels={data.typePerf.map(s => s.type)}
+                  labels={data.typePerf.map(s => t(s.type))}
                   bars={data.typePerf.map(s => s.reach)}
                   line={data.typePerf.map(s => s.replies)}
                   leftMax={reachMax} rightMax={repliesMax} height={250}
                   fmtLeft={n => fmtNum(n)}
-                  barName="Avg Reach" lineName="Avg Replies" />
-              : <div className="h-[250px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data tipe story.</div>}
+                  barName={t('Avg Reach')} lineName={t('Avg Replies')} />
+              : <div className="h-[250px] flex items-center justify-center text-[12px] text-[#9ca3af]">{t('No story type data.')}</div>}
           </div>
           <div className="mx-4 mb-4 mt-auto">
-            <Callout tone="success" title="Interactive Stories Win">{data.typeInsight}</Callout>
+            <Callout tone="success" title={t('Interactive Stories Win')}>{data.typeInsight}</Callout>
           </div>
         </Card>
       </div>
 
-      <SectionHeader icon="show_chart">Trend</SectionHeader>
+      <SectionHeader icon="show_chart">{t('Trend')}</SectionHeader>
       <Card>
-        <CardHead title="Story Performance Over Time" metricKey="story_metric_daily.story_count" sub="Views, exits & swipe-ups by week" />
+        <CardHead title={t('Story Performance Over Time')} metricKey="story_metric_daily.story_count" sub={t('Views, exits & swipe-ups by week')} />
         <div className="px-4 pb-3 pt-3">
           {data.overTime.some(s => s.data.length)
             ? <MultiLineChart series={data.overTime} labels={data.overTimeLabels} height={300} dots yAxis fmtY={fmtNum} />
-            : <div className="h-[300px] flex items-center justify-center text-[12px] text-[#9ca3af]">Tidak ada data tren story.</div>}
+            : <div className="h-[300px] flex items-center justify-center text-[12px] text-[#9ca3af]">{t('No story trend data.')}</div>}
         </div>
         <div className="flex items-center gap-4 px-4 pb-4 flex-wrap">
           {data.overTime.map(s => (
             <span key={s.name} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6b7280]">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />{s.name}
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />{t(s.name)}
             </span>
           ))}
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import type { PlatformSyncRow } from '@/lib/monitoring/queries'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -85,6 +86,7 @@ function SyncButton({
   brandId: string; platform: string; orgSlug: string
   onDone: (brandId: string, platform: string, newTs: string) => void
 }) {
+  const t = useT()
   const [isPending, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
 
@@ -95,12 +97,12 @@ function SyncButton({
         const res = await fetch(`/api/brands/${brandId}/${platform}/initial-sync`, { method: 'POST' })
         if (!res.ok) {
           const j = await res.json().catch(() => ({}))
-          setErr(j.error ?? 'Sync failed')
+          setErr(j.error ?? t('Sync failed'))
           return
         }
         onDone(brandId, platform, new Date().toISOString())
       } catch {
-        setErr('Network error')
+        setErr(t('Network error'))
       }
     })
   }
@@ -116,7 +118,7 @@ function SyncButton({
         <span className={`material-symbols-outlined text-[14px] text-[#1B8A80] ${isPending ? 'animate-spin' : ''}`}>
           {isPending ? 'progress_activity' : 'sync'}
         </span>
-        {isPending ? 'Syncing…' : 'Sync now'}
+        {isPending ? t('Syncing…') : t('Sync now')}
       </button>
       {err && (
         <span className="text-[11px] text-[#ef4444]" style={PJB}>{err}</span>
@@ -139,6 +141,7 @@ function BrandCard({
   group: BrandGroup; orgSlug: string
   onSynced: (brandId: string, platform: string, ts: string) => void
 }) {
+  const t = useT()
   return (
     <div className="bg-white border border-[#e2e8f0] rounded-2xl overflow-hidden">
       {/* Brand header */}
@@ -178,7 +181,7 @@ function BrandCard({
 
               {/* Last sync */}
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] text-[#64748b]" style={PJB}>Last sync</p>
+                <p className="text-[12px] text-[#64748b]" style={PJB}>{t('Last sync')}</p>
                 <p className="text-[13px] font-semibold text-[#334155]" style={PJB}>
                   {formatRelative(row.lastProfileSync)}
                 </p>
@@ -219,14 +222,15 @@ function BrandCard({
 // ─── Summary Stats ────────────────────────────────────────────────────────────
 
 function SummaryStats({ rows }: { rows: PlatformSyncRow[] }) {
+  const t = useT()
   const total   = rows.length
   const synced  = rows.filter(r => getSyncStatus(r.lastProfileSync) === 'synced').length
   const problem = rows.filter(r => getSyncStatus(r.lastProfileSync) === 'never').length
 
   const stats = [
-    { label: 'Total accounts', value: total,   color: '#0f172a' },
-    { label: 'Synced',         value: synced,  color: '#166534' },
-    { label: 'Not synced',     value: problem, color: '#991b1b' },
+    { label: t('Total accounts'), value: total,   color: '#0f172a' },
+    { label: t('Synced'),         value: synced,  color: '#166534' },
+    { label: t('Not synced'),     value: problem, color: '#991b1b' },
   ]
 
   return (
@@ -249,6 +253,7 @@ interface Props {
 }
 
 export default function MonitoringPage({ orgSlug, data: initialData }: Props) {
+  const t = useT()
   const [rows, setRows] = useState<PlatformSyncRow[]>(initialData)
 
   function handleSynced(brandId: string, platform: string, ts: string) {
@@ -280,7 +285,7 @@ export default function MonitoringPage({ orgSlug, data: initialData }: Props) {
       <div className="px-10 pt-7 pb-5 border-b-2 border-[#e2e8f0]">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[12.5px] text-[#94a3b8] mb-1.5 tracking-wide" style={PJB}>Admin only</p>
+            <p className="text-[12.5px] text-[#94a3b8] mb-1.5 tracking-wide" style={PJB}>{t('Admin only')}</p>
             <h1 style={PJB} className="text-[36px] font-bold text-[#0f172a] tracking-[-0.04em] leading-none">
               Monitoring
             </h1>
@@ -291,7 +296,7 @@ export default function MonitoringPage({ orgSlug, data: initialData }: Props) {
 
           <div className="flex items-center gap-2 mt-2">
             <span className="material-symbols-outlined text-[15px] text-[#94a3b8]">lock</span>
-            <span className="text-[12.5px] text-[#94a3b8] font-medium" style={PJB}>Visible to admins only</span>
+            <span className="text-[12.5px] text-[#94a3b8] font-medium" style={PJB}>{t('Visible to admins only')}</span>
           </div>
         </div>
       </div>
@@ -301,7 +306,7 @@ export default function MonitoringPage({ orgSlug, data: initialData }: Props) {
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <span className="material-symbols-outlined text-[48px] text-[#e2e8f0] mb-4">monitor_heart</span>
-            <p style={PJB} className="text-[15px] font-semibold text-[#334155]">No connected accounts</p>
+            <p style={PJB} className="text-[15px] font-semibold text-[#334155]">{t('No connected accounts')}</p>
             <p className="text-[13px] text-[#94a3b8] mt-1.5 max-w-xs">
               Connect social accounts to your brands to start monitoring sync status.
             </p>

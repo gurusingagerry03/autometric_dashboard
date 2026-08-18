@@ -2,7 +2,9 @@
 
 import { Sparkline } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
+import ExactValue from '@/components/ui/ExactValue'
 import type { Kpi, OverviewKpi } from './data'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -32,6 +34,32 @@ export function CardHead({ title, sub, action, metricKey }: {
         {sub && <p className="text-[11px] text-[#9ca3af] mt-0.5">{sub}</p>}
       </div>
       {action}
+    </div>
+  )
+}
+
+/**
+ * A table's column headings, each carrying its own glossary (i).
+ *
+ * Tables are where a metric is most likely to be misread — the column name is
+ * the only context a cell gets — so every measured column explains itself the
+ * same way a chart card does. Pass a metric key of `null` for the columns that
+ * need no explanation (rank, avatar, date) and no icon is rendered.
+ */
+export function TableHeadRow({ cols, className = '' }: {
+  /** `label` is the English source string; it is translated at render. */
+  cols: { label: string; metricKey?: string | null }[]
+  className?: string
+}) {
+  const t = useT()
+  return (
+    <div className={`gap-2 px-4 py-2.5 border-y border-[#eef0f2] bg-[#fafbfb] ${className}`}>
+      {cols.map((c, i) => (
+        <span key={i} style={PJ} className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#9ca3af]">
+          {t(c.label)}
+          <MetricInfo metricKey={c.metricKey} size={12} />
+        </span>
+      ))}
     </div>
   )
 }
@@ -78,10 +106,30 @@ export function Delta({ delta, good, bare = false }: { delta: number; good: bool
 
 /* KPI card with a free-form delta string (mixed units: %, pts, notes). */
 export function FlexKpiCard({ kpi, color }: { kpi: OverviewKpi; color: string }) {
+  const t = useT()
   const c = kpi.flat ? '#6b7280' : kpi.good ? '#3d8a5f' : '#c2553f'
   const bg = kpi.flat ? '#f3f4f6' : kpi.good ? '#eaf5ef' : '#fcefec'
   const dir = kpi.dir ?? (kpi.good ? 'up' : 'down')
   const icon = kpi.flat ? 'remove' : dir === 'up' ? 'arrow_upward' : 'arrow_downward'
+
+  // Nothing behind this metric: no value, no trend, no sparkline — a flat line at
+  // zero would read as a measurement, which is the thing to avoid.
+  if (kpi.unavailable) {
+    return (
+      <Card className="px-4 py-3.5 flex flex-col gap-2.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="material-symbols-outlined text-[15px] text-[#cbd1d8]">{kpi.icon}</span>
+          <span style={PJ} className="text-[10px] font-bold uppercase tracking-wider text-[#c4c9d4] truncate">{kpi.label}</span>
+          <MetricInfo metricKey={kpi.key} scope="kpi" size={12} />
+        </div>
+        <span style={PJ} className="text-[24px] font-bold text-[#d1d5db] leading-none tracking-[-0.02em]">—</span>
+        <span className="text-[10.5px] font-semibold text-[#9ca3af] bg-[#f3f4f6] px-1.5 py-0.5 rounded-md self-start">
+          {t('Data not available')}
+        </span>
+      </Card>
+    )
+  }
+
   return (
     <Card className="px-4 py-3.5 flex flex-col gap-2.5">
       <div className="flex items-center gap-1.5 min-w-0">
@@ -90,7 +138,8 @@ export function FlexKpiCard({ kpi, color }: { kpi: OverviewKpi; color: string })
         <MetricInfo metricKey={kpi.key} scope="kpi" size={12} />
       </div>
       <div className="flex items-end justify-between gap-2">
-        <span style={PJ} className="text-[24px] font-bold text-[#111827] leading-none tracking-[-0.02em]">{kpi.value}</span>
+        <ExactValue display={kpi.value} exact={kpi.exact} style={PJ}
+          className="text-[24px] font-bold text-[#111827] leading-none tracking-[-0.02em]" />
         <div className="mb-0.5"><Sparkline data={kpi.spark} color={color} /></div>
       </div>
       <span className="inline-flex items-center gap-0.5 self-start font-bold px-1.5 py-0.5 rounded-md text-[10.5px]"
@@ -143,7 +192,8 @@ export function KpiCard({ kpi, color }: { kpi: Kpi; color: string }) {
         )}
       </div>
       <div className="flex items-end justify-between gap-2">
-        <span style={PJ} className="text-[24px] font-bold text-[#111827] leading-none tracking-[-0.02em]">{kpi.value}</span>
+        <ExactValue display={kpi.value} exact={kpi.exact} style={PJ}
+          className="text-[24px] font-bold text-[#111827] leading-none tracking-[-0.02em]" />
         <div className="mb-0.5"><Sparkline data={kpi.spark} color={color} /></div>
       </div>
       <Delta delta={kpi.delta} good={kpi.positiveIsGood} />
@@ -164,6 +214,7 @@ export function PostLink({ href, caption, className = '' }: {
   caption: string
   className?: string
 }) {
+  const t = useT()
   const base = `min-w-0 truncate ${className}`
   if (!href) return <span className={base} title={caption}>{caption}</span>
   return (

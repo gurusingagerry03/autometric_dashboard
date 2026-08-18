@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { lookupMetric } from '@/lib/metrics/glossary'
+import { useLanguage } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -26,7 +27,10 @@ interface Props {
  * what makes it usable on touch, where there is no hover.
  */
 export default function MetricInfo({ metricKey, scope, size = 13, className = '' }: Props) {
-  const entry = lookupMetric(metricKey, scope)
+  const { lang, t } = useLanguage()
+  // Resolved to the reader's language only — a tooltip that stacks Indonesian on
+  // top of English asks the reader to skip past half of it every time.
+  const entry = lookupMetric(metricKey, scope, lang)
 
   const [open,   setOpen]   = useState(false)
   const [pinned, setPinned] = useState(false)
@@ -38,16 +42,16 @@ export default function MetricInfo({ metricKey, scope, size = 13, className = ''
     if (!el) return
     const r = el.getBoundingClientRect()
     // Estimate height so the flip decision is made before paint; the tooltip is
-    // short enough that a fixed estimate is accurate in practice. A bilingual
-    // entry carries a second paragraph block, so it needs roughly twice the room.
-    const estimated = entry?.descriptionEn ? 236 : 132
+    // short enough that a fixed estimate is accurate in practice. A caveat adds
+    // roughly one more line block.
+    const estimated = entry?.caveat ? 168 : 132
     const above = r.bottom + GAP + estimated > window.innerHeight && r.top > estimated + GAP
     const left  = Math.min(
       Math.max(EDGE, r.left + r.width / 2 - WIDTH / 2),
       window.innerWidth - WIDTH - EDGE,
     )
     setPos({ top: above ? r.top - GAP : r.bottom + GAP, left, above })
-  }, [entry?.descriptionEn])
+  }, [entry?.caveat])
 
   const show = useCallback(() => { place(); setOpen(true) },  [place])
   const hide = useCallback(() => { if (!pinned) setOpen(false) }, [pinned])
@@ -84,7 +88,7 @@ export default function MetricInfo({ metricKey, scope, size = 13, className = ''
       <button
         ref={btnRef}
         type="button"
-        aria-label={`Penjelasan metrik ${entry.label}`}
+        aria-label={t('Explanation for the {metric} metric', { metric: entry.label })}
         aria-expanded={open}
         onMouseEnter={show}
         onMouseLeave={hide}
@@ -120,16 +124,6 @@ export default function MetricInfo({ metricKey, scope, size = 13, className = ''
           <p className="text-[12px] leading-relaxed text-[#4b5563]">{entry.description}</p>
           {entry.caveat && (
             <p className="text-[11.5px] leading-relaxed text-[#9ca3af] mt-1.5">{entry.caveat}</p>
-          )}
-          {/* English copy, when the metric carries it — separated by a rule so the
-              two languages read as one block each rather than four loose lines. */}
-          {entry.descriptionEn && (
-            <div className="mt-2 pt-2 border-t border-[#f3f4f6]">
-              <p className="text-[12px] leading-relaxed text-[#6b7280]">{entry.descriptionEn}</p>
-              {entry.caveatEn && (
-                <p className="text-[11.5px] leading-relaxed text-[#9ca3af] mt-1.5">{entry.caveatEn}</p>
-              )}
-            </div>
           )}
         </div>
       )}

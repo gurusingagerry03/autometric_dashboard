@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import GoogleButton from './GoogleButton'
 import PasswordInput from './PasswordInput'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 interface Props {
   onSwitch: () => void
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function LoginForm({ onSwitch, onForgotPassword }: Props) {
+  const t = useT()
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -29,7 +31,7 @@ export default function LoginForm({ onSwitch, onForgotPassword }: Props) {
       const result = await signIn('credentials', { email, password, redirect: false })
 
       if (result?.error) {
-        setError('Invalid email or password.')
+        setError(t('Invalid email or password.'))
         setHasError(true)
         return
       }
@@ -38,7 +40,7 @@ export default function LoginForm({ onSwitch, onForgotPassword }: Props) {
       const session = await getSession()
       router.replace(session?.user?.role === 'ADMIN' ? '/admin' : '/')
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError(t('Something went wrong. Please try again.'))
       setHasError(true)
     } finally {
       setLoading(false)
@@ -62,15 +64,15 @@ export default function LoginForm({ onSwitch, onForgotPassword }: Props) {
       </div>
 
       <div>
-        <h2 className="font-h2 text-h2 text-on-surface mb-1">Sign in</h2>
-        <p className="font-body-md text-body-md text-on-surface-variant">Welcome back — enter your details below.</p>
+        <h2 className="font-h2 text-h2 text-on-surface mb-1">{t('Sign in')}</h2>
+        <p className="font-body-md text-body-md text-on-surface-variant">{t('Welcome back — enter your details below.')}</p>
       </div>
 
-      <GoogleButton label="Continue with Google" />
+      <GoogleButton label={t('Continue with Google')} />
 
       <div className="flex items-center gap-3">
         <div className="flex-1 h-px bg-outline-variant" />
-        <span className="text-[12px] font-body-md text-on-surface-variant">or with email</span>
+        <span className="text-[12px] font-body-md text-on-surface-variant">{t('or with email')}</span>
         <div className="flex-1 h-px bg-outline-variant" />
       </div>
 
@@ -98,8 +100,8 @@ export default function LoginForm({ onSwitch, onForgotPassword }: Props) {
         <PasswordInput
           id="login-password"
           name="password"
-          label="Password"
-          placeholder="Enter your password"
+          label={t('Password')}
+          placeholder={t('Enter your password')}
           value={password}
           onChange={e => { setPassword(e.target.value); clearError() }}
           hasError={hasError}

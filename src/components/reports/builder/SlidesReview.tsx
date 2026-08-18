@@ -5,6 +5,7 @@ import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide, SlideChrome } from '@/lib/reports/data/slideModel'
 import SlidePreview from '../slides/SlidePreview'
 import { PJ } from './ui'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 export default function SlidesReview({
   slides, colors, isExporting, cover, chromeFor,
@@ -25,6 +26,7 @@ export default function SlidesReview({
   onSaveTemplate: () => void
   onEditCover: () => void
 }) {
+  const t = useT()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   // Reorder state. `dragIndex` = the slide being dragged, `overIndex` = the card it
@@ -73,7 +75,7 @@ export default function SlidesReview({
             className="flex items-center gap-2 bg-[#2C3079] hover:bg-[#20224F] disabled:opacity-60 text-white text-[13px] font-bold pl-5 pr-4 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(30,79,73,0.30)] transition-colors"
           >
             <span className="material-symbols-outlined text-[18px]">download</span>
-            {isExporting ? 'Exporting…' : 'Export PPTX'}
+            {isExporting ? t('Exporting…') : t('Export PPTX')}
             <span className={`material-symbols-outlined text-[18px] transition-transform ${menuOpen ? 'rotate-180' : ''}`}>expand_more</span>
           </button>
 
@@ -89,8 +91,8 @@ export default function SlidesReview({
                 >
                   <span className="material-symbols-outlined text-[20px] text-[#2C3079] mt-0.5">download</span>
                   <span>
-                    <span className="block text-[13px] font-bold text-[#0f172a]">Export only</span>
-                    <span className="block text-[11.5px] text-[#94a3b8]">Download the .pptx to this device</span>
+                    <span className="block text-[13px] font-bold text-[#0f172a]">{t('Export only')}</span>
+                    <span className="block text-[11.5px] text-[#94a3b8]">{t('Download the .pptx to this device')}</span>
                   </span>
                 </button>
                 <button
@@ -101,7 +103,7 @@ export default function SlidesReview({
                   <span className="material-symbols-outlined text-[20px] text-[#2C3079] mt-0.5">cloud_upload</span>
                   <span>
                     <span className="block text-[13px] font-bold text-[#0f172a]">Export &amp; save</span>
-                    <span className="block text-[11.5px] text-[#94a3b8]">Download and store in your reports library</span>
+                    <span className="block text-[11.5px] text-[#94a3b8]">{t('Download and store in your reports library')}</span>
                   </span>
                 </button>
               </div>
@@ -112,7 +114,7 @@ export default function SlidesReview({
 
       <div className="flex items-end justify-between mb-5">
         <div>
-          <h2 style={PJ} className="text-[22px] font-bold text-[#0f172a] tracking-[-0.02em]">Slides</h2>
+          <h2 style={PJ} className="text-[22px] font-bold text-[#0f172a] tracking-[-0.02em]">{t('Slides')}</h2>
           <p className="text-[13px] text-[#94a3b8] mt-0.5">
             Click a slide to edit. Drag a slide to reorder it, or click its page number to move it to a specific position.
           </p>
@@ -137,8 +139,8 @@ export default function SlidesReview({
             </div>
           </div>
           <div className="px-4 h-14 flex items-center justify-between">
-            <h3 style={PJ} className="text-[13.5px] font-bold text-[#0f172a]">Cover</h3>
-            <span style={PJ} className="text-[10px] font-bold uppercase tracking-wide text-[#2C3079] bg-[#E6E7F3] px-2 py-0.5 rounded-full">Cover</span>
+            <h3 style={PJ} className="text-[13.5px] font-bold text-[#0f172a]">{t('Cover')}</h3>
+            <span style={PJ} className="text-[10px] font-bold uppercase tracking-wide text-[#2C3079] bg-[#E6E7F3] px-2 py-0.5 rounded-full">{t('Cover')}</span>
           </div>
         </div>
 
@@ -204,7 +206,7 @@ export default function SlidesReview({
               ) : (
                 <button
                   onClick={e => { e.stopPropagation(); setPosIndex(i) }}
-                  title="Move to position…"
+                  title={t('Move to position…')}
                   style={PJ}
                   className="absolute top-2.5 left-2.5 text-[10px] font-bold bg-white/90 text-[#64748b] w-6 h-6 flex items-center justify-center rounded-md hover:bg-white hover:text-[#1B8A80] hover:ring-2 hover:ring-[#1B8A80]/40 transition"
                 >
@@ -213,7 +215,7 @@ export default function SlidesReview({
               )}
               {/* Drag affordance — the whole card is draggable; this marks it. */}
               <span
-                title="Drag to reorder"
+                title={t('Drag to reorder')}
                 className="absolute top-2.5 right-2.5 w-6 h-6 items-center justify-center rounded-md bg-white/90 text-[#94a3b8] cursor-grab active:cursor-grabbing hidden group-hover:flex"
               >
                 <span className="material-symbols-outlined text-[15px]">drag_indicator</span>
@@ -236,19 +238,19 @@ export default function SlidesReview({
               ) : (
                 <>
                   <h3 style={PJ} className="flex-1 text-[13.5px] font-bold text-[#0f172a] truncate">
-                    {s.title || 'Untitled slide'}
+                    {s.title || t('Untitled slide')}
                   </h3>
                   <div className="flex items-center gap-0.5 flex-shrink-0">
                     <button
                       onClick={e => { e.stopPropagation(); setEditingId(s.id) }}
-                      title="Rename"
+                      title={t('Rename')}
                       className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-[#1B8A80] hover:bg-[#f0f7fa] transition"
                     >
                       <span className="material-symbols-outlined text-[16px]">edit</span>
                     </button>
                     <button
                       onClick={e => { e.stopPropagation(); onDelete(s.id) }}
-                      title="Delete"
+                      title={t('Delete')}
                       className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-[#dc2626] hover:bg-[#fef2f2] transition"
                     >
                       <span className="material-symbols-outlined text-[16px]">delete</span>
@@ -268,7 +270,7 @@ export default function SlidesReview({
           <span className="w-12 h-12 rounded-full bg-[#f3f4f6] group-hover:bg-[#dcebe6] flex items-center justify-center text-[#9ca3af] group-hover:text-[#2C3079] transition-colors">
             <span className="material-symbols-outlined text-[26px]">add</span>
           </span>
-          <span style={PJ} className="text-[13px] font-semibold text-[#6b7280] group-hover:text-[#2C3079]">Add slide</span>
+          <span style={PJ} className="text-[13px] font-semibold text-[#6b7280] group-hover:text-[#2C3079]">{t('Add slide')}</span>
         </button>
       </div>
     </div>

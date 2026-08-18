@@ -9,6 +9,7 @@ import { TABLE_TYPES, buildTable, columnsForChannel, customColumnsFrom } from '@
 import { resolveLineData, resolveBarData, type ChartConfig } from '@/lib/reports/data/chartData'
 import { buildPosts } from '@/lib/reports/data/posts'
 import { PLATFORM_META } from '@/components/dashboard/data'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 // Resolves to the report's selected font (set as --report-font on the slide root).
 export const PJ = { fontFamily: 'var(--report-font, "Plus Jakarta Sans", sans-serif)' } as const
@@ -55,12 +56,13 @@ export function CardLabel({ children, icon, accent, onEdit }: { children: React.
 }
 
 export function Title({ value, editable, onChange }: { value: string; editable: boolean; onChange?: (v: string) => void }) {
+  const t = useT()
   if (editable) {
     return (
       <input
         value={value}
         onChange={e => onChange?.(e.target.value)}
-        placeholder="Slide title"
+        placeholder={t('Slide title')}
         style={{ fontSize: '2.8cqw', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', background: 'transparent', outline: 'none', width: '100%', ...PJ }}
         className="placeholder:text-slate-300"
       />
@@ -91,6 +93,7 @@ export function ChannelBadge({ channel }: { channel: string }) {
 }
 
 export function InsightsBlock({ value, editable, onChange, label = 'Key insights' }: { value: string; editable: boolean; onChange?: (v: string) => void; label?: string }) {
+  const t = useT()
   const [editing, setEditing] = useState(false)
   const style: React.CSSProperties = { fontSize: '1.45cqw', color: '#475569', lineHeight: 1.55, ...PJ }
 
@@ -106,7 +109,7 @@ export function InsightsBlock({ value, editable, onChange, label = 'Key insights
             autoFocus={editing && !value}
             value={value}
             onChange={e => onChange?.(e.target.value)}
-            placeholder="• Type a key insight per line…"
+            placeholder={t('• Type a key insight per line…')}
             style={{ ...style, width: '100%', height: '100%', background: 'transparent', outline: 'none', resize: 'none' }}
             className="placeholder:text-slate-300"
           />
@@ -207,6 +210,7 @@ function AutoFitParagraph({ text, baseCqw, editable, onClick }: { text: string; 
 export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insights' }: {
   slide: ContentSlide; editable: boolean; onChange?: (next: ContentSlide) => void; label?: string
 }) {
+  const t = useT()
   const kpi = useReportKpi()
   const table = useReportMetrics()
   const chart = useReportChart()
@@ -267,7 +271,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
           )
         ) : editable ? (
           <textarea value={slide.insights} onChange={e => onChange?.({ ...slide, insights: e.target.value })}
-            placeholder="Klik ‘Generate AI’ atau ketik insight manual…"
+            placeholder={t('Click ‘Generate AI’ or type the insight yourself…')}
             style={{ ...textStyle, width: '100%', height: '100%', background: 'transparent', outline: 'none', resize: 'none' }}
             className="placeholder:text-slate-300" />
         ) : (
@@ -280,6 +284,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
 }
 
 export function Footer({ chrome, colors }: { chrome: SlideChrome; colors: CoverColors }) {
+  const t = useT()
   return (
     <div className="flex items-center" style={{ paddingTop: '1.2cqh' }}>
       {/* Left — logo · period (no box) */}
@@ -297,7 +302,7 @@ export function Footer({ chrome, colors }: { chrome: SlideChrome; colors: CoverC
       <div className="flex-1 flex flex-col items-center" style={{ gap: '0.2cqh' }}>
         {chrome.preparedBy && (
           <>
-            <span style={{ fontSize: '1.05cqw', color: '#94a3b8', ...PJ }}>Prepared by</span>
+            <span style={{ fontSize: '1.05cqw', color: '#94a3b8', ...PJ }}>{t('Prepared by')}</span>
             <span style={{ fontSize: '1.3cqw', fontWeight: 700, color: '#475569', ...PJ }}>{chrome.preparedBy}</span>
           </>
         )}

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgMemberById } from '@/lib/reports/access'
 import { parseCustomRange } from '@/lib/dashboard/range'
 import { getCommunityData, type PlatformParam } from '@/lib/dashboard/community'
+import { langFromRequest } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     const brandId = sp.get('brand') || null
     const custom = parseCustomRange(sp)
 
-    const data = await getCommunityData(orgId, platform, days, brandId, custom)
+    const data = await getCommunityData(orgId, platform, days, brandId, custom, translatorFor(await langFromRequest(req.nextUrl)))
     return NextResponse.json(data)
   } catch (err) {
     console.error('[GET /api/organizations/[id]/dashboard/community]', err)

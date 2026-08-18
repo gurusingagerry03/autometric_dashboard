@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '@/lib/i18n/LanguageContext'
+import type { Translator } from '@/lib/i18n/translate'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -23,7 +25,9 @@ export function todayISO(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'] as const
+// English abbreviations are the translation KEYS; `id.ts` maps the four that
+// differ in Indonesian (May→Mei, Aug→Agu, Oct→Okt, Dec→Des).
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const
 
 /* ───────────────────────────── selection model ───────────────────────── */
@@ -108,9 +112,13 @@ export function withResolved(sel: DateSelection, today = todayISO()): DateSelect
   return { ...sel, ...resolveSelection(sel, today) }
 }
 
-/** Label pendek: "28 Jul 2026" untuk satu hari, "1 – 28 Jul 2026" untuk range. */
-export function fmtSelection(start: string, end: string): string {
-  const day = (s: string) => { const [, m, d] = s.split('-').map(Number); return `${d} ${MONTHS[m - 1]}` }
+/**
+ * Label pendek: "28 Jul 2026" untuk satu hari, "1 – 28 Jul 2026" untuk range.
+ * `t` opsional supaya nama bulan ikut bahasa yang dipilih; tanpa itu tetap Inggris.
+ */
+export function fmtSelection(start: string, end: string, t?: Translator): string {
+  const mon = (i: number) => (t ? t(MONTHS[i]) : MONTHS[i])
+  const day = (s: string) => { const [, m, d] = s.split('-').map(Number); return `${d} ${mon(m - 1)}` }
   if (start === end) return `${day(start)} ${start.slice(0, 4)}`
   const ys = start.slice(0, 4), ye = end.slice(0, 4)
   if (ys !== ye) return `${day(start)} ${ys} – ${day(end)} ${ye}`
@@ -155,8 +163,9 @@ function monthCells(v: View): (string | null)[] {
 
 /* ───────────────────────────── calendar ──────────────────────────────── */
 
-function Calendar({ label, view, onView, selected, rangeStart, rangeEnd, today, bounds, onPick }: {
+function Calendar({ label, t, view, onView, selected, rangeStart, rangeEnd, today, bounds, onPick }: {
   label: string
+  t: Translator
   view: View
   onView: (v: View) => void
   selected: string
@@ -176,15 +185,15 @@ function Calendar({ label, view, onView, selected, rangeStart, rangeEnd, today, 
       <div className="relative flex items-center justify-between mb-1.5">
         <button type="button" onClick={() => setJump(j => !j)} style={PJ}
           className="flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wide text-[#374151] hover:bg-[#f3f4f6]">
-          {MONTHS[view.m]} {view.y}
+          {t(MONTHS[view.m])} {view.y}
           <span className="material-symbols-outlined text-[15px] text-[#9ca3af]">arrow_drop_down</span>
         </button>
         <div className="flex items-center gap-0.5">
-          <button type="button" onClick={() => onView(stepView(view, -1))} title="Bulan sebelumnya"
+          <button type="button" onClick={() => onView(stepView(view, -1))} title={t('Previous month')}
             className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#f3f4f6]">
             <span className="material-symbols-outlined text-[17px]">chevron_left</span>
           </button>
-          <button type="button" onClick={() => onView(stepView(view, 1))} title="Bulan berikutnya"
+          <button type="button" onClick={() => onView(stepView(view, 1))} title={t('Next month')}
             className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#f3f4f6]">
             <span className="material-symbols-outlined text-[17px]">chevron_right</span>
           </button>
@@ -235,7 +244,7 @@ function Calendar({ label, view, onView, selected, rangeStart, rangeEnd, today, 
           const noData = !!bounds && (d < bounds.min || d > bounds.max)
           return (
             <button key={i} type="button" onClick={() => onPick(d)} style={PJ}
-              title={noData ? 'Belum ada data di tanggal ini' : undefined}
+              title={noData ? t('No data on this date') : undefined}
               className={`h-7 flex items-center justify-center text-[11.5px] transition-colors ${
                 inRange && !isSel ? 'bg-[#eef0f9]' : ''
               } ${
@@ -270,6 +279,7 @@ export default function DateRangePicker({ value, onChange, bounds }: {
   const [viewA, setViewA] = useState<View>(() => viewOf(value.start || todayISO()))
   const [viewB, setViewB] = useState<View>(() => viewOf(value.end || todayISO()))
   const ref = useRef<HTMLDivElement>(null)
+  const t = useT()
   const today = todayISO()
 
   // Membuka popover selalu mulai dari pilihan yang sedang aktif; menutup tanpa
@@ -337,10 +347,10 @@ export default function DateRangePicker({ value, onChange, bounds }: {
   return (
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => (open ? setOpen(false) : openPanel())} style={PJ}
-        title={value.mode === 'fixed' ? 'Rentang tanggal' : MODE_LABEL[value.mode]}
+        title={value.mode === 'fixed' ? t('Date range') : t(MODE_LABEL[value.mode])}
         className="flex items-center gap-1.5 text-[12px] font-semibold text-[#374151] bg-white border border-[#e5e7eb] rounded-lg pl-2.5 pr-2 py-2 cursor-pointer hover:border-[#d1d5db] outline-none">
         <span className="material-symbols-outlined text-[16px] text-[#9ca3af]">calendar_month</span>
-        {fmtSelection(applied.start, applied.end)}
+        {fmtSelection(applied.start, applied.end, t)}
         <span className="material-symbols-outlined text-[16px] text-[#9ca3af]">arrow_drop_down</span>
       </button>
 
@@ -349,17 +359,17 @@ export default function DateRangePicker({ value, onChange, bounds }: {
           {/* header: mode + submenu */}
           <div className="flex items-start justify-between mb-3">
             <div>
-              <p style={PJ} className="text-[13px] font-bold text-[#111827]">{fmtSelection(shown.start, shown.end)}</p>
+              <p style={PJ} className="text-[13px] font-bold text-[#111827]">{fmtSelection(shown.start, shown.end, t)}</p>
               <p className="text-[11px] text-[#9ca3af] mt-0.5">
-                {MODE_LABEL[draft.mode]}
-                {draft.mode !== 'fixed' && ' · dihitung ulang setiap hari'}
+                {t(MODE_LABEL[draft.mode])}
+                {draft.mode !== 'fixed' && ` · ${t('recalculated every day')}`}
               </p>
             </div>
 
             <div className="relative">
               <button type="button" onClick={() => { setMenu(m => !m); setSub(null) }} style={PJ}
                 className="flex items-center justify-between gap-2 w-[176px] text-[12px] font-semibold text-[#374151] bg-white border border-[#d1d5db] rounded-lg px-3 py-2 hover:border-[#9ca3af]">
-                <span className="truncate">{MODE_LABEL[draft.mode]}</span>
+                <span className="truncate">{t(MODE_LABEL[draft.mode])}</span>
                 <span className="material-symbols-outlined text-[16px] text-[#6b7280]">arrow_drop_down</span>
               </button>
 
@@ -377,7 +387,7 @@ export default function DateRangePicker({ value, onChange, bounds }: {
                           className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-[12.5px] transition-colors ${
                             active ? 'font-bold text-[#2C3079] bg-[#f2f3fa]' : 'font-medium text-[#374151] hover:bg-[#f7f8f9]'
                           }`}>
-                          <span className="truncate">{entry.label}</span>
+                          <span className="truncate">{t(entry.label)}</span>
                           {entry.children && (
                             <span className="material-symbols-outlined text-[15px] text-[#9ca3af]">chevron_right</span>
                           )}
@@ -395,7 +405,7 @@ export default function DateRangePicker({ value, onChange, bounds }: {
                                     ? 'font-bold text-[#2C3079] bg-[#f2f3fa]'
                                     : 'font-medium text-[#374151] hover:bg-[#f7f8f9]'
                                 }`}>
-                                {MODE_LABEL[m]}
+                                {t(MODE_LABEL[m])}
                               </button>
                             ))}
                           </div>
@@ -410,25 +420,25 @@ export default function DateRangePicker({ value, onChange, bounds }: {
 
           {draft.mode === 'advanced' && (
             <div className="flex items-center gap-2 flex-wrap bg-[#f7f8f9] border border-[#eceef0] rounded-lg px-3 py-2.5 mb-3">
-              <span className="text-[11.5px] font-semibold text-[#6b7280]">Dari</span>
+              <span className="text-[11.5px] font-semibold text-[#6b7280]">{t('From')}</span>
               <input type="number" min={0} value={advFrom} style={PJ}
                 onChange={e => setResolved({ ...draft, advFrom: Math.max(0, Number(e.target.value) || 0) })}
                 className="w-16 text-[12px] font-semibold text-[#374151] bg-white border border-[#e5e7eb] rounded-md px-2 py-1.5 outline-none focus:border-[#2C3079]" />
-              <span className="text-[11.5px] text-[#6b7280]">hari lalu sampai</span>
+              <span className="text-[11.5px] text-[#6b7280]">{t('days ago until')}</span>
               <input type="number" min={0} value={advTo} style={PJ}
                 onChange={e => setResolved({ ...draft, advTo: Math.max(0, Number(e.target.value) || 0) })}
                 className="w-16 text-[12px] font-semibold text-[#374151] bg-white border border-[#e5e7eb] rounded-md px-2 py-1.5 outline-none focus:border-[#2C3079]" />
-              <span className="text-[11.5px] text-[#6b7280]">hari lalu</span>
-              <span className="text-[11px] text-[#9ca3af] ml-auto">0 = hari ini</span>
+              <span className="text-[11.5px] text-[#6b7280]">{t('days ago')}</span>
+              <span className="text-[11px] text-[#9ca3af] ml-auto">{t('0 = today')}</span>
             </div>
           )}
 
           <div className="flex justify-between gap-4">
-            <Calendar label="Start Date" view={viewA} onView={setViewA}
+            <Calendar label={t('Start Date')} t={t} view={viewA} onView={setViewA}
               selected={shown.start} rangeStart={shown.start} rangeEnd={shown.end}
               today={today} bounds={bounds ?? null} onPick={pickStart} />
             <div className="w-px bg-[#eceef0]" />
-            <Calendar label="End Date" view={viewB} onView={setViewB}
+            <Calendar label={t('End Date')} t={t} view={viewB} onView={setViewB}
               selected={shown.end} rangeStart={shown.start} rangeEnd={shown.end}
               today={today} bounds={bounds ?? null} onPick={pickEnd} />
           </div>
@@ -436,18 +446,18 @@ export default function DateRangePicker({ value, onChange, bounds }: {
           <div className="flex items-center justify-between gap-3 mt-3.5 pt-3 border-t border-[#f0f1f3]">
             <p className="text-[11px] text-[#9ca3af] leading-snug">
               {bounds
-                ? <>Data tersedia {fmtSelection(bounds.min, bounds.max)}
-                    {tailMissing && <span className="text-[#c79235]"> · sebagian rentang ini belum ada datanya</span>}</>
-                : 'Brand ini belum punya data.'}
+                ? <>{t('Data available')} {fmtSelection(bounds.min, bounds.max, t)}
+                    {tailMissing && <span className="text-[#c79235]"> · {t('part of this range has no data yet')}</span>}</>
+                : t('This brand has no data yet.')}
             </p>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button type="button" onClick={() => setOpen(false)} style={PJ}
                 className="text-[12px] font-semibold text-[#6b7280] px-3 py-2 rounded-lg hover:bg-[#f3f4f6]">
-                Batal
+                {t('Cancel')}
               </button>
               <button type="button" onClick={apply} style={PJ}
                 className="text-[12px] font-bold text-white bg-[#2C3079] px-4 py-2 rounded-lg hover:bg-[#242a68]">
-                Terapkan
+                {t('Apply')}
               </button>
             </div>
           </div>

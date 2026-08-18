@@ -3,6 +3,7 @@
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide, SlideChrome } from '@/lib/reports/data/slideModel'
 import { PJ } from './parts'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 /**
  * Section Heading — a full-bleed, centered section divider. Background follows the
@@ -18,6 +19,7 @@ export default function SectionSlide({
   editable: boolean
   onChange?: (next: ContentSlide) => void
 }) {
+  const t = useT()
   const setField = (k: keyof ContentSlide, v: string) => onChange?.({ ...slide, [k]: v })
   const svg = chrome.template.background(colors, chrome.mode)
   const bg = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`
@@ -39,7 +41,7 @@ export default function SectionSlide({
           <input
             value={slide.title}
             onChange={e => setField('title', e.target.value)}
-            placeholder="Section title"
+            placeholder={t('Section title')}
             style={{ ...center, fontSize: '7cqw', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.05, color: text, background: 'transparent', outline: 'none', width: '100%' }}
           />
         ) : (
@@ -52,7 +54,7 @@ export default function SectionSlide({
           <input
             value={slide.body}
             onChange={e => setField('body', e.target.value)}
-            placeholder="Add a subtitle (optional)"
+            placeholder={t('Add a subtitle (optional)')}
             style={{ ...center, fontSize: '2.4cqw', fontWeight: 500, color: text, opacity: 0.85, background: 'transparent', outline: 'none', width: '100%', marginTop: '2.6cqh' }}
           />
         ) : (

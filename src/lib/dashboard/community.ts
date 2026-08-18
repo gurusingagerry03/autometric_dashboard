@@ -1,6 +1,8 @@
 ﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi, TrendSeries, DashPlatform, ContributorRow } from '@/components/dashboard/data'
+import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Gold-layer data access for the Community dashboard, scoped to one organization.
@@ -30,15 +32,9 @@ const PLAT_SERIES: { platform: DashPlatform; name: string; color: string }[] = [
   { platform: 'facebook', name: 'Facebook', color: '#3d7eea' },
 ]
 const TIER_LABEL: Record<string, ContributorRow['tier']> = { super_fan: 'Super Fan', active: 'Active', casual: 'Casual' }
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const fmtDateLabel = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.split('-'); return `${+d} ${t(MONTH_ABBR[+m - 1])}` }
 
-function fmtNum(n: number): string {
-  const a = Math.abs(n)
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (a >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.round(n))
-}
 const ratio = (num: number, den: number) => (den > 0 ? num / den : 0)
 function deltaStr(cur: number, prev: number): { delta: string; good: boolean } {
   if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: cur >= 0 }
@@ -75,7 +71,16 @@ async function resolveWindows(orgId: string, platform: PlatformParam, days: numb
 }
 
 // ── KPI totals (gold) ─────────────────────────────────────────────────────────
-interface KpiTotals { total: number; igRep: number; igCom: number; tkCom: number; tkLik: number; fbLik: number; fbCom: number }
+interface KpiTotals {
+  total: number; igRep: number; igCom: number
+  tkCom: number; tkLik: number; fbLik: number; fbCom: number
+  /**
+   * Rows PRESENT per platform, which is a different question from the sums.
+   * `comment_activity_daily` simply has no TikTok rows in some workspaces, and
+   * without this the ratio would come out 0 and render as a measured zero.
+   */
+  igRows: number; tkRows: number; fbRows: number
+}
 const KPI_SELECT = `
    COALESCE(SUM(c.comment_count),0)::float                                          total,
    COALESCE(SUM(c.replies_sum)   FILTER (WHERE c.platform='instagram'),0)::float    "igRep",
@@ -83,7 +88,10 @@ const KPI_SELECT = `
    COALESCE(SUM(c.comment_count) FILTER (WHERE c.platform='tiktok'),0)::float        "tkCom",
    COALESCE(SUM(c.likes_sum)     FILTER (WHERE c.platform='tiktok'),0)::float        "tkLik",
    COALESCE(SUM(c.likes_sum)     FILTER (WHERE c.platform='facebook'),0)::float      "fbLik",
-   COALESCE(SUM(c.comment_count) FILTER (WHERE c.platform='facebook'),0)::float      "fbCom"`
+   COALESCE(SUM(c.comment_count) FILTER (WHERE c.platform='facebook'),0)::float      "fbCom",
+   COUNT(*) FILTER (WHERE c.platform='instagram')::int                               "igRows",
+   COUNT(*) FILTER (WHERE c.platform='tiktok')::int                                  "tkRows",
+   COUNT(*) FILTER (WHERE c.platform='facebook')::int                                "fbRows"`
 
 async function kpiTotals(orgId: string, platform: PlatformParam, w: Window, brandId: string | null): Promise<KpiTotals> {
   const { rows } = await pool.query(
@@ -117,20 +125,20 @@ async function kpiDaily(orgId: string, platform: PlatformParam, w: Window, brand
   }
 }
 
-function buildKpis(cur: KpiTotals, prev: KpiTotals, s: Awaited<ReturnType<typeof kpiDaily>>): OverviewKpi[] {
+function buildKpis(cur: KpiTotals, prev: KpiTotals, s: Awaited<ReturnType<typeof kpiDaily>>, t: Translator): OverviewKpi[] {
   const igCur = ratio(cur.igRep, cur.igCom), igPrev = ratio(prev.igRep, prev.igCom)
   const tkCur = ratio(cur.tkLik, cur.tkCom), tkPrev = ratio(prev.tkLik, prev.tkCom)
   const fbCur = ratio(cur.fbLik, cur.fbCom), fbPrev = ratio(prev.fbLik, prev.fbCom)
   return [
-    { key: 'c-total', label: 'Total Comments Tracked', icon: 'forum', value: fmtNum(cur.total), ...deltaStr(cur.total, prev.total), spark: s.total.length ? s.total : [0] },
-    { key: 'c-igr', label: 'IG Avg. Replies/Comment', icon: 'reply', value: igCur.toFixed(1), ...deltaStr(igCur, igPrev), spark: s.igRep.length ? s.igRep : [0] },
-    { key: 'c-tkr', label: 'TT Avg. Likes/Comment', icon: 'thumb_up', value: fmtNum(tkCur), ...deltaStr(tkCur, tkPrev), spark: s.tkLikes.length ? s.tkLikes : [0] },
-    { key: 'c-fbl', label: 'FB Avg. Likes/Comment', icon: 'favorite', value: fbCur.toFixed(1), ...deltaStr(fbCur, fbPrev), spark: s.fbLik.length ? s.fbLik : [0] },
+    { key: 'c-total', label: t('Total Comments Tracked'), icon: 'forum', ...compact(cur.total), ...deltaStr(cur.total, prev.total), spark: s.total.length ? s.total : [0] },
+    { key: 'c-igr', label: t('IG Avg. Replies/Comment'), icon: 'reply', value: igCur.toFixed(1), ...deltaStr(igCur, igPrev), spark: s.igRep.length ? s.igRep : [0], unavailable: cur.igRows === 0 },
+    { key: 'c-tkr', label: t('TT Avg. Likes/Comment'), icon: 'thumb_up', ...compact(tkCur), ...deltaStr(tkCur, tkPrev), spark: s.tkLikes.length ? s.tkLikes : [0], unavailable: cur.tkRows === 0 },
+    { key: 'c-fbl', label: t('FB Avg. Likes/Comment'), icon: 'favorite', value: fbCur.toFixed(1), ...deltaStr(fbCur, fbPrev), spark: s.fbLik.length ? s.fbLik : [0], unavailable: cur.fbRows === 0 },
   ]
 }
 
 // ── comment volume by platform (weekly) ───────────────────────────────────────
-async function commentVolume(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function commentVolume(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ platform: DashPlatform; wk: string; c: number }>(
     `SELECT c.platform, to_char(date_trunc('week', c.metric_date), 'YYYY-MM-DD') wk,
             COALESCE(SUM(c.comment_count),0)::float c
@@ -152,11 +160,11 @@ async function commentVolume(orgId: string, platform: PlatformParam, w: Window, 
       for (const r of rows) if (r.platform === ps.platform) data[idx.get(r.wk)!] = Math.round(r.c)
       return { name: ps.name, color: ps.color, data }
     })
-  return { commentVolume: series, commentVolumeLabels: weeks.length ? weeks.map(fmtDateLabel) : [''] }
+  return { commentVolume: series, commentVolumeLabels: weeks.length ? weeks.map(iso => fmtDateLabel(iso, t)) : [''] }
 }
 
 // ── comments by hour of day ───────────────────────────────────────────────────
-async function commentByHour(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function commentByHour(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ h: number; c: number }>(
     `SELECT c.hour_of_day h, COALESCE(SUM(c.comment_count),0)::int c
        FROM l2_gold.comment_activity_hourly c
@@ -179,8 +187,9 @@ async function commentByHour(orgId: string, platform: PlatformParam, w: Window, 
   const primeFrom = best.from, primeTo = best.from + 3
   const pad = (h: number) => String(h).padStart(2, '0')
   const insight = total > 0
-    ? `Komentar memuncak ${pad(primeFrom)}:00–${pad(primeTo + 1)}:00 WIB (${Math.round((best.sum / total) * 100)}% dari total). Merespons di window ini memperdalam thread balasan.`
-    : 'Belum ada data aktivitas komentar per jam pada periode ini.'
+    ? t('Comments peak {from}:00–{to}:00 WIB ({pct}% of the total). Replying inside this window deepens the reply threads.',
+        { from: pad(primeFrom), to: pad(primeTo + 1), pct: Math.round((best.sum / total) * 100) })
+    : t('No hourly comment activity in this period yet.')
   return { commentByHour: hours, primeFrom, primeTo, primeInsight: insight }
 }
 
@@ -189,12 +198,14 @@ async function leaderboard(orgId: string, platform: PlatformParam, days: number,
   const windowDays = [7, 30, 90].includes(days) ? days : 30
   const { rows } = await pool.query<{
     uname: string; platform: DashPlatform; comments: number; likes: number
-    replies: number; relevance: number | null; score: number; tier: string
+    replies: number; relevance: number | null; tier: string
   }>(
+    // composite_score orders the rows but is never selected: it has no column on
+    // screen any more, so reading it into the payload would be dead weight.
     `SELECT cc.normalized_username uname, cc.platform,
             cc.comments_count::int comments, cc.likes_received::int likes,
             cc.replies_sum::int replies, cc.avg_relevance::float relevance,
-            cc.composite_score::float score, cc.tier
+            cc.tier
        FROM l2_gold.community_contributors cc
        JOIN public.brands b ON b.id = cc.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'cc')})
@@ -213,7 +224,6 @@ async function leaderboard(orgId: string, platform: PlatformParam, days: number,
     likes: r.likes,
     daily: +ratio(r.replies, r.comments).toFixed(1),   // "Avg Replies" column = replies per comment
     relevance: Math.round(r.relevance ?? 0),
-    score: Math.round(r.score),
     tier: TIER_LABEL[r.tier] ?? 'Casual',
     color: PALETTE[i % PALETTE.length],
   }))
@@ -222,6 +232,9 @@ async function leaderboard(orgId: string, platform: PlatformParam, days: number,
 export async function getCommunityData(
   orgId: string, platform: PlatformParam, days: number, brandId: string | null = null,
   custom: CustomRange | null = null,
+  // Insight sentences and KPI labels are composed here, so the language has to
+  // reach this far in — the client cannot translate a sentence it did not build.
+  t: Translator = (k: string) => k,
 ): Promise<CommunityPayload> {
   const win = await resolveWindows(orgId, platform, days, brandId, custom)
   if (!win) {
@@ -234,12 +247,12 @@ export async function getCommunityData(
     kpiTotals(orgId, platform, win.cur, brandId),
     kpiTotals(orgId, platform, win.prev, brandId),
     kpiDaily(orgId, platform, win.cur, brandId),
-    commentVolume(orgId, platform, win.cur, brandId),
-    commentByHour(orgId, platform, win.cur, brandId),
+    commentVolume(orgId, platform, win.cur, brandId, t),
+    commentByHour(orgId, platform, win.cur, brandId, t),
     leaderboard(orgId, platform, days, brandId),
   ])
   return {
-    kpis: buildKpis(cur, prev, daily),
+    kpis: buildKpis(cur, prev, daily, t),
     ...vol,
     ...hour,
     contributors: lb,

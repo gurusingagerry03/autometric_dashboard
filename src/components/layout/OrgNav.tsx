@@ -4,12 +4,15 @@ import Link from 'next/link'
 import { usePathname, useParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { ORG_NAV_ITEMS, type OrgNavItem } from '@/lib/organizations/nav'
+import { useT } from '@/lib/i18n/LanguageContext'
+import type { Translator } from '@/lib/i18n/translate'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
 export default function OrgNav({ fallbackOrgSlug }: { fallbackOrgSlug: string }) {
   const pathname = usePathname()
   const params = useParams()
+  const t = useT()
   const orgSlug = (params?.orgSlug as string | undefined) ?? fallbackOrgSlug
   const { data: session } = useSession()
 
@@ -43,13 +46,13 @@ export default function OrgNav({ fallbackOrgSlug }: { fallbackOrgSlug: string })
               }`}>
                 {item.icon}
               </span>
-              {item.label}
+              {t(item.label)}
             </Link>
 
             {hasChildren && sectionActive && (
               <div className="mt-0.5 mb-1 flex flex-col gap-0.5">
                 {item.children!.map(child => (
-                  <SubLink key={child.path} item={child} base={base} pathname={pathname} />
+                  <SubLink key={child.path} item={child} base={base} pathname={pathname} t={t} />
                 ))}
               </div>
             )}
@@ -60,7 +63,7 @@ export default function OrgNav({ fallbackOrgSlug }: { fallbackOrgSlug: string })
   )
 }
 
-function SubLink({ item, base, pathname }: { item: OrgNavItem; base: string; pathname: string }) {
+function SubLink({ item, base, pathname, t }: { item: OrgNavItem; base: string; pathname: string; t: Translator }) {
   const href = `${base}/${item.path}`
   const active = pathname.startsWith(href)
 
@@ -68,14 +71,14 @@ function SubLink({ item, base, pathname }: { item: OrgNavItem; base: string; pat
     return (
       <div
         aria-disabled="true"
-        title="Belum tersedia"
+        title={t('Not available yet')}
         style={PJ}
         className="flex items-center gap-2.5 h-8 rounded-md text-[12.5px] font-semibold border-l-[3px] border-l-[#eef0f2] ml-[18px] pl-[10px] pr-3 text-[#c7cbd1] cursor-not-allowed select-none"
       >
         <span className="material-symbols-outlined text-[16px] flex-shrink-0 text-[#d5d9de]">
           {item.icon}
         </span>
-        {item.label}
+        {t(item.label)}
       </div>
     )
   }
@@ -95,7 +98,7 @@ function SubLink({ item, base, pathname }: { item: OrgNavItem; base: string; pat
       }`}>
         {item.icon}
       </span>
-      {item.label}
+      {t(item.label)}
     </Link>
   )
 }

@@ -1,10 +1,12 @@
 'use client'
 
 import { PJ } from './ui'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 export type Step = 'setup' | 'cover' | 'slides' | 'editSlide'
 
 export default function Stepper({ step }: { step: Step }) {
+  const t = useT()
   const order: Step[] = ['setup', 'cover', 'slides']
   const steps: { id: Step; label: string }[] = [
     { id: 'setup', label: 'Setup' },
@@ -27,7 +29,7 @@ export default function Stepper({ step }: { step: Step }) {
               }`}
             >
               <span className="w-4 h-4 rounded-full bg-white/25 flex items-center justify-center text-[10px]">{i + 1}</span>
-              {s.label}
+              {t(s.label)}
             </span>
             {i < steps.length - 1 && <span className="material-symbols-outlined text-[18px] text-[#d1d5db]">chevron_right</span>}
           </div>

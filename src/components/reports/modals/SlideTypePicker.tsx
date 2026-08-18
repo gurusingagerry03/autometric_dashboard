@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { SlideType } from '@/lib/reports/data/slideModel'
 import { PLATFORM_META } from '@/components/dashboard/data'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -51,6 +52,7 @@ export default function SlideTypePicker({
   onClose: () => void
   onSelect: (type: SlideType, channel: string) => void
 }) {
+  const t = useT()
   const [channel, setChannel] = useState<string | null>(null)
 
   // Always start at the channel step when (re)opened.
@@ -73,7 +75,7 @@ export default function SlideTypePicker({
           {channel && (
             <button
               onClick={() => setChannel(null)}
-              title="Back to channels"
+              title={t('Back to channels')}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors"
             >
               <span className="material-symbols-outlined text-[20px]">arrow_back</span>
@@ -127,32 +129,32 @@ export default function SlideTypePicker({
         {/* Step 2 — layout */}
         {channel && (
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {templates.map(t => (
+            {templates.map(tpl => (
               <button
-                key={t.id}
-                disabled={!t.enabled}
-                onClick={() => t.enabled && onSelect(t.id as SlideType, channel)}
+                key={tpl.id}
+                disabled={!tpl.enabled}
+                onClick={() => tpl.enabled && onSelect(tpl.id as SlideType, channel)}
                 className={`group flex items-center gap-3.5 p-4 rounded-xl border text-left transition-all ${
-                  t.enabled
+                  tpl.enabled
                     ? 'border-[#e5e7eb] hover:border-[#2C3079] hover:bg-[#F1F2FB] hover:shadow-sm cursor-pointer'
                     : 'border-[#eef0f2] bg-[#fafbfb] opacity-70 cursor-not-allowed'
                 }`}
               >
                 <span
                   className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                    t.enabled ? 'bg-[#E6E7F3] text-[#2C3079] group-hover:bg-[#2C3079] group-hover:text-white' : 'bg-[#f1f3f5] text-[#cbd5e1]'
+                    tpl.enabled ? 'bg-[#E6E7F3] text-[#2C3079] group-hover:bg-[#2C3079] group-hover:text-white' : 'bg-[#f1f3f5] text-[#cbd5e1]'
                   } transition-colors`}
                 >
-                  <span className="material-symbols-outlined text-[22px]">{t.icon}</span>
+                  <span className="material-symbols-outlined text-[22px]">{tpl.icon}</span>
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p style={PJ} className="text-[13.5px] font-bold text-[#0f172a]">{t.name}</p>
-                    {!t.enabled && (
-                      <span style={PJ} className="text-[9px] font-bold uppercase tracking-wide text-[#94a3b8] bg-[#eef0f2] px-1.5 py-0.5 rounded-full">Soon</span>
+                    <p style={PJ} className="text-[13.5px] font-bold text-[#0f172a]">{tpl.name}</p>
+                    {!tpl.enabled && (
+                      <span style={PJ} className="text-[9px] font-bold uppercase tracking-wide text-[#94a3b8] bg-[#eef0f2] px-1.5 py-0.5 rounded-full">{t('Soon')}</span>
                     )}
                   </div>
-                  <p className="text-[12px] text-[#94a3b8] mt-0.5 truncate">{t.desc}</p>
+                  <p className="text-[12px] text-[#94a3b8] mt-0.5 truncate">{tpl.desc}</p>
                 </div>
               </button>
             ))}

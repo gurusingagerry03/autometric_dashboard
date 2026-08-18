@@ -3,6 +3,8 @@ import { windowsFromRange, type CustomRange } from './range'
 import type {
   OverviewKpi, TrendSeries, TrendMetric, DashPlatform, BrandMatrixRow, ContentAttribute,
 } from '@/components/dashboard/data'
+import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Gold-layer data access for the Overview dashboard, scoped to one organization.
@@ -20,6 +22,7 @@ export interface OverviewPayload {
   kpis: OverviewKpi[]
   engagementOverTime: Record<TrendMetric, TrendSeries[]>
   trendLabels: string[]
+  /** `value` = absolute reach for that platform; the share is derived in the view. */
   platformReachShare: { platform: DashPlatform; value: number }[]
   brandMatrix: BrandMatrixRow[]
   contentAttributes: ContentAttribute[]
@@ -32,18 +35,13 @@ export interface OverviewPayload {
 const PALETTE = ['#1B8A80', '#e0a458', '#5fa783', '#d97a7a', '#8b7fc7', '#5b94b8']
 const ATTR_COLORS = ['#5fa783', '#e0a458', '#d97a7a', '#8b7fc7', '#1B8A80', '#5b94b8', '#c79235', '#9ca3af']
 
+// English is the canonical label; `t()` turns it into the reader's language.
 const TAG_LABEL: Record<string, string> = {
   organic: 'Organic', boosted: 'Boosted Posts', collab: 'Collabs', campaign: 'Campaign',
   aon: 'AON Posts', activity: 'Activity', event: 'Event', repost: 'Repost',
 }
 
 // ── formatters ──────────────────────────────────────────────────────────────
-function fmtNum(n: number): string {
-  const a = Math.abs(n)
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (a >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.round(n))
-}
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0)
 function deltaStr(cur: number, prev: number): { delta: string; good: boolean } {
   if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: cur >= 0 }
@@ -126,21 +124,21 @@ async function dailySparks(orgId: string, platform: PlatformParam, w: Window, br
   }
 }
 
-function buildKpis(cur: Totals, prev: Totals, s: Awaited<ReturnType<typeof dailySparks>>): OverviewKpi[] {
+function buildKpis(cur: Totals, prev: Totals, s: Awaited<ReturnType<typeof dailySparks>>, t: Translator): OverviewKpi[] {
   const erCur = pct(cur.eng, cur.erden), erPrev = pct(prev.eng, prev.erden)
   const erDelta = erCur - erPrev
   return [
-    { key: 'reach', label: 'Total Reach', icon: 'ads_click', value: fmtNum(cur.reach), ...deltaStr(cur.reach, prev.reach), spark: s.reach.length ? s.reach : [0] },
-    { key: 'eng', label: 'Total Engagement', icon: 'favorite', value: fmtNum(cur.eng), ...deltaStr(cur.eng, prev.eng), spark: s.eng.length ? s.eng : [0] },
-    { key: 'er', label: 'Blended Eng. Rate', icon: 'bolt', value: `${erCur.toFixed(2)}%`, delta: `${erDelta >= 0 ? '+' : ''}${erDelta.toFixed(2)}pts`, good: erDelta >= 0, spark: s.er.length ? s.er : [0] },
-    { key: 'views', label: 'TT Video Views', icon: 'smart_display', value: fmtNum(cur.tkviews), ...deltaStr(cur.tkviews, prev.tkviews), spark: s.tkviews.length ? s.tkviews : [0] },
-    { key: 'growth', label: 'Net Follower Growth', icon: 'group_add', value: `${cur.net >= 0 ? '+' : ''}${fmtNum(cur.net)}`, ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
+    { key: 'reach', label: t('Total Reach'), icon: 'ads_click', ...compact(cur.reach), ...deltaStr(cur.reach, prev.reach), spark: s.reach.length ? s.reach : [0] },
+    { key: 'eng', label: t('Total Engagement'), icon: 'favorite', ...compact(cur.eng), ...deltaStr(cur.eng, prev.eng), spark: s.eng.length ? s.eng : [0] },
+    { key: 'er', label: t('Blended Eng. Rate'), icon: 'bolt', value: `${erCur.toFixed(2)}%`, delta: `${erDelta >= 0 ? '+' : ''}${erDelta.toFixed(2)}pts`, good: erDelta >= 0, spark: s.er.length ? s.er : [0] },
+    { key: 'views', label: t('TT Video Views'), icon: 'smart_display', ...compact(cur.tkviews), ...deltaStr(cur.tkviews, prev.tkviews), spark: s.tkviews.length ? s.tkviews : [0] },
+    { key: 'growth', label: t('Net Follower Growth'), icon: 'group_add', ...compactSigned(cur.net), ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
   ]
 }
 
 // ── engagement over time (daily, over the selected period) ────────────────────
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
-const fmtDateLabel = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.split('-'); return `${+d} ${t(MONTH_ABBR[+m - 1])}` }
 
 // all calendar dates (YYYY-MM-DD) from start..end inclusive
 function dateRange(start: string, end: string): string[] {
@@ -151,7 +149,7 @@ function dateRange(start: string, end: string): string[] {
   return out
 }
 
-async function engagementOverTime(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function engagementOverTime(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows: metricRows } = await pool.query<{ brand: string; d: string; eng: number; reach: number }>(
     `SELECT b.name brand, to_char(bmd.metric_date, 'YYYY-MM-DD') d,
             SUM(bmd.engagement_sum)::float eng, SUM(bmd.reach_sum)::float reach
@@ -200,7 +198,7 @@ async function engagementOverTime(orgId: string, platform: PlatformParam, w: Win
 
   // one tick per date; thin visible labels to ~10 so the axis stays readable
   const step = Math.max(1, Math.ceil(dates.length / 10))
-  const labels = dates.map((iso, i) => (i % step === 0 || i === dates.length - 1 ? fmtDateLabel(iso) : ''))
+  const labels = dates.map((iso, i) => (i % step === 0 || i === dates.length - 1 ? fmtDateLabel(iso, t) : ''))
 
   return {
     engagementOverTime: { Engagement: series('eng'), Reach: series('reach'), Followers: series('fol') } as Record<TrendMetric, TrendSeries[]>,
@@ -220,10 +218,12 @@ async function platformReachShare(orgId: string, platform: PlatformParam, w: Win
       GROUP BY bmd.platform`,
     [orgId, platform, w.start, w.end, brandId],
   )
-  const total = rows.reduce((s, r) => s + r.reach, 0)
+  // `value` is the platform's ABSOLUTE reach, not its share. The donut derives the
+  // percentage itself, so the hover can report both the real reach figure and the
+  // contribution it represents — a share alone tells the reader nothing about size.
   return rows
     .filter(r => r.reach > 0)
-    .map(r => ({ platform: r.platform, value: Math.round(pct(r.reach, total)) }))
+    .map(r => ({ platform: r.platform, value: Math.round(r.reach) }))
     .sort((a, b) => b.value - a.value)
 }
 
@@ -262,35 +262,26 @@ async function brandMatrix(orgId: string, platform: PlatformParam, cur: Window, 
   )
   const folMap = new Map(fol.map(r => [`${r.brand}|${r.platform}`, r.f]))
 
-  // min-max ranges for scoring
-  const ers = rows.map(r => pct(r.eng, r.erden))
-  const reaches = rows.map(r => r.reach)
-  const posts = rows.map(r => r.posts)
-  const norm = (v: number, arr: number[]) => {
-    const lo = Math.min(...arr), hi = Math.max(...arr)
-    return hi > lo ? (v - lo) / (hi - lo) : 0.5
-  }
-
+  // Ordered by engagement — a column the reader can actually see, so the ranking
+  // explains itself. (It used to be a hidden composite "score"; that column was
+  // removed on client request, and sorting by something invisible reads as random.)
   return rows
     .map(r => {
       const er = pct(r.eng, r.erden)
       const ratio = r.eng1 > 0 ? r.eng2 / r.eng1 : (r.eng2 > 0 ? 2 : 1)
       const trend: BrandMatrixRow['trend'] = ratio > 1.05 ? 'up' : ratio < 0.95 ? 'down' : 'flat'
-      const score = Math.max(1, Math.min(100, Math.round(
-        (norm(er, ers) * 0.5 + norm(r.reach, reaches) * 0.3 + norm(r.posts, posts) * 0.2) * 100,
-      )))
       return {
         brand: r.brand, platform: r.platform,
         followers: Math.round(folMap.get(`${r.brand}|${r.platform}`) ?? 0),
         reach: Math.round(r.reach), engagement: Math.round(r.eng),
-        er: +er.toFixed(1), posts: r.posts, trend, score,
+        er: +er.toFixed(1), posts: r.posts, trend,
       }
     })
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.engagement - a.engagement)
 }
 
 // ── content attribute breakdown ────────────────────────────────────────────────
-async function contentAttributes(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function contentAttributes(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ tag: string; cnt: number; eng: number; erden: number }>(
     `SELECT cad.content_tag tag, SUM(cad.post_count)::int cnt,
             SUM(cad.engagement_sum)::float eng, SUM(cad.er_denominator_sum)::float erden
@@ -307,7 +298,7 @@ async function contentAttributes(orgId: string, platform: PlatformParam, w: Wind
   const overall = pct(totalEng, totalDen)
 
   const attrs: ContentAttribute[] = rows.map((r, i) => ({
-    label: TAG_LABEL[r.tag] ?? r.tag, count: r.cnt, er: +pct(r.eng, r.erden).toFixed(1),
+    label: t(TAG_LABEL[r.tag] ?? r.tag), count: r.cnt, er: +pct(r.eng, r.erden).toFixed(1),
     color: ATTR_COLORS[i % ATTR_COLORS.length],
   }))
 
@@ -315,15 +306,19 @@ async function contentAttributes(orgId: string, platform: PlatformParam, w: Wind
   const ranked = attrs.filter(a => a.label !== 'Organic' && a.count > 0).sort((a, b) => b.er - a.er)
   const top = ranked[0]
   const finding = top
-    ? `${top.label} mencatat ER tertinggi (${top.er}%), ${overall > 0 ? `${(top.er / overall).toFixed(1)}× di atas rata-rata blended (${overall.toFixed(1)}%)` : 'jauh di atas rata-rata'} — kanal dengan leverage terbesar saat ini.`
-    : 'Belum cukup data atribut konten pada periode ini.'
+    ? (overall > 0
+        ? t('{tag} has the highest ER ({er}%), {mult}× above the blended average ({avg}%) — the biggest lever available right now.',
+            { tag: t(top.label), er: top.er, mult: (top.er / overall).toFixed(1), avg: overall.toFixed(1) })
+        : t('{tag} has the highest ER ({er}%), far above average — the biggest lever available right now.',
+            { tag: t(top.label), er: top.er }))
+    : t('Not enough content attribute data in this period.')
   return { contentAttributes: attrs, contentAttrFinding: finding }
 }
 
 // ── best posting times heatmap (gold posting_time_heatmap — all-time by design) ──
 const SLOT_OF = (h: number) => (h <= 9 ? 0 : h <= 12 ? 1 : h <= 15 ? 2 : h <= 18 ? 3 : h <= 20 ? 4 : 5)
 
-async function postingHeatmap(orgId: string, platform: PlatformParam, brandId: string | null) {
+async function postingHeatmap(orgId: string, platform: PlatformParam, brandId: string | null, t: Translator) {
   // posting_time_heatmap is a TRUNCATE+INSERT all-time aggregate (no metric_date),
   // so it is NOT period-scoped — best posting windows are a stable pattern. brand_id
   // is per-account; weekday is 0=Sun..6=Sat (WIB).
@@ -354,13 +349,14 @@ async function postingHeatmap(orgId: string, platform: PlatformParam, brandId: s
   const norm = grid.map(row => row.map(v => +(v / max).toFixed(3)))
 
   // top window insight from the hottest cell
-  const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu']
+  const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   const SLOTS = ['08:00', '12:00', '15:00', '18:00', '20:00', '22:00']
   let best = { v: 0, d: 0, s: 0 }
   norm.forEach((row, d) => row.forEach((v, s) => { if (v > best.v) best = { v, d, s } }))
   const insight = best.v > 0
-    ? `Rata-rata engagement per post tertinggi di ${DAYS[best.d]} sekitar ${SLOTS[best.s]} WIB. Jadwalkan konten utama di window ini.`
-    : 'Belum ada cukup data posting untuk menentukan jam terbaik.'
+    ? t('Average engagement per post peaks on {day} around {time} WIB. Schedule your headline content in this window.',
+        { day: t(DAYS[best.d]), time: SLOTS[best.s] })
+    : t('Not enough posting data to determine the best hours yet.')
   return { postingHeatmap: norm, postingWindowInsight: insight }
 }
 
@@ -368,6 +364,9 @@ async function postingHeatmap(orgId: string, platform: PlatformParam, brandId: s
 export async function getOverviewData(
   orgId: string, platform: PlatformParam, days: number, brandId: string | null = null,
   custom: CustomRange | null = null,
+  // Insight sentences and KPI labels are built here, so the language has to reach
+  // this far in — the client cannot translate a sentence it did not compose.
+  t: Translator = (k: string) => k,
 ): Promise<OverviewPayload> {
   const win = await resolveWindows(orgId, platform, days, brandId, custom)
   if (!win) {
@@ -381,15 +380,15 @@ export async function getOverviewData(
     totals(orgId, platform, win.cur, brandId),
     totals(orgId, platform, win.prev, brandId),
     dailySparks(orgId, platform, win.cur, brandId),
-    engagementOverTime(orgId, platform, win.cur, brandId),
+    engagementOverTime(orgId, platform, win.cur, brandId, t),
     platformReachShare(orgId, platform, win.cur, brandId),
     brandMatrix(orgId, platform, win.cur, win.mid, brandId),
-    contentAttributes(orgId, platform, win.cur, brandId),
-    postingHeatmap(orgId, platform, brandId),
+    contentAttributes(orgId, platform, win.cur, brandId, t),
+    postingHeatmap(orgId, platform, brandId, t),
   ])
 
   return {
-    kpis: buildKpis(curT, prevT, sparks),
+    kpis: buildKpis(curT, prevT, sparks, t),
     ...eot,
     platformReachShare: share,
     brandMatrix: matrix,

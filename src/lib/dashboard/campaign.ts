@@ -1,5 +1,6 @@
 import pool from '@/lib/db'
 import type { DashPlatform } from '@/components/dashboard/data'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Gold-layer data access for the Campaign Analysis dashboard, scoped to one org.
@@ -32,12 +33,15 @@ export interface CampaignAnalysis {
   wordcloud: { word: string; weight: number }[]
 }
 
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDate = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
 const hashtagsOf = (caption: string | null): string[] => (caption?.match(/#[\p{L}\p{N}_]+/gu) ?? []).slice(0, 4)
 
 /** Campaign posts pool for the selection grid (recent posts, per brand + platform). */
-export async function getCampaignPosts(orgId: string, platform: PlatformParam, brandId: string | null): Promise<CampaignPostRow[]> {
+export async function getCampaignPosts(
+  orgId: string, platform: PlatformParam, brandId: string | null,
+  t: Translator = (k: string) => k,
+): Promise<CampaignPostRow[]> {
   const { rows } = await pool.query<{
     post_id: string; platform: DashPlatform; content_pillar: string | null; is_boosted: boolean
     caption: string | null; post_date: string; likes: number; comments: number; er: number | null
@@ -60,7 +64,7 @@ export async function getCampaignPosts(orgId: string, platform: PlatformParam, b
     platform: r.platform,
     pillar: r.content_pillar ?? 'Uncategorized',
     boosted: r.is_boosted,
-    caption: (r.caption ?? '').replace(/\s+/g, ' ').trim() || '(tanpa caption)',
+    caption: (r.caption ?? '').replace(/\s+/g, ' ').trim() || t('(no caption)'),
     date: fmtDate(r.post_date),
     likes: r.likes,
     comments: r.comments,

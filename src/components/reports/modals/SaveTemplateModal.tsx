@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -23,6 +24,7 @@ export default function SaveTemplateModal({
   onSave: (name: string, templateId: string | null) => Promise<{ ok: boolean; error?: string }>
   activeTemplate?: { id: string; name: string } | null
 }) {
+  const t = useT()
   const [name, setName] = useState(defaultName)
   const [saving, setSaving] = useState<'update' | 'new' | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -70,13 +72,13 @@ export default function SaveTemplateModal({
             </h2>
             <p className="text-[12.5px] text-[#94a3b8] mt-0.5 leading-snug">
               {activeTemplate
-                ? <>You started from <span className="font-semibold text-[#475569]">{activeTemplate.name}</span>. Save your changes back onto it, or keep it and create a separate template.</>
+                ? <>{t('You started from')} <span className="font-semibold text-[#475569]">{activeTemplate.name}</span>. {t('Save your changes back onto it, or keep it and create a separate template.')}</>
                 : 'Reuse this report’s structure (cover style + slides) for any brand or period.'}
             </p>
           </div>
         </div>
 
-        <label style={PJ} className="block text-[12px] font-semibold text-[#475569] mb-1.5">Template name</label>
+        <label style={PJ} className="block text-[12px] font-semibold text-[#475569] mb-1.5">{t('Template name')}</label>
         <input
           ref={inputRef}
           value={name}
@@ -85,7 +87,7 @@ export default function SaveTemplateModal({
             if (e.key === 'Enter') submit(activeTemplate ? 'update' : 'new')
             if (e.key === 'Escape') close()
           }}
-          placeholder="e.g. Monthly performance report"
+          placeholder={t('e.g. Monthly performance report')}
           disabled={busy}
           style={PJ}
           className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-[13px] text-[#111827] bg-white focus:border-[#1B8A80] focus:outline-none disabled:bg-[#f9fafb]"

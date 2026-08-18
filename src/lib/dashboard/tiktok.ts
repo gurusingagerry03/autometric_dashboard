@@ -1,6 +1,8 @@
 import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi } from '@/components/dashboard/data'
+import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Data access for the TikTok Deep dashboard, scoped to one organization.
@@ -27,16 +29,10 @@ export interface TiktokPayload {
 }
 
 const PALETTE = ['#1B8A80', '#e0a458', '#5fa783', '#d97a7a', '#8b7fc7', '#5b94b8']
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const CR_NUM = `NULLIF(regexp_replace({col}.completion_rate, '[^0-9.]', '', 'g'), '')::numeric`
-const fmtDateLabel = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
+const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.split('-'); return `${+d} ${t(MONTH_ABBR[+m - 1])}` }
 
-function fmtNum(n: number): string {
-  const a = Math.abs(n)
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (a >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.round(n))
-}
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0)
 function deltaStr(cur: number, prev: number, lowerIsGood = false): { delta: string; good: boolean; dir: 'up' | 'down' } {
   const dir = (cur >= prev ? 'up' : 'down') as 'up' | 'down'
@@ -138,18 +134,18 @@ async function dailySparks(orgId: string, w: Window, brandId: string | null) {
   }
 }
 
-function buildKpis(cur: ChurnTotals, prev: ChurnTotals, complCur: number, complPrev: number, s: Awaited<ReturnType<typeof dailySparks>>): OverviewKpi[] {
+function buildKpis(cur: ChurnTotals, prev: ChurnTotals, complCur: number, complPrev: number, s: Awaited<ReturnType<typeof dailySparks>>, t: Translator): OverviewKpi[] {
   return [
-    { key: 'tk-views', label: 'Total Video Views', icon: 'play_circle', value: fmtNum(cur.views), ...deltaStr(cur.views, prev.views), spark: s.views.length ? s.views : [0] },
-    { key: 'tk-new', label: 'New Followers', icon: 'person_add', value: fmtNum(cur.gained), ...deltaStr(cur.gained, prev.gained), spark: s.gained.length ? s.gained : [0] },
-    { key: 'tk-lost', label: 'Lost Followers', icon: 'person_remove', value: fmtNum(cur.lost), ...deltaStr(cur.lost, prev.lost, true), spark: s.lost.length ? s.lost : [0] },
-    { key: 'tk-net', label: 'Net Growth', icon: 'trending_up', value: `${cur.net >= 0 ? '+' : ''}${fmtNum(cur.net)}`, ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
-    { key: 'tk-compl', label: 'Avg. Completion Rate', icon: 'check_circle', value: `${Math.round(complCur)}%`, ...ptsStr(complCur, complPrev), spark: s.completion.length ? s.completion : [0] },
+    { key: 'tk-views', label: t('Total Video Views'), icon: 'play_circle', ...compact(cur.views), ...deltaStr(cur.views, prev.views), spark: s.views.length ? s.views : [0] },
+    { key: 'tk-new', label: t('New Followers'), icon: 'person_add', ...compact(cur.gained), ...deltaStr(cur.gained, prev.gained), spark: s.gained.length ? s.gained : [0] },
+    { key: 'tk-lost', label: t('Lost Followers'), icon: 'person_remove', ...compact(cur.lost), ...deltaStr(cur.lost, prev.lost, true), spark: s.lost.length ? s.lost : [0] },
+    { key: 'tk-net', label: t('Net Growth'), icon: 'trending_up', ...compactSigned(cur.net), ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
+    { key: 'tk-compl', label: t('Avg. Completion Rate'), icon: 'check_circle', value: `${Math.round(complCur)}%`, ...ptsStr(complCur, complPrev), spark: s.completion.length ? s.completion : [0] },
   ]
 }
 
 // ── follower churn weekly (gold) ──────────────────────────────────────────────
-async function churnWeekly(orgId: string, w: Window, brandId: string | null) {
+async function churnWeekly(orgId: string, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ wk: string; gained: number; lost: number }>(
     `SELECT to_char(date_trunc('week', t.metric_date), 'YYYY-MM-DD') wk,
             COALESCE(SUM(t.new_followers),0)::int  gained,
@@ -162,7 +158,7 @@ async function churnWeekly(orgId: string, w: Window, brandId: string | null) {
       ORDER BY date_trunc('week', t.metric_date)`,
     [orgId, w.start, w.end, brandId],
   )
-  const churnWeeks = rows.map(r => ({ label: fmtDateLabel(r.wk), gained: r.gained, lost: r.lost }))
+  const churnWeeks = rows.map(r => ({ label: fmtDateLabel(r.wk, t), gained: r.gained, lost: r.lost }))
   // insight: week with the biggest lost-follower spike vs the prior week
   let worst = { i: -1, jump: 0 }
   for (let i = 1; i < churnWeeks.length; i++) {
@@ -173,10 +169,11 @@ async function churnWeekly(orgId: string, w: Window, brandId: string | null) {
     }
   }
   const insight = worst.i >= 0 && worst.jump >= 0.2
-    ? `Volume lost follower melonjak +${Math.round(worst.jump * 100)}% di ${churnWeeks[worst.i].label} — biasanya bertepatan dengan jeda posting; jaga ≥1 post/hari di TikTok.`
+    ? t('Lost-follower volume spiked +{pct}% in {week} — usually a posting gap. Keep at least 1 post a day on TikTok.',
+        { pct: Math.round(worst.jump * 100), week: churnWeeks[worst.i].label })
     : churnWeeks.length
-      ? 'Churn follower relatif stabil antar minggu pada periode ini.'
-      : 'Belum ada data churn pada periode ini.'
+      ? t('Follower churn is fairly steady week to week in this period.')
+      : t('No churn data in this period yet.')
   return { churnWeeks, churnInsight: insight }
 }
 
@@ -198,7 +195,7 @@ async function durationCompletion(orgId: string, w: Window, brandId: string | nu
 }
 
 // ── avg watch time by content pillar (gold pillar_performance_daily) ──────────
-async function watchByPillar(orgId: string, w: Window, brandId: string | null) {
+async function watchByPillar(orgId: string, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ pillar: string; awt: number }>(
     `SELECT pp.content_pillar pillar,
             (SUM(pp.watch_time_sum) / NULLIF(SUM(pp.post_count),0))::float awt
@@ -217,15 +214,19 @@ async function watchByPillar(orgId: string, w: Window, brandId: string | null) {
   const bottom = rest[rest.length - 1]
   const insight = top
     ? bottom
-      ? `Pillar ${top.label} menahan rata-rata watch time ${top.value}s vs ${bottom.value}s untuk ${bottom.label} — narasi mengalahkan hard-sell.`
-      : `Pillar ${top.label} mencatat rata-rata watch time tertinggi (${top.value}s).`
-    : 'Belum ada data watch time per pillar pada periode ini.'
+      ? t('The {top} pillar holds {topS}s average watch time against {bottomS}s for {bottom} — narrative beats hard-sell.',
+          { top: top.label, topS: top.value, bottomS: bottom.value, bottom: bottom.label })
+      : t('The {top} pillar has the highest average watch time ({topS}s).', { top: top.label, topS: top.value })
+    : t('No per-pillar watch-time data in this period yet.')
   return { watchByPillar, watchInsight: insight }
 }
 
 export async function getTiktokData(
   orgId: string, _platform: PlatformParam, days: number, brandId: string | null = null,
   custom: CustomRange | null = null,
+  // Insight sentences and KPI labels are composed here, so the language has to
+  // reach this far in — the client cannot translate a sentence it did not build.
+  t: Translator = (k: string) => k,
 ): Promise<TiktokPayload> {
   const win = await resolveWindows(orgId, days, brandId, custom)
   if (!win) {
@@ -240,12 +241,12 @@ export async function getTiktokData(
     avgCompletion(orgId, win.cur, brandId),
     avgCompletion(orgId, win.prev, brandId),
     dailySparks(orgId, win.cur, brandId),
-    churnWeekly(orgId, win.cur, brandId),
+    churnWeekly(orgId, win.cur, brandId, t),
     durationCompletion(orgId, win.cur, brandId),
-    watchByPillar(orgId, win.cur, brandId),
+    watchByPillar(orgId, win.cur, brandId, t),
   ])
   return {
-    kpis: buildKpis(curT, prevT, complCur, complPrev, sparks),
+    kpis: buildKpis(curT, prevT, complCur, complPrev, sparks, t),
     ...weekly,
     churnTotals: { gained: Math.round(curT.gained), lost: Math.round(curT.lost), net: Math.round(curT.net) },
     durationCompletion: scatter,

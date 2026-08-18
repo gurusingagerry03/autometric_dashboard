@@ -31,6 +31,7 @@ import SlidesReview from './SlidesReview'
 import SlideEditor from './SlideEditor'
 import { PJ, Panel, Field } from './ui'
 import { MONTHS, NOW } from './constants'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 let slideSeq = 0
 
@@ -72,6 +73,7 @@ export default function ReportBuilder({
   onExit?: () => void
   initialTemplateId?: string
 }) {
+  const t = useT()
   const router = useRouter()
   const [step, setStep] = useState<Step>('setup')
 
@@ -329,14 +331,14 @@ export default function ReportBuilder({
         })
         if (result.ok) {
           router.refresh()
-          showToast('success', 'Report berhasil disimpan ke reports library organisasi.')
+          showToast('success', t('Report saved to the organization reports library.'))
         } else {
-          showToast('error', `File terunduh, tapi gagal menyimpan ke library:\n${result.error ?? 'Unknown error'}`)
+          showToast('error', `${t('File downloaded, but saving to the library failed:')}\n${result.error ?? t('Unknown error')}`)
         }
       }
     } catch (err) {
       console.error(err)
-      showToast('error', 'Export gagal. Cek console untuk detail.')
+      showToast('error', t('Export failed. Check the console for details.'))
     } finally {
       setIsExporting(false)
     }
@@ -344,9 +346,9 @@ export default function ReportBuilder({
 
   // Apply a saved template from the Setup step: replace slides + cover style only.
   // Brand/period/colors/logo stay as the user set them. Returns false if cancelled.
-  function applyTemplate(t: ReportTemplateRecord): boolean {
-    const config = t.config
-    if (slides.length > 0 && !window.confirm('Replace the current slides with this template’s structure?')) return false
+  function applyTemplate(tpl: ReportTemplateRecord): boolean {
+    const config = tpl.config
+    if (slides.length > 0 && !window.confirm(t('Replace the current slides with this template’s structure?'))) return false
     setSlides(seedTemplateSlides(config.slides))
     setTemplateId(config.cover.templateId)
     setMode(config.cover.mode)
@@ -355,7 +357,7 @@ export default function ReportBuilder({
     setSubtitle(config.cover.subtitle)
     // Remember where the structure came from so the next save can go back onto
     // it — otherwise resuming work always leaves a duplicate template behind.
-    setActiveTemplate({ id: t.id, name: t.name })
+    setActiveTemplate({ id: tpl.id, name: tpl.name })
     return true
   }
 
@@ -402,7 +404,7 @@ export default function ReportBuilder({
           {onExit && (
             <button
               onClick={onExit}
-              title="Back to reports"
+              title={t('Back to reports')}
               className="w-9 h-9 flex items-center justify-center bg-white border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:text-[#2C3079] hover:border-[#d1d5db] transition-colors"
             >
               <span className="material-symbols-outlined text-[20px]">arrow_back</span>
@@ -413,7 +415,7 @@ export default function ReportBuilder({
               New report · {orgName}
             </p>
             <h1 style={PJ} className="text-[21px] font-bold text-[#0f172a] tracking-[-0.03em] leading-none mt-1">
-              {step === 'setup' ? 'Report setup' : step === 'cover' ? 'Design cover' : 'Build slides'}
+              {step === 'setup' ? t('Report setup') : step === 'cover' ? t('Design cover') : t('Build slides')}
             </h1>
           </div>
         </div>
@@ -439,7 +441,7 @@ export default function ReportBuilder({
           <div className="grid grid-cols-12 gap-8">
             {/* Controls */}
             <div className="col-span-12 lg:col-span-4 space-y-5">
-              <Panel title="Logo" icon="image">
+              <Panel title={t('Logo')} icon="image">
                 <input
                   ref={fileRef}
                   type="file"
@@ -453,13 +455,13 @@ export default function ReportBuilder({
                 >
                   <span className="material-symbols-outlined text-[26px] text-[#9ca3af]">upload</span>
                   <p style={PJ} className="text-[12.5px] font-semibold text-[#374151] mt-1">
-                    {logoDataUrl ? 'Replace logo' : 'Upload brand logo'}
+                    {logoDataUrl ? t('Replace logo') : t('Upload brand logo')}
                   </p>
-                  <p className="text-[11px] text-[#9ca3af] mt-0.5">Colors are extracted automatically</p>
+                  <p className="text-[11px] text-[#9ca3af] mt-0.5">{t('Colors are extracted automatically')}</p>
                 </button>
               </Panel>
 
-              <Panel title="Template" icon="dashboard">
+              <Panel title={t('Template')} icon="dashboard">
                 <div className="grid grid-cols-3 gap-2">
                   {COVER_TEMPLATES.map(t => (
                     <button
@@ -485,7 +487,7 @@ export default function ReportBuilder({
                 </div>
               </Panel>
 
-              <Panel title="Colors" icon="palette">
+              <Panel title={t('Colors')} icon="palette">
                 <div className="space-y-2.5">
                   {(['primary', 'secondary', 'accent'] as const).map(key => (
                     <div key={key} className="flex items-center justify-between">
@@ -504,7 +506,7 @@ export default function ReportBuilder({
                 </div>
               </Panel>
 
-              <Panel title="Appearance" icon="contrast">
+              <Panel title={t('Appearance')} icon="contrast">
                 <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
                   {(['light', 'dark'] as const).map(m => (
                     <button
@@ -521,7 +523,7 @@ export default function ReportBuilder({
                 </div>
               </Panel>
 
-              <Panel title="Text" icon="title">
+              <Panel title={t('Text')} icon="title">
                 <Field label="Title" value={title} onChange={setTitle} />
                 <Field label="Subtitle" value={subtitle} onChange={setSubtitle} />
               </Panel>
@@ -560,7 +562,7 @@ export default function ReportBuilder({
                   {/* Meta + continue */}
                   <div className="flex items-center justify-between mt-6 px-1">
                     <div className="min-w-0">
-                      <p style={PJ} className="text-[13.5px] font-bold text-[#0f172a] truncate">{brandName || 'No brand'}</p>
+                      <p style={PJ} className="text-[13.5px] font-bold text-[#0f172a] truncate">{brandName || t('No brand')}</p>
                       <p className="text-[12px] text-[#94a3b8] mt-0.5">{period} · 16:9 · PPTX</p>
                     </div>
                     <button
@@ -568,7 +570,7 @@ export default function ReportBuilder({
                       style={PJ}
                       className="flex items-center gap-2 bg-[#2C3079] hover:bg-[#20224F] text-white text-[13px] font-bold px-5 py-2.5 rounded-xl shadow-[0_4px_14px_rgba(30,79,73,0.30)] transition-colors flex-shrink-0"
                     >
-                      Continue to slides
+                      {t('Continue to slides')}
                       <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                     </button>
                   </div>
@@ -658,7 +660,7 @@ export default function ReportBuilder({
 
       <SaveTemplateModal
         open={saveTemplateOpen}
-        defaultName={title || 'My report template'}
+        defaultName={title || t('My report template')}
         onClose={() => setSaveTemplateOpen(false)}
         onSave={saveTemplate}
         activeTemplate={activeTemplate}

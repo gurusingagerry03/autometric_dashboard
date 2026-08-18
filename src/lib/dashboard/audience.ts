@@ -3,6 +3,8 @@ import { windowsFromRange, type CustomRange } from './range'
 import type {
   OverviewKpi, TrendSeries, DashPlatform, ContributorRow, RelevanceTierRow, UgcPost,
 } from '@/components/dashboard/data'
+import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import type { Translator } from '@/lib/i18n/translate'
 
 /**
  * Data access for the Audience Deep Dive dashboard, scoped to one organization.
@@ -25,14 +27,16 @@ export type PlatformParam = 'all' | DashPlatform
 
 export interface AudiencePayload {
   kpis: OverviewKpi[]
-  age: { bucket: string; value: number; color: string }[]
+  /** `value` = share (%), `count` = the follower headcount behind it. */
+  age: { bucket: string; value: number; count: number; color: string }[]
   ageInsight: string
-  gender: { platform: DashPlatform; female: number; male: number }[]
+  /** `female`/`male` are shares (%); the `*Count` pair is the headcount behind them. */
+  gender: { platform: DashPlatform; female: number; male: number; femaleCount: number; maleCount: number }[]
   relevanceTiers: RelevanceTierRow[]
   relevanceSignal: string
   contributors: ContributorRow[]
   superFanNote: string
-  cities: { city: string; value: number }[]
+  cities: { city: string; value: number; count: number }[]
   followerTrend: TrendSeries[]
   followerLabels: string[]
   ugc: UgcPost[]
@@ -51,14 +55,8 @@ const UGC_FORMAT: Record<string, string> = {
 const TIER_LABEL: Record<string, ContributorRow['tier']> = {
   super_fan: 'Super Fan', active: 'Active', casual: 'Casual',
 }
-const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-function fmtNum(n: number): string {
-  const a = Math.abs(n)
-  if (a >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M'
-  if (a >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K'
-  return String(Math.round(n))
-}
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0)
 function deltaStr(cur: number, prev: number): { delta: string; good: boolean } {
   if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: cur >= 0 }
@@ -69,8 +67,8 @@ function initials(name: string): string {
   const parts = name.replace(/[@_.]/g, ' ').trim().split(/\s+/).filter(Boolean)
   return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || name.slice(0, 2).toUpperCase()
 }
-const fmtDateLabel = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
-const fmtShort = (d: Date) => `${d.getUTCDate()} ${MONTH_ABBR[d.getUTCMonth()]}`
+const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.split('-'); return `${+d} ${t(MONTH_ABBR[+m - 1])}` }
+const fmtShort = (d: Date, t: Translator) => `${d.getUTCDate()} ${t(MONTH_ABBR[d.getUTCMonth()])}`
 
 const PLAT = `($2 = 'all' OR {col}.platform = $2)`
 
@@ -118,7 +116,7 @@ async function profileDaily(orgId: string, platform: PlatformParam, w: Window, b
   return rows
 }
 
-function buildKpis(cur: ProfDay[], prev: ProfDay[]): OverviewKpi[] {
+function buildKpis(cur: ProfDay[], prev: ProfDay[], t: Translator): OverviewKpi[] {
   const sum = (rows: ProfDay[], k: keyof ProfDay) => rows.reduce((s, r) => s + (r[k] as number), 0)
   const follCur = cur.length ? cur[cur.length - 1].foll : 0
   const follStart = cur.length ? cur[0].foll : 0
@@ -126,15 +124,15 @@ function buildKpis(cur: ProfDay[], prev: ProfDay[]): OverviewKpi[] {
   const tkCur = sum(cur, 'tkVisit'), tkPrev = sum(prev, 'tkVisit')
   const fbCur = sum(cur, 'fbVisit'), fbPrev = sum(prev, 'fbVisit')
   return [
-    { key: 'foll', label: 'Total Tracked Followers', icon: 'group', value: fmtNum(follCur), ...deltaStr(follCur, follStart), spark: cur.length ? cur.map(r => Math.round(r.foll)) : [0] },
-    { key: 'igr', label: 'IG Profile Reach', icon: 'ads_click', value: fmtNum(igCur), ...deltaStr(igCur, igPrev), spark: cur.length ? cur.map(r => Math.round(r.igReach)) : [0] },
-    { key: 'tkv', label: 'TT Profile Views', icon: 'visibility', value: fmtNum(tkCur), ...deltaStr(tkCur, tkPrev), spark: cur.length ? cur.map(r => Math.round(r.tkVisit)) : [0] },
-    { key: 'fbv', label: 'FB Profile Visits', icon: 'person', value: fmtNum(fbCur), ...deltaStr(fbCur, fbPrev), spark: cur.length ? cur.map(r => Math.round(r.fbVisit)) : [0] },
+    { key: 'foll', label: t('Total Tracked Followers'), icon: 'group', ...compact(follCur), ...deltaStr(follCur, follStart), spark: cur.length ? cur.map(r => Math.round(r.foll)) : [0] },
+    { key: 'igr', label: t('IG Profile Reach'), icon: 'ads_click', ...compact(igCur), ...deltaStr(igCur, igPrev), spark: cur.length ? cur.map(r => Math.round(r.igReach)) : [0] },
+    { key: 'tkv', label: t('TT Profile Views'), icon: 'visibility', ...compact(tkCur), ...deltaStr(tkCur, tkPrev), spark: cur.length ? cur.map(r => Math.round(r.tkVisit)) : [0] },
+    { key: 'fbv', label: t('FB Profile Visits'), icon: 'person', ...compact(fbCur), ...deltaStr(fbCur, fbPrev), spark: cur.length ? cur.map(r => Math.round(r.fbVisit)) : [0] },
   ]
 }
 
 // ── Age distribution (latest snapshot) ────────────────────────────────────────
-async function ageDistribution(orgId: string, platform: PlatformParam, brandId: string | null) {
+async function ageDistribution(orgId: string, platform: PlatformParam, brandId: string | null, t: Translator) {
   const sums = AGE_LABELS.map(([col]) => `COALESCE(SUM(u.${col}),0)::float "${col}"`).join(',\n            ')
   const { rows } = await pool.query<Record<string, number>>(
     `SELECT ${sums}
@@ -154,13 +152,19 @@ async function ageDistribution(orgId: string, platform: PlatformParam, brandId: 
   )
   const r = rows[0] ?? {}
   const total = AGE_LABELS.reduce((s, [col]) => s + (r[col] ?? 0), 0)
+  // `count` rides along with the share so the hover can report how many people a
+  // percentage actually stands for — 4% of 2M and 4% of 2K read very differently.
   const age = AGE_LABELS.map(([col, label], i) => ({
-    bucket: label, value: total > 0 ? Math.round(pct(r[col] ?? 0, total)) : 0, color: PALETTE[i % PALETTE.length],
+    bucket: label,
+    value: total > 0 ? Math.round(pct(r[col] ?? 0, total)) : 0,
+    count: Math.round(r[col] ?? 0),
+    color: PALETTE[i % PALETTE.length],
   }))
   const top = age.slice().sort((a, b) => b.value - a.value)[0]
   const insight = total > 0 && top
-    ? `Segmen ${top.bucket} mendominasi audiens (${top.value}%) — sesuaikan tone & format konten untuk kelompok usia ini.`
-    : 'Belum ada data demografi usia pada periode ini.'
+    ? t('The {bucket} segment dominates the audience ({pct}%) — tune tone and format for this age group.',
+        { bucket: top.bucket, pct: top.value })
+    : t('No age demographic data in this period.')
   return { age, ageInsight: insight }
 }
 
@@ -185,11 +189,18 @@ async function genderSplit(orgId: string, platform: PlatformParam, brandId: stri
       GROUP BY u.platform`,
     [orgId, platform, brandId],
   )
+  // The headcounts ride along with the shares for the same reason the age bars
+  // carry theirs: "62% female" answers a different question than "1,284 women",
+  // and only one of the two is worth hovering for.
   return rows
     .filter(r => r.f + r.m > 0)
     .map(r => {
       const female = Math.round(pct(r.f, r.f + r.m))
-      return { platform: r.platform, female, male: 100 - female }
+      return {
+        platform: r.platform,
+        female, male: 100 - female,
+        femaleCount: Math.round(r.f), maleCount: Math.round(r.m),
+      }
     })
 }
 
@@ -213,11 +224,15 @@ async function topCities(orgId: string, platform: PlatformParam, brandId: string
     [orgId, platform, brandId],
   )
   const total = rows.reduce((s, r) => s + r.v, 0)
-  return rows.map(r => ({ city: r.city, value: total > 0 ? Math.round(pct(r.v, total)) : 0 }))
+  return rows.map(r => ({
+    city: r.city,
+    value: total > 0 ? Math.round(pct(r.v, total)) : 0,
+    count: Math.round(r.v),
+  }))
 }
 
 // ── Follower growth trend (per brand, weekly) ─────────────────────────────────
-async function followerTrend(orgId: string, platform: PlatformParam, w: Window, brandId: string | null) {
+async function followerTrend(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ brand: string; wk: string; f: number }>(
     `WITH daily AS (
         SELECT b.name brand, bmd.metric_date d, SUM(bmd.follower_count_eod)::float f
@@ -242,19 +257,89 @@ async function followerTrend(orgId: string, platform: PlatformParam, w: Window, 
     for (const r of rows) if (r.brand === brand) data[idx.get(r.wk)!] = Math.round(r.f)
     return { name: brand, color: PALETTE[i % PALETTE.length], data }
   })
-  return { followerTrend: series, followerLabels: weeks.length ? weeks.map(fmtDateLabel) : [''] }
+  return { followerTrend: series, followerLabels: weeks.length ? weeks.map(iso => fmtDateLabel(iso, t)) : [''] }
 }
 
 // ── Comment relevance tiers (gold distribution counts + feature/silver samples) ──
 const REL_TIERS = [
-  { key: 'high', tier: 'High Relevance', range: '>75', desc: 'Kontekstual, terkait plot/caption, debat karakter', color: '#5fa783', min: 75, max: 101 },
-  { key: 'mid', tier: 'Mid Relevance', range: '40–75', desc: 'Reaksi positif umum, pujian singkat', color: '#e0a458', min: 40, max: 75 },
-  { key: 'low', tier: 'Low Relevance', range: '<40', desc: 'Spam, emoji saja, off-topic', color: '#d97a7a', min: -1, max: 40 },
+  { key: 'high', tier: 'High Relevance', range: '>75', desc: 'Contextual — tied to the plot or caption, character debates', color: '#5fa783', min: 75, max: 101 },
+  { key: 'mid', tier: 'Mid Relevance', range: '40–75', desc: 'General positive reactions, short praise', color: '#e0a458', min: 40, max: 75 },
+  { key: 'low', tier: 'Low Relevance', range: '<40', desc: 'Spam, emoji only, off-topic', color: '#d97a7a', min: -1, max: 40 },
 ]
 // normalise score to 0..100 whether the source stores 0..1 or 0..100
 const REL_NORM = `(CASE WHEN f.relevance_score <= 1 THEN f.relevance_score * 100 ELSE f.relevance_score END)`
 
-async function commentRelevance(orgId: string, platform: PlatformParam, brandId: string | null) {
+/** Which tier a single score falls into, or undefined if it is out of range. */
+function tierOf(score: number): string | undefined {
+  return REL_TIERS.find(t => score >= t.min && score < t.max)?.key
+}
+
+/**
+ * Choose the sample comments shown under each relevance tier.
+ *
+ * Scores are per COMMENT ROW, and the same sentence typed by ten different
+ * people is ten rows — each scored independently, so the scorer's noise can land
+ * copies of one identical text in two different tiers. On screen that reads as a
+ * bug ("how is the same comment both high and low relevance?") and the repeats
+ * crowd out the variety the panel exists to show.
+ *
+ * So: group by the normalised text and file each distinct text under exactly ONE
+ * tier — the tier most of its own occurrences land in. Assigning by the mean
+ * score instead would look tidier but starves a tier whose comments straddle a
+ * boundary: a text sitting 90% in Mid and 10% in Low averages its way out of Mid
+ * entirely, and the panel then shows a tier with a count but no examples.
+ */
+function pickSamples(rows: { s: number | string; txt: string | null }[]): Map<string, string[]> {
+  interface Group { text: string; perTier: Map<string, number>; total: number }
+  const byText = new Map<string, Group>()
+
+  for (const r of rows) {
+    const text = (r.txt ?? '').trim()
+    if (!text) continue
+    // node-postgres hands NUMERIC back as a string; `Number()` here is what keeps
+    // the comparisons numeric instead of lexicographic.
+    const score = Number(r.s)
+    if (!Number.isFinite(score)) continue
+    const tier = tierOf(score)
+    if (!tier) continue
+
+    // Case and inner whitespace differences are the same comment to a reader.
+    const key = text.toLowerCase().replace(/\s+/g, ' ')
+    const g = byText.get(key) ?? { text, perTier: new Map<string, number>(), total: 0 }
+    g.perTier.set(tier, (g.perTier.get(tier) ?? 0) + 1)
+    g.total += 1
+    byText.set(key, g)
+  }
+
+  // Each distinct text claims its modal tier; ties fall to the first tier in
+  // REL_TIERS order, which is deterministic run to run.
+  const claimed = new Map<string, { text: string; hits: number; total: number }[]>()
+  for (const g of byText.values()) {
+    let best: { tier: string; hits: number } | null = null
+    for (const t of REL_TIERS) {
+      const hits = g.perTier.get(t.key) ?? 0
+      if (hits > (best?.hits ?? 0)) best = { tier: t.key, hits }
+    }
+    if (!best) continue
+    const bucket = claimed.get(best.tier) ?? []
+    bucket.push({ text: g.text, hits: best.hits, total: g.total })
+    claimed.set(best.tier, bucket)
+  }
+
+  const out = new Map<string, string[]>()
+  for (const t of REL_TIERS) {
+    const picked = (claimed.get(t.key) ?? [])
+      // Most-seen first: the more often a text appears, the more representative
+      // of the tier it is.
+      .sort((a, b) => b.hits - a.hits || b.total - a.total)
+      .slice(0, 3)
+      .map(v => v.text)
+    out.set(t.key, picked)
+  }
+  return out
+}
+
+async function commentRelevance(orgId: string, platform: PlatformParam, brandId: string | null, t: Translator) {
   // Distribution counts come from the gold rollup; sample texts per tier are joined
   // on the fly from feature.comment_relevance_scores + unified_comment (per docs §5).
   const [dist, samp] = await Promise.all([
@@ -267,7 +352,8 @@ async function commentRelevance(orgId: string, platform: PlatformParam, brandId:
         GROUP BY crd.tier`,
       [orgId, platform, brandId],
     ).catch(() => ({ rows: [] as { tier: string; cnt: number }[] })),
-    pool.query<{ s: number; txt: string | null }>(
+    // `s` is typed as it actually arrives: NUMERIC comes back as a string.
+    pool.query<{ s: string; txt: string | null }>(
       `SELECT ${REL_NORM} s, c.comment_text txt
          FROM feature.comment_relevance_scores f
          JOIN l1_silver.unified_comment c
@@ -278,40 +364,40 @@ async function commentRelevance(orgId: string, platform: PlatformParam, brandId:
           AND f.relevance_score IS NOT NULL
           AND ($3::uuid IS NULL OR bsa.brand_id = $3)`,
       [orgId, platform, brandId],
-    ).catch(() => ({ rows: [] as { s: number; txt: string | null }[] })),
+    ).catch(() => ({ rows: [] as { s: string; txt: string | null }[] })),
   ])
 
   const countByTier = new Map(dist.rows.map(r => [r.tier, r.cnt]))
   const total = [...countByTier.values()].reduce((s, c) => s + c, 0)
-  const tiers: RelevanceTierRow[] = REL_TIERS.map(t => {
-    const count = countByTier.get(t.key) ?? 0
-    const samples = samp.rows
-      .filter(r => r.s >= t.min && r.s < t.max)
-      .sort((a, b) => b.s - a.s)
-      .map(r => (r.txt ?? '').trim()).filter(Boolean).slice(0, 3)
+  const samplesByTier = pickSamples(samp.rows)
+
+  const tiers: RelevanceTierRow[] = REL_TIERS.map(rel => {
+    const count = countByTier.get(rel.key) ?? 0
     return {
-      tier: t.tier, range: t.range, count,
+      tier: rel.tier, range: rel.range, count,
       pct: total > 0 ? Math.round(pct(count, total)) : 0,
-      desc: t.desc, color: t.color, samples,
+      desc: t(rel.desc), color: rel.color, samples: samplesByTier.get(rel.key) ?? [],
     }
   })
   const high = tiers[0]
   const signal = total > 0
-    ? `${high.pct}% komentar tergolong relevansi tinggi (>75) — sinyal keterlibatan audiens yang dalam. Optimalkan caption dengan pertanyaan terbuka untuk menaikkan porsi ini.`
-    : 'Belum ada distribusi relevansi komentar pada periode ini (l2_gold.comment_relevance_distribution masih kosong).'
+    ? t('{pct}% of comments score as highly relevant (>75) — a sign of deep audience involvement. Open-ended captions push this share higher.',
+        { pct: high.pct })
+    : t('No comment relevance distribution in this period yet.')
   return { relevanceTiers: tiers, relevanceSignal: signal }
 }
 
 // ── Top community contributors (gold) ─────────────────────────────────────────
-async function contributors(orgId: string, platform: PlatformParam, days: number, brandId: string | null): Promise<{ contributors: ContributorRow[]; superFanNote: string }> {
+async function contributors(orgId: string, platform: PlatformParam, days: number, brandId: string | null, t: Translator): Promise<{ contributors: ContributorRow[]; superFanNote: string }> {
   const windowDays = [7, 30, 90].includes(days) ? days : 30
   const { rows } = await pool.query<{
     uname: string; platform: DashPlatform; comments: number; likes: number
-    relevance: number | null; score: number; tier: string
+    relevance: number | null; tier: string
   }>(
+    // composite_score orders the rows but is never selected — see ContributorRow.
     `SELECT cc.normalized_username uname, cc.platform,
             cc.comments_count::int comments, cc.likes_received::int likes,
-            cc.avg_relevance::float relevance, cc.composite_score::float score, cc.tier
+            cc.avg_relevance::float relevance, cc.tier
        FROM l2_gold.community_contributors cc
        JOIN public.brands b ON b.id = cc.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'cc')})
@@ -330,19 +416,19 @@ async function contributors(orgId: string, platform: PlatformParam, days: number
     likes: r.likes,
     daily: +(r.comments / windowDays).toFixed(1),
     relevance: Math.round(r.relevance ?? 0),
-    score: Math.round(r.score),
     tier: TIER_LABEL[r.tier] ?? 'Casual',
     color: PALETTE[i % PALETTE.length],
   }))
   const sf = list.find(c => c.tier === 'Super Fan') ?? list[0]
   const note = list.length
-    ? `${sf.username} memimpin dengan ${sf.comments} komentar (skor ${sf.score}) dalam ${windowDays} hari terakhir — kandidat untuk program fan/ambassador.`
-    : 'Belum ada data kontributor komunitas pada periode ini.'
+    ? t('{user} leads with {comments} comments over the last {days} days — a candidate for a fan/ambassador programme.',
+        { user: sf.username, comments: sf.comments, days: windowDays })
+    : t('No community contributor data in this period yet.')
   return { contributors: list, superFanNote: note }
 }
 
 // ── UGC tagged posts (L0 harmonization) ───────────────────────────────────────
-async function ugcPosts(orgId: string, w: Window, brandId: string | null) {
+async function ugcPosts(orgId: string, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{
     username: string; post_type: string | null; caption: string | null
     likes: number; comments: number; post_date: Date; link: string | null
@@ -362,15 +448,16 @@ async function ugcPosts(orgId: string, w: Window, brandId: string | null) {
   const ugc: UgcPost[] = rows.map(r => ({
     username: r.username?.startsWith('@') ? r.username : `@${r.username ?? 'unknown'}`,
     format: UGC_FORMAT[r.post_type ?? ''] ?? (r.post_type ?? 'Image'),
-    caption: (r.caption ?? '').replace(/\s+/g, ' ').trim() || '(tanpa caption)',
+    caption: (r.caption ?? '').replace(/\s+/g, ' ').trim() || t('(no caption)'),
     likes: r.likes, comments: r.comments, total: r.likes + r.comments,
-    date: fmtShort(new Date(r.post_date)),
+    date: fmtShort(new Date(r.post_date), t),
     link: r.link,
   }))
   const avg = ugc.length ? Math.round(ugc.reduce((s, p) => s + p.total, 0) / ugc.length) : 0
   const insight = ugc.length
-    ? `Post tagged dari audiens rata-rata meraih ${fmtNum(avg)} interaksi — repost UGC berperforma tinggi adalah pengganda reach termurah.`
-    : 'Belum ada UGC tagged post pada periode ini.'
+    ? t('Tagged posts from the audience average {avg} interactions — reposting high-performing UGC is the cheapest reach multiplier available.',
+        { avg: fmtNum(avg) })
+    : t('No tagged UGC posts in this period yet.')
   return { ugc, ugcInsight: insight }
 }
 
@@ -378,6 +465,9 @@ async function ugcPosts(orgId: string, w: Window, brandId: string | null) {
 export async function getAudienceData(
   orgId: string, platform: PlatformParam, days: number, brandId: string | null = null,
   custom: CustomRange | null = null,
+  // Insight sentences and KPI labels are composed here, so the language has to
+  // reach this far in — the client cannot translate a sentence it did not build.
+  t: Translator = (k: string) => k,
 ): Promise<AudiencePayload> {
   const win = await resolveWindows(orgId, platform, days, brandId, custom)
   if (!win) {
@@ -390,16 +480,16 @@ export async function getAudienceData(
   const [curP, prevP, age, gender, cities, trend, rel, contrib, ugc] = await Promise.all([
     profileDaily(orgId, platform, win.cur, brandId),
     profileDaily(orgId, platform, win.prev, brandId),
-    ageDistribution(orgId, platform, brandId),
+    ageDistribution(orgId, platform, brandId, t),
     genderSplit(orgId, platform, brandId),
     topCities(orgId, platform, brandId),
-    followerTrend(orgId, platform, win.cur, brandId),
-    commentRelevance(orgId, platform, brandId),
-    contributors(orgId, platform, days, brandId),
-    ugcPosts(orgId, win.cur, brandId),
+    followerTrend(orgId, platform, win.cur, brandId, t),
+    commentRelevance(orgId, platform, brandId, t),
+    contributors(orgId, platform, days, brandId, t),
+    ugcPosts(orgId, win.cur, brandId, t),
   ])
   return {
-    kpis: buildKpis(curP, prevP),
+    kpis: buildKpis(curP, prevP, t),
     ...age,
     gender,
     ...rel,

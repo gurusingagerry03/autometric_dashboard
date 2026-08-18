@@ -6,6 +6,7 @@ import type { ReportTemplateRecord } from '@/lib/reports/data/slideModel'
 import { REPORT_FONTS, FONT_META, fontStack } from '@/lib/reports/data/fonts'
 import { MONTHS, YEARS } from './constants'
 import { PJ, Label, Field } from './ui'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 export default function SetupStep(props: {
   brands: DashBrand[]
@@ -18,9 +19,10 @@ export default function SetupStep(props: {
   availablePeriods?: { year: number; month: number }[] | null
   onContinue: () => void
 }) {
+  const t = useT()
   const noBrands = props.brands.length === 0
   const [pickedId, setPickedId] = useState('')
-  const applied = props.templates.find(t => t.id === pickedId)
+  const applied = props.templates.find(tpl => tpl.id === pickedId)
 
   // Periods with data (null = still loading → don't disable anything yet). Years
   // are the fixed recent list merged with any data years so no real period hides.
@@ -34,28 +36,28 @@ export default function SetupStep(props: {
 
   function handlePickTemplate(id: string) {
     if (!id) { setPickedId(''); return }
-    const t = props.templates.find(x => x.id === id)
-    if (t && props.onUseTemplate(t)) setPickedId(id)
+    const tpl = props.templates.find(x => x.id === id)
+    if (tpl && props.onUseTemplate(tpl)) setPickedId(id)
   }
 
   return (
     <div className="max-w-[600px] mx-auto">
       <div className="bg-white rounded-2xl border border-[#e5e7eb] shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-[#f0f1f2]">
-          <h2 style={PJ} className="text-[15px] font-bold text-[#111827]">Report details</h2>
-          <p className="text-[12px] text-[#9ca3af] mt-0.5">Pick the brand and reporting period, then design the cover.</p>
+          <h2 style={PJ} className="text-[15px] font-bold text-[#111827]">{t('Report details')}</h2>
+          <p className="text-[12px] text-[#9ca3af] mt-0.5">{t('Pick the brand and reporting period, then design the cover.')}</p>
         </div>
         <div className="p-6 space-y-5">
           {props.templates.length > 0 && (
             <div className="rounded-xl border border-[#e3ece9] bg-gradient-to-br from-[#F1F2FB] to-[#eef4f7] p-4">
-              <Label>Start from a saved template</Label>
+              <Label>{t('Start from a saved template')}</Label>
               <select
                 value={pickedId}
                 onChange={e => handlePickTemplate(e.target.value)}
                 style={PJ}
                 className="w-full border border-[#cfe0da] rounded-lg px-3 py-2.5 text-[13px] text-[#111827] bg-white focus:border-[#1B8A80] focus:outline-none"
               >
-                <option value="">Blank — build from scratch</option>
+                <option value="">{t('Blank — build from scratch')}</option>
                 {props.templates.map(t => (
                   <option key={t.id} value={t.id}>{t.name} · {t.slideCount} slide{t.slideCount !== 1 ? 's' : ''}</option>
                 ))}
@@ -72,7 +74,7 @@ export default function SetupStep(props: {
           )}
 
           <div>
-            <Label>Brand</Label>
+            <Label>{t('Brand')}</Label>
             <select
               value={props.brandId}
               onChange={e => props.onBrand(e.target.value)}
@@ -81,7 +83,7 @@ export default function SetupStep(props: {
               className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-[13px] text-[#111827] bg-white focus:border-[#1B8A80] focus:outline-none disabled:bg-[#f9fafb] disabled:text-[#9ca3af]"
             >
               {noBrands
-                ? <option value="">No brands connected</option>
+                ? <option value="">{t('No brands connected')}</option>
                 : props.brands.map(b => (
                     <option key={b.id} value={b.id}>{b.handle ? `${b.name} · ${b.handle}` : b.name}</option>
                   ))}
@@ -94,7 +96,7 @@ export default function SetupStep(props: {
           </div>
 
           <div>
-            <Label>Period</Label>
+            <Label>{t('Period')}</Label>
             <div className="grid grid-cols-2 gap-3">
               <select
                 value={props.month}
@@ -104,7 +106,7 @@ export default function SetupStep(props: {
               >
                 {MONTHS.map(m => (
                   <option key={m} value={m} disabled={!monthHasData(m)}>
-                    {m}{monthHasData(m) ? '' : ' — no data'}
+                    {t(m)}{monthHasData(m) ? '' : ` — ${t('no data')}`}
                   </option>
                 ))}
               </select>
@@ -122,9 +124,9 @@ export default function SetupStep(props: {
               </select>
             </div>
             {hasPeriodData
-              ? <p className="text-[11px] text-[#9ca3af] mt-1.5">Hanya periode yang punya data yang bisa dipilih.</p>
+              ? <p className="text-[11px] text-[#9ca3af] mt-1.5">{t('Only periods that actually have data can be selected.')}</p>
               : periods
-                ? <p className="text-[11px] text-[#dc2626] mt-1.5">Brand ini belum punya data periode apa pun.</p>
+                ? <p className="text-[11px] text-[#dc2626] mt-1.5">{t('This brand has no data for any period yet.')}</p>
                 : null}
           </div>
 
@@ -132,7 +134,7 @@ export default function SetupStep(props: {
           <Field label="Subtitle" value={props.subtitle} onChange={props.setSubtitle} />
 
           <div>
-            <Label>Font</Label>
+            <Label>{t('Font')}</Label>
             <div className="grid grid-cols-3 gap-2.5">
               {REPORT_FONTS.map(f => {
                 const active = props.font === f
@@ -149,7 +151,7 @@ export default function SetupStep(props: {
                 )
               })}
             </div>
-            <p className="text-[11px] text-[#9ca3af] mt-1.5">Font bawaan Microsoft — PPTX tampil sama persis di PowerPoint.</p>
+            <p className="text-[11px] text-[#9ca3af] mt-1.5">{t('Microsoft stock fonts — the PPTX looks identical in PowerPoint.')}</p>
           </div>
         </div>
         <div className="px-6 py-4 bg-[#fafbfb] border-t border-[#f0f1f2] flex justify-end">

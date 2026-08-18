@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import OrgAvatar from '@/components/organizations/OrgAvatar'
 import { Invitation } from '@/lib/invitations/types'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -21,6 +22,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function InvitationsModal({ invites, onAccept, onDecline, onClose }: Props) {
+  const t = useT()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -37,11 +39,11 @@ export default function InvitationsModal({ invites, onAccept, onDecline, onClose
     try {
       const res  = await fetch(`/api/invitations/${invite.id}`, { method: 'POST' })
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Failed to accept invitation.'); return }
+      if (!res.ok) { setError(json.error ?? t('Failed to accept invitation.')); return }
       onAccept(invite.id)
       router.push(`/organizations/${json.data.org_slug}/dashboard`)
     } catch {
-      setError('Network error. Please try again.')
+      setError(t('Network error. Please try again.'))
     } finally {
       setBusy(null)
     }
@@ -52,10 +54,10 @@ export default function InvitationsModal({ invites, onAccept, onDecline, onClose
     setError('')
     try {
       const res = await fetch(`/api/invitations/${id}`, { method: 'DELETE' })
-      if (!res.ok) { const j = await res.json(); setError(j.error ?? 'Failed to decline.'); return }
+      if (!res.ok) { const j = await res.json(); setError(j.error ?? t('Failed to decline.')); return }
       onDecline(id)
     } catch {
-      setError('Network error. Please try again.')
+      setError(t('Network error. Please try again.'))
     } finally {
       setBusy(null)
     }
@@ -70,7 +72,7 @@ export default function InvitationsModal({ invites, onAccept, onDecline, onClose
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4">
           <div>
-            <h2 style={PJB} className="text-[15px] font-bold text-[#0f172a]">Pending Invitations</h2>
+            <h2 style={PJB} className="text-[15px] font-bold text-[#0f172a]">{t('Pending Invitations')}</h2>
             <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
               {invites.length} invitation{invites.length !== 1 ? 's' : ''} waiting for you
             </p>
@@ -120,7 +122,7 @@ export default function InvitationsModal({ invites, onAccept, onDecline, onClose
                     >
                       {isBusy
                         ? <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Joining…</>
-                        : 'Accept'
+                        : t('Accept')
                       }
                     </button>
                   </div>

@@ -3,6 +3,7 @@
 import { useBrandDetail } from './BrandDetailContext'
 import { PLATFORM_CONFIG } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -11,6 +12,7 @@ function formatDate(d: string) {
 }
 
 export default function BrandOverviewTab() {
+  const t = useT()
   const { brand } = useBrandDetail()
 
   return (
@@ -19,8 +21,8 @@ export default function BrandOverviewTab() {
       {/* Stats row */}
       <div className="grid grid-cols-2 border-b border-[#e5e7eb]">
         {[
-          { label: 'Connected Accounts', value: brand.accounts.length,   icon: 'add_link' },
-          { label: 'Competitors',        value: brand.competitors.length, icon: 'flag'     },
+          { label: t('Connected Accounts'), value: brand.accounts.length,   icon: 'add_link' },
+          { label: t('Competitors'),        value: brand.competitors.length, icon: 'flag'     },
         ].map((s, i) => (
           <div key={s.label} className={`px-6 py-5 ${i < 1 ? 'border-r border-[#e5e7eb]' : ''}`}>
             <div className="flex items-center gap-2 mb-1">
@@ -35,12 +37,12 @@ export default function BrandOverviewTab() {
       {/* Connected Accounts */}
       <div className="border-b border-[#e5e7eb]">
         <div className="px-6 py-4 border-b border-[#e5e7eb]">
-          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Connected Accounts</span>
+          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('Connected Accounts')}</span>
         </div>
         {brand.accounts.length === 0 ? (
           <div className="px-6 py-10 flex flex-col items-center gap-2">
             <span className="material-symbols-outlined text-[32px] text-[#d1d5db]">add_link</span>
-            <p className="text-[13px] text-[#9ca3af]">No accounts connected yet</p>
+            <p className="text-[13px] text-[#9ca3af]">{t('No accounts connected yet')}</p>
           </div>
         ) : (
           brand.accounts.map(acc => (
@@ -64,12 +66,12 @@ export default function BrandOverviewTab() {
       {/* Competitors */}
       <div className="border-b border-[#e5e7eb]">
         <div className="px-6 py-4 border-b border-[#e5e7eb]">
-          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Competitors</span>
+          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('Competitors')}</span>
         </div>
         {brand.competitors.length === 0 ? (
           <div className="px-6 py-10 flex flex-col items-center gap-2">
             <span className="material-symbols-outlined text-[32px] text-[#d1d5db]">flag</span>
-            <p className="text-[13px] text-[#9ca3af]">No competitors tracked yet</p>
+            <p className="text-[13px] text-[#9ca3af]">{t('No competitors tracked yet')}</p>
           </div>
         ) : (
           brand.competitors.map(comp => (
@@ -87,11 +89,11 @@ export default function BrandOverviewTab() {
       {/* Brand Info */}
       <div>
         <div className="px-6 py-4 border-b border-[#e5e7eb]">
-          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Brand Info</span>
+          <span style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('Brand Info')}</span>
         </div>
         <div className="px-6 py-4">
           <div className="flex items-center gap-3">
-            <span style={PJB} className="text-[12px] font-medium text-[#9ca3af] w-24 flex-shrink-0">Created</span>
+            <span style={PJB} className="text-[12px] font-medium text-[#9ca3af] w-24 flex-shrink-0">{t('Created')}</span>
             <span className="text-[13px] text-[#374151]">{formatDate(brand.created_at)}</span>
           </div>
         </div>

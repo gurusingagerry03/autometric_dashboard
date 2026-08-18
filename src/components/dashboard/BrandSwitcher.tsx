@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { fmtNum, PLATFORM_META, type DashBrand } from './data'
 import BrandAvatar from './BrandAvatar'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -12,6 +13,7 @@ export default function BrandSwitcher({ value, brands, onChange, children }: {
   onChange: (b: DashBrand) => void
   children: React.ReactNode
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -33,7 +35,7 @@ export default function BrandSwitcher({ value, brands, onChange, children }: {
       {open && (
         <div className="absolute left-0 top-[calc(100%+8px)] w-[300px] bg-white border border-[#e5e7eb] rounded-xl shadow-xl shadow-black/[0.07] py-1.5 z-30">
           <div className="px-3 pt-1.5 pb-2">
-            <span style={PJ} className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af]">Switch brand</span>
+            <span style={PJ} className="text-[10px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('Switch brand')}</span>
           </div>
           {brands.map(b => {
             const active = b.id === value.id

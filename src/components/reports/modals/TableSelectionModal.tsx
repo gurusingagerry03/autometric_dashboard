@@ -9,6 +9,7 @@ import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import MetricInfo from '@/components/ui/MetricInfo'
 import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
 import CustomMetricModal from './CustomMetricModal'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -33,6 +34,7 @@ export default function TableSelectionModal({
   onConfirm: (config: TableConfig) => void
   onCustomMetricsChanged?: () => void
 }) {
+  const t = useT()
   const [type, setType] = useState(initial?.type ?? defaultTypeFor(channel))
   const [columns, setColumns] = useState<string[]>(
     initial ? normalizeColumnIds(initial.columns) : defaultColumnsFor(defaultTypeFor(channel), channel),
@@ -86,8 +88,8 @@ export default function TableSelectionModal({
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#f0f1f2] flex justify-between items-center">
           <div>
-            <h3 style={PJ} className="font-bold text-[16px] text-[#0f172a]">Configure Data Table</h3>
-            <p className="text-[12px] text-[#94a3b8] mt-0.5">Select a template and customize metrics.</p>
+            <h3 style={PJ} className="font-bold text-[16px] text-[#0f172a]">{t('Configure Data Table')}</h3>
+            <p className="text-[12px] text-[#94a3b8] mt-0.5">{t('Select a template and customize metrics.')}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -134,7 +136,7 @@ export default function TableSelectionModal({
             {isCompetitor && (
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-3">
-                  <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Competitors</h4>
+                  <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Competitors')}</h4>
                   {availableCompetitors.length > 0 && (
                     <button
                       onClick={() => setCompetitorIds(competitorIds.length === allCompIds.length ? [] : allCompIds)}
@@ -167,7 +169,7 @@ export default function TableSelectionModal({
               </div>
             )}
             <div className="flex justify-between items-center mb-3">
-              <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Visible Columns</h4>
+              <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Visible Columns')}</h4>
               <button onClick={() => setColumns(defaultColumnsFor(type, channel))} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold">
                 Reset to Default
               </button>
@@ -192,7 +194,7 @@ export default function TableSelectionModal({
             {showCustom && (
               <div className="mt-5">
                 <div className="flex justify-between items-center mb-3">
-                  <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Custom Metrics</h4>
+                  <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Custom Metrics')}</h4>
                   <button onClick={() => setCmOpen(true)} className="flex items-center gap-1 text-[10.5px] text-[#2C3079] hover:underline font-semibold">
                     <span className="material-symbols-outlined text-[14px]">tune</span>
                     {customMetrics.length ? 'Manage' : 'Create'}
@@ -228,7 +230,7 @@ export default function TableSelectionModal({
         </div>
 
         <div className="p-4 px-6 border-t border-[#f0f1f2] flex justify-end gap-2">
-          <button onClick={onClose} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">Cancel</button>
+          <button onClick={onClose} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">{t('Cancel')}</button>
           <button
             onClick={() => onConfirm(isCompetitor ? { type, columns, competitorIds } : { type, columns })}
             disabled={columns.length === 0}

@@ -8,6 +8,7 @@ import {
 import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
 import CustomMetricModal from './CustomMetricModal'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -28,6 +29,7 @@ export default function ChartSelectionModal({
   onSelect: (config: ChartConfig) => void
   onCustomMetricsChanged?: () => void
 }) {
+  const t = useT()
   const [step, setStep] = useState(1)
   const [category, setCategory] = useState<ChartCategory | null>(null)
   const [dimension, setDimension] = useState<LineDimension | null>(null)
@@ -126,19 +128,19 @@ export default function ChartSelectionModal({
           <div className={`grid ${allowWordCloud ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
             <button onClick={() => { setCategory('line'); setStep(2) }} style={PJ} className={base}>
               <span className="material-symbols-outlined text-[32px] opacity-70">show_chart</span>
-              <span className="text-[14px] font-bold">Line Chart</span>
-              <span className="text-[10px] text-[#94a3b8]">Trends over time</span>
+              <span className="text-[14px] font-bold">{t('Line Chart')}</span>
+              <span className="text-[10px] text-[#94a3b8]">{t('Trends over time')}</span>
             </button>
             <button onClick={() => { setCategory('bar'); setStep(2) }} style={PJ} className={base}>
               <span className="material-symbols-outlined text-[32px] opacity-70">bar_chart</span>
-              <span className="text-[14px] font-bold">Bar Chart</span>
-              <span className="text-[10px] text-[#94a3b8]">Compare values</span>
+              <span className="text-[14px] font-bold">{t('Bar Chart')}</span>
+              <span className="text-[10px] text-[#94a3b8]">{t('Compare values')}</span>
             </button>
             {allowWordCloud && (
               <button onClick={() => { setCategory('wordcloud'); setStep(2) }} style={PJ} className={base}>
                 <span className="material-symbols-outlined text-[32px] opacity-70">cloud</span>
-                <span className="text-[14px] font-bold">Word Cloud</span>
-                <span className="text-[10px] text-[#94a3b8]">Keyword visualization</span>
+                <span className="text-[14px] font-bold">{t('Word Cloud')}</span>
+                <span className="text-[10px] text-[#94a3b8]">{t('Keyword visualization')}</span>
               </button>
             )}
           </div>
@@ -164,13 +166,13 @@ export default function ChartSelectionModal({
           <div className="grid grid-cols-2 gap-4">
             <button onClick={() => { setOrientation('vertical'); setStep(3) }} style={PJ} className={base}>
               <span className="material-symbols-outlined text-[32px] opacity-70">bar_chart</span>
-              <span className="text-[14px] font-bold">Vertical</span>
-              <span className="text-[10px] text-[#94a3b8]">Standard bar chart</span>
+              <span className="text-[14px] font-bold">{t('Vertical')}</span>
+              <span className="text-[10px] text-[#94a3b8]">{t('Standard bar chart')}</span>
             </button>
             <button onClick={() => { setOrientation('horizontal'); setStep(3) }} style={PJ} className={base}>
               <span className="material-symbols-outlined text-[32px] opacity-70 rotate-90">bar_chart</span>
-              <span className="text-[14px] font-bold">Horizontal</span>
-              <span className="text-[10px] text-[#94a3b8]">Horizontal bar chart</span>
+              <span className="text-[14px] font-bold">{t('Horizontal')}</span>
+              <span className="text-[10px] text-[#94a3b8]">{t('Horizontal bar chart')}</span>
             </button>
           </div>
         )}
@@ -250,7 +252,7 @@ export default function ChartSelectionModal({
             {customMetrics.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Custom Metrics</span>
+                  <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Custom Metrics')}</span>
                   <button onClick={() => setCmOpen(true)} className="flex items-center gap-1 text-[10.5px] text-[#2C3079] hover:underline font-semibold">
                     <span className="material-symbols-outlined text-[14px]">tune</span>Manage
                   </button>
@@ -315,7 +317,7 @@ export default function ChartSelectionModal({
                 </span>
                 <span className="material-symbols-outlined text-[15px] opacity-60">compare_arrows</span>
                 <span className="min-w-0">
-                  <span className="block text-[12px] font-semibold">Compare with previous month</span>
+                  <span className="block text-[12px] font-semibold">{t('Compare with previous month')}</span>
                   <span className="block text-[10.5px] text-[#94a3b8]">Each pillar gets a previous-month bar next to this month&rsquo;s</span>
                 </span>
               </button>
@@ -325,7 +327,7 @@ export default function ChartSelectionModal({
               customMetrics.length > 0 ? (
                 <div className="border-t border-[#f0f1f2] pt-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Custom Metrics</span>
+                    <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Custom Metrics')}</span>
                     <button onClick={() => setCmOpen(true)} className="flex items-center gap-1 text-[10.5px] text-[#2C3079] hover:underline font-semibold">
                       <span className="material-symbols-outlined text-[14px]">tune</span>Manage
                     </button>
@@ -353,7 +355,7 @@ export default function ChartSelectionModal({
             {barCategory === 'competitors' && (
               <div className="border-t border-[#f0f1f2] pt-3">
                 <div className="flex justify-between items-center mb-2">
-                  <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Competitors</span>
+                  <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Competitors')}</span>
                   {availableCompetitors.length > 0 && (
                     <button
                       onClick={() => setCompetitorIds(competitorIds.length === allCompIds.length ? [] : allCompIds)}
@@ -364,7 +366,7 @@ export default function ChartSelectionModal({
                   )}
                 </div>
                 {availableCompetitors.length === 0 ? (
-                  <p className="text-[11px] text-[#94a3b8]">Belum ada competitor dengan data untuk channel/periode ini.</p>
+                  <p className="text-[11px] text-[#94a3b8]">{t('No competitor has data for this channel/period yet.')}</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto">
                     {availableCompetitors.map(c => {

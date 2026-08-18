@@ -4,12 +4,14 @@ import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { Brand, CompetitorAccount, Platform, SocialAccount, COMPETITOR_PLATFORM_LIST, PLATFORM_CONFIG } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
+import PlanLimits from '../PlanLimits'
 import { CSV_PLATFORMS } from '@/lib/csv/types'
 import { useOAuthConnect, CONNECT_OPTIONS } from '@/hooks/useOAuthConnect'
 import { COMPETITOR_ADD_ENABLED } from '@/lib/featureFlags'
 import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
 import { pollVerification } from '@/lib/competitors/pollVerification'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -32,10 +34,11 @@ interface PendingItem {
 type Step = 1 | 2 | 3
 
 function StepIndicator({ step }: { step: Step }) {
+  const t = useT()
   const steps = [
-    { n: 1, label: 'Brand Name' },
-    { n: 2, label: 'Connect Accounts' },
-    { n: 3, label: 'Add Competitors' },
+    { n: 1, label: t('Brand Name') },
+    { n: 2, label: t('Connect Accounts') },
+    { n: 3, label: t('Add Competitors') },
   ]
   return (
     <div className="flex items-center px-6 pt-4 pb-3">
@@ -69,6 +72,7 @@ function PlatformPicker({ selected, onSelect, used }: {
   onSelect: (p: Platform) => void
   used: Partial<Record<Platform, number>>
 }) {
+  const t = useT()
   return (
     <div className="flex gap-2">
       {COMPETITOR_PLATFORM_LIST.map(p => {
@@ -79,7 +83,7 @@ function PlatformPicker({ selected, onSelect, used }: {
             key={p}
             type="button"
             disabled={full}
-            title={full ? competitorQuotaMessage(PLATFORM_CONFIG[p].label) : undefined}
+            title={full ? competitorQuotaMessage(PLATFORM_CONFIG[p].label, t) : undefined}
             onClick={() => onSelect(p)}
             className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${
               full
@@ -109,6 +113,7 @@ function AddedList({ items, onRemove, emptyLabel, notFound = [], busy = false }:
   /** Sedang diverifikasi: baris yang belum diputuskan diberi spinner. */
   busy?: boolean
 }) {
+  const t = useT()
   if (items.length === 0) {
     return <p className="text-[12px] text-[#9ca3af] text-center py-2">{emptyLabel}</p>
   }
@@ -129,7 +134,7 @@ function AddedList({ items, onRemove, emptyLabel, notFound = [], busy = false }:
             </span>
             {bad && (
               <span style={PJB} className="text-[10.5px] font-semibold text-[#b91c1c] flex-shrink-0">
-                tidak ditemukan
+                {t('not found')}
               </span>
             )}
             {busy && !bad && (
@@ -149,6 +154,7 @@ function AddedList({ items, onRemove, emptyLabel, notFound = [], busy = false }:
 }
 
 export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
+  const t = useT()
   const [step,    setStep]    = useState<Step>(1)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -193,7 +199,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
   // ── Step 1 ──────────────────────────────────────────────────────
   async function handleStep1() {
     const trimmed = name.trim()
-    if (!trimmed) { setNameErr('Brand name is required.'); return }
+    if (!trimmed) { setNameErr(t('Brand name is required.')); return }
     setLoading(true); setError('')
     try {
       const res  = await fetch(`/api/organizations/${orgId}/brands`, {
@@ -202,11 +208,11 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
         body: JSON.stringify({ name: trimmed }),
       })
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Something went wrong.'); return }
+      if (!res.ok) { setError(json.error ?? t('Something went wrong.')); return }
       setBrandId(json.data.id)
       setStep(2)
     } catch {
-      setError('Something went wrong.')
+      setError(t('Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -239,12 +245,12 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
 
   function addCsvAccount() {
     const u = csvInput.trim().replace(/^@/, '')
-    if (!u) { setCsvErr('Isi username-nya dulu.'); return }
+    if (!u) { setCsvErr(t('Enter the username first.')); return }
     // Cermin validasi server. Keberadaan akunnya diperiksa nanti saat Next
     // (butuh Apify), tapi format salah tidak perlu menunggu selama itu.
     if (!isValidHandle(csvPlatform, u)) { setCsvErr(invalidHandleMessage(csvPlatform, u)); return }
     if (accounts.some(a => a.platform === csvPlatform)) {
-      setCsvErr(`${PLATFORM_CONFIG[csvPlatform].label} sudah punya akun di brand ini.`)
+      setCsvErr(t('{platform} already has an account on this brand.', { platform: PLATFORM_CONFIG[csvPlatform].label }))
       return
     }
     setAccounts(prev => [...prev, { platform: csvPlatform, username: u, dataSource: 'csv' }])
@@ -274,14 +280,14 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
           })
           if (!res.ok) {
             const json = await res.json()
-            setError(json.error ?? 'Failed to connect account.')
+            setError(json.error ?? t('Failed to connect account.'))
             return
           }
         }
       }
       setStep(3)
     } catch {
-      setError('Something went wrong.')
+      setError(t('Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -296,7 +302,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
 
   function addCompetitor() {
     const u = compUsername.trim().replace(/^@/, '')
-    if (!u) { setCompErr('Enter a username.'); return }
+    if (!u) { setCompErr(t('Enter a username.')); return }
     // Cermin validasi server: handle berspasi bikin actor Apify menolak start-run.
     if (!isValidHandle(compPlatform, u)) { setCompErr(invalidHandleMessage(compPlatform, u)); return }
     if ((compUsed[compPlatform] ?? 0) >= MAX_COMPETITORS_PER_PLATFORM) {
@@ -333,7 +339,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
           const json = await res.json().catch(() => ({}))
           // Ditolak sebelum dibuat (format salah / pre-check / kuota) — pesannya
           // sudah spesifik dari server, jadi diperlakukan sama seperti not-found.
-          throw new Error(json.error ?? `Gagal menambahkan @${c.username}.`)
+          throw new Error(json.error ?? t('Failed to add @{username}.', { username: c.username }))
         }
         return (await res.json()).data as CompetitorAccount
       }))
@@ -363,8 +369,8 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
           setNotFound(failed)
           setError(
             failed.length === 1
-              ? `Akun @${failed[0]} tidak ditemukan. Perbaiki atau hapus dari daftar, lalu Finish lagi.`
-              : `${failed.length} akun tidak ditemukan. Perbaiki atau hapus dari daftar, lalu Finish lagi.`,
+              ? t('Account @{username} was not found. Fix it or remove it from the list, then press Finish again.', { username: failed[0] })
+              : t('{count} accounts were not found. Fix them or remove them from the list, then press Finish again.', { count: failed.length }),
           )
           return
         }
@@ -388,7 +394,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
     } catch (err) {
       // Pesan dari server (format handle salah, pre-check, kuota) jauh lebih
       // berguna daripada "Something went wrong" — jangan ditelan.
-      setError(err instanceof Error ? err.message : 'Something went wrong.')
+      setError(err instanceof Error ? err.message : t('Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -402,8 +408,8 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
 
         {/* Header */}
         <div className="px-6 pt-5 pb-0">
-          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">New Brand</h2>
-          <p className="text-[13px] text-[#9ca3af] mt-0.5">Set up your brand in a few quick steps.</p>
+          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('New Brand')}</h2>
+          <p className="text-[13px] text-[#9ca3af] mt-0.5">{t('Set up your brand in a few quick steps.')}</p>
         </div>
 
         <StepIndicator step={step} />
@@ -418,13 +424,13 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                 {initials}
               </div>
               <div>
-                <p style={PJB} className="text-[14px] font-bold text-[#111827]">{name || 'Brand name'}</p>
-                <p className="text-[11px] text-[#9ca3af] mt-0.5">0 accounts · 0 competitors</p>
+                <p style={PJB} className="text-[14px] font-bold text-[#111827]">{name || t('Brand name')}</p>
+                <p className="text-[11px] text-[#9ca3af] mt-0.5">{t('{accounts} accounts · {competitors} competitors', { accounts: 0, competitors: 0 })}</p>
               </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <label style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#6b7280]">
-                Brand name
+                {t('Brand name')}
               </label>
               <input
                 ref={nameRef}
@@ -432,7 +438,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                 value={name}
                 onChange={e => { setName(e.target.value); setNameErr('') }}
                 onKeyDown={e => e.key === 'Enter' && handleStep1()}
-                placeholder="e.g. Nike Indonesia"
+                placeholder={t('e.g. Nike Indonesia')}
                 maxLength={80}
                 className={`h-9 px-3 text-[13.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border rounded-lg outline-none transition-all ${
                   nameErr
@@ -450,8 +456,8 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
         {step === 2 && pending && (
           <div className="px-6 py-6 flex flex-col gap-4">
             <div>
-              <p style={PJB} className="text-[13px] font-semibold text-[#111827]">Confirm account</p>
-              <p className="text-[12px] text-[#9ca3af] mt-0.5">Connect this account to your brand?</p>
+              <p style={PJB} className="text-[13px] font-semibold text-[#111827]">{t('Confirm account')}</p>
+              <p className="text-[12px] text-[#9ca3af] mt-0.5">{t('Connect this account to your brand?')}</p>
             </div>
             <div className="flex items-center gap-4 w-full bg-[#f9fafb] rounded-xl px-4 py-3.5 border border-[#f3f4f6]">
               {pending.payload.avatarUrl ? (
@@ -480,9 +486,11 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
         {step === 2 && !pending && (
           <div className="px-6 py-5 flex flex-col gap-3">
             <div>
-              <p style={PJB} className="text-[13px] font-semibold text-[#111827]">Connect social accounts</p>
-              <p className="text-[12px] text-[#9ca3af] mt-0.5">Connect the platforms you want to track for this brand.</p>
+              <p style={PJB} className="text-[13px] font-semibold text-[#111827]">{t('Connect social accounts')}</p>
+              <p className="text-[12px] text-[#9ca3af] mt-0.5">{t('Connect the platforms you want to track for this brand.')}</p>
             </div>
+
+            <PlanLimits />
 
             <div className="flex flex-col gap-2">
               {CONNECT_OPTIONS.map(opt => {
@@ -521,7 +529,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                           </button>
                         </div>
                       ) : platformTaken ? (
-                        <span style={PJB} className="text-[11px] text-[#9ca3af] flex-shrink-0">Already connected</span>
+                        <span style={PJB} className="text-[11px] text-[#9ca3af] flex-shrink-0">{t('Already connected')}</span>
                       ) : opt.method === 'manual' ? (
                         <button type="button" onClick={() => setTiktokOpen(o => !o)} style={PJB}
                           className="flex items-center gap-0.5 text-[12.5px] font-semibold text-[#1B8A80] flex-shrink-0">
@@ -538,7 +546,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                           style={PJB}
                           className="flex items-center gap-0.5 text-[12.5px] font-semibold text-[#1B8A80] disabled:opacity-40 flex-shrink-0"
                         >
-                          Connect
+                          {t('Connect')}
                           <span className="material-symbols-outlined text-[15px]">chevron_right</span>
                         </button>
                       )}
@@ -553,12 +561,12 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                           value={tiktokInput}
                           onChange={e => setTiktokInput(e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && addTiktokAccount()}
-                          placeholder="@username on TikTok"
+                          placeholder={t('@username on {platform}', { platform: 'TikTok' })}
                           className="flex-1 h-8 px-3 text-[12.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border border-[#e5e7eb] rounded-lg outline-none focus:border-[#1B8A80] focus:ring-2 focus:ring-[#1B8A80]/10 transition-all"
                         />
                         <button type="button" onClick={addTiktokAccount} style={PJB}
                           className="h-8 px-3 bg-[#f3f4f6] hover:bg-[#e5e7eb] text-[12.5px] font-semibold text-[#374151] rounded-lg transition-colors flex-shrink-0">
-                          Add
+                          {t('Add')}
                         </button>
                       </div>
                     )}
@@ -603,7 +611,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                           key={p}
                           type="button"
                           disabled={taken}
-                          title={taken ? `${p} sudah punya akun di brand ini` : undefined}
+                          title={taken ? t('{platform} already has an account on this brand', { platform: PLATFORM_CONFIG[p].label }) : undefined}
                           onClick={() => { setCsvPlatform(p); setCsvErr('') }}
                           className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg border transition-all ${
                             taken
@@ -628,17 +636,17 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                       value={csvInput}
                       onChange={e => { setCsvInput(e.target.value); setCsvErr('') }}
                       onKeyDown={e => e.key === 'Enter' && addCsvAccount()}
-                      placeholder={`@username di ${PLATFORM_CONFIG[csvPlatform].label}`}
+                      placeholder={t('@username on {platform}', { platform: PLATFORM_CONFIG[csvPlatform].label })}
                       className="flex-1 h-8 px-3 text-[12.5px] text-[#111827] placeholder:text-[#d1d5db] bg-white border border-[#e5e7eb] rounded-lg outline-none focus:border-[#1B8A80] focus:ring-2 focus:ring-[#1B8A80]/10 transition-all"
                     />
                     <button type="button" onClick={addCsvAccount} style={PJB}
                       className="h-8 px-3 bg-[#f3f4f6] hover:bg-[#e5e7eb] text-[12.5px] font-semibold text-[#374151] rounded-lg transition-colors flex-shrink-0">
-                      Tambah
+                      {t('Add')}
                     </button>
                   </div>
                   {csvErr && <p className="text-[11px] text-red-500">{csvErr}</p>}
                   <p className="text-[11px] text-[#9ca3af]">
-                    Filenya diupload nanti di tab <span className="font-semibold text-[#6b7280]">Data Sources</span> pada halaman brand.
+                    {t('The file gets uploaded later, in the')} <span className="font-semibold text-[#6b7280]">{t('Data Sources')}</span> {t('tab on the brand page.')}
                   </p>
                 </div>
               )}
@@ -652,7 +660,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                         @{a.username}
                       </span>
                       <span className="text-[10px] font-bold text-[#1B8A80] bg-[#1B8A80]/10 px-1.5 py-0.5 rounded-full">
-                        Manual
+                        {t('Manual')}
                       </span>
                       <button type="button" onClick={() => removeAccount(a.platform)}
                         className="text-[#9ca3af] hover:text-red-400 transition-colors">
@@ -673,9 +681,9 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
         {step === 3 && (
           <div className="px-6 py-5 flex flex-col gap-4">
             <div>
-              <p style={PJB} className="text-[13px] font-semibold text-[#111827]">Add competitors</p>
+              <p style={PJB} className="text-[13px] font-semibold text-[#111827]">{t('Add competitors')}</p>
               <p className="text-[12px] text-[#9ca3af] mt-0.5">
-                Track competitor accounts to benchmark against — up to {MAX_COMPETITORS_PER_PLATFORM} per platform.
+                {t('Track competitor accounts to benchmark against — up to {max} per platform.', { max: MAX_COMPETITORS_PER_PLATFORM })}
               </p>
             </div>
 
@@ -691,7 +699,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                       value={compUsername}
                       onChange={e => { setCompUsername(e.target.value); setCompErr('') }}
                       onKeyDown={e => e.key === 'Enter' && addCompetitor()}
-                      placeholder={`@username on ${PLATFORM_CONFIG[compPlatform].label}`}
+                      placeholder={t('@username on {platform}', { platform: PLATFORM_CONFIG[compPlatform].label })}
                       className={`h-9 px-3 text-[13px] text-[#111827] placeholder:text-[#d1d5db] bg-white border rounded-lg outline-none transition-all ${
                         compErr
                           ? 'border-red-400 focus:border-red-400 focus:ring-2 focus:ring-red-100'
@@ -714,7 +722,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                     setNotFound(prev => prev.filter(u => u !== gone))
                     setError('')
                   }}
-                  emptyLabel="No competitors added yet."
+                  emptyLabel={t('No competitors added yet.')}
                   notFound={notFound}
                   busy={verifying}
                 />
@@ -736,8 +744,8 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
             ) : (
               <div className="rounded-lg border border-dashed border-[#e5e7eb] bg-[#fafafa] px-4 py-6 flex flex-col items-center text-center gap-1">
                 <span className="material-symbols-outlined text-[28px] text-[#cbd1d8]">block</span>
-                <p style={PJB} className="text-[13px] font-semibold text-[#374151]">Penambahan competitor dinonaktifkan sementara</p>
-                <p className="text-[12px] text-[#9ca3af]">Lewati langkah ini — bisa diaktifkan lagi nanti.</p>
+                <p style={PJB} className="text-[13px] font-semibold text-[#374151]">{t('Adding competitors is temporarily disabled')}</p>
+                <p className="text-[12px] text-[#9ca3af]">{t('Skip this step — it can be turned back on later.')}</p>
               </div>
             )}
 
@@ -753,11 +761,11 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
             <>
               <button type="button" onClick={onClose}
                 className="h-8 px-3.5 text-[13px] font-medium text-[#6b7280] hover:text-[#111827] hover:bg-[#f9fafb] rounded-lg transition-colors">
-                Cancel
+                {t('Cancel')}
               </button>
               <button type="button" onClick={handleStep1} disabled={!name.trim() || loading} style={PJB}
                 className="h-8 px-4 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-1.5">
-                {loading ? 'Creating…' : <><span>Next</span><span className="material-symbols-outlined text-[14px]">arrow_forward</span></>}
+                {loading ? t('Creating…') : <><span>{t('Next')}</span><span className="material-symbols-outlined text-[14px]">arrow_forward</span></>}
               </button>
             </>
           )}
@@ -772,8 +780,8 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                 onClick={() => confirmAccount(CONNECT_OPTIONS.find(o => o.method === pending.method) ?? CONNECT_OPTIONS[0])}
                 className="h-8 px-4 bg-[#111827] hover:bg-[#1f2937] disabled:opacity-50 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-2">
                 {oauthLoading ? (
-                  <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Menghubungkan...</>
-                ) : 'Connect'}
+                  <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />{t('Connecting…')}</>
+                ) : t('Connect')}
               </button>
             </>
           )}
@@ -786,7 +794,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
               </button>
               <button type="button" onClick={() => handleStep2(false)} disabled={loading} style={PJB}
                 className="h-8 px-4 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-1.5">
-                {loading ? 'Saving…' : <><span>Next</span><span className="material-symbols-outlined text-[14px]">arrow_forward</span></>}
+                {loading ? t('Saving…') : <><span>{t('Next')}</span><span className="material-symbols-outlined text-[14px]">arrow_forward</span></>}
               </button>
             </>
           )}
@@ -801,7 +809,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
                 className="h-8 px-4 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-1.5">
                 {verifying ? 'Memeriksa…'
                   : loading ? 'Saving…'
-                  : <><span>Finish</span><span className="material-symbols-outlined text-[14px]">check</span></>}
+                  : <><span>{t('Finish')}</span><span className="material-symbols-outlined text-[14px]">check</span></>}
               </button>
             </>
           )}

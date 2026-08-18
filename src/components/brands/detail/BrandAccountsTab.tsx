@@ -6,6 +6,7 @@ import { useBrandDetail } from './BrandDetailContext'
 import { SocialAccount } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
 import ConnectAccountModal from '../modals/ConnectAccountModal'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -14,6 +15,7 @@ function formatDate(d: string) {
 }
 
 export default function BrandAccountsTab() {
+  const t = useT()
   const { brand, addAccount, disconnectAccount } = useBrandDetail()
   const [showConnect,    setShowConnect]    = useState(false)
   const [confirmAccount, setConfirmAccount] = useState<SocialAccount | null>(null)
@@ -35,10 +37,10 @@ export default function BrandAccountsTab() {
 
       <div className="flex items-center justify-between py-4 border-b border-[#e5e7eb] mb-0">
         <div>
-          <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">Connected Accounts</h2>
+          <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">{t('Connected Accounts')}</h2>
           <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
             {brand.accounts.length === 0
-              ? 'No accounts connected yet.'
+              ? t('No accounts connected yet.')
               : `${brand.accounts.length} account${brand.accounts.length !== 1 ? 's' : ''} connected.`}
           </p>
         </div>
@@ -52,8 +54,8 @@ export default function BrandAccountsTab() {
       {brand.accounts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <span className="material-symbols-outlined text-[44px] text-[#e5e7eb]">add_link</span>
-          <p style={PJB} className="text-[14px] font-bold text-[#374151]">No accounts yet</p>
-          <p className="text-[13px] text-[#9ca3af]">Connect a social account to start tracking performance</p>
+          <p style={PJB} className="text-[14px] font-bold text-[#374151]">{t('No accounts yet')}</p>
+          <p className="text-[13px] text-[#9ca3af]">{t('Connect a social account to start tracking performance')}</p>
           <button onClick={() => setShowConnect(true)} style={PJB}
             className="mt-1 flex items-center gap-1.5 h-9 px-4 bg-[#1B8A80] hover:bg-[#177A70] text-white text-[13px] font-semibold rounded-lg transition-colors">
             <span className="material-symbols-outlined text-[15px]">add</span>
@@ -64,7 +66,7 @@ export default function BrandAccountsTab() {
         <div>
           <div className="grid grid-cols-[28px_1fr_1fr_44px] px-0 py-2.5 border-b border-[#e5e7eb] gap-x-4">
             {['', 'Account', 'Connected', ''].map((h, i) => (
-              <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{h}</span>
+              <span key={i} style={PJB} className="text-[10px] font-bold uppercase tracking-widest text-[#c4c9d4]">{t(h)}</span>
             ))}
           </div>
 
@@ -81,7 +83,7 @@ export default function BrandAccountsTab() {
               <span style={PJB} className="text-[12.5px] text-[#6b7280]">
                 {acc.connected_at ? formatDate(acc.connected_at) : '—'}
               </span>
-              <button onClick={() => setConfirmAccount(acc)} title="Disconnect"
+              <button onClick={() => setConfirmAccount(acc)} title={t('Disconnect')}
                 className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#fee2e2] transition-colors text-[#d1d5db] hover:text-[#ef4444]">
                 <span className="material-symbols-outlined text-[16px]">link_off</span>
               </button>
@@ -109,7 +111,7 @@ export default function BrandAccountsTab() {
               <div className="w-14 h-14 rounded-full bg-[#fef2f2] flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-[28px] text-[#ef4444]">link_off</span>
               </div>
-              <p style={PJB} className="text-[17px] font-bold text-[#111827]">Disconnect account?</p>
+              <p style={PJB} className="text-[17px] font-bold text-[#111827]">{t('Disconnect account?')}</p>
               <p className="text-[13px] text-[#9ca3af] mt-1.5 leading-relaxed">
                 This account will be removed from this brand.<br />You can reconnect it anytime.
               </p>

@@ -7,6 +7,7 @@ import { KpiMetric, deltaIsGood, resolveKpiMetric } from '@/lib/reports/data/kpi
 import { useReportKpi, useReportMetrics } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { ChartBlock } from './charts'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const COUNTS = [3, 4, 5, 6]
 
@@ -18,6 +19,7 @@ function sizesFor(n: number) {
 }
 
 function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMetric | undefined; accent: string; count: number; editable: boolean; onClick?: () => void }) {
+  const t = useT()
   const s = sizesFor(count)
   if (!metric) {
     return (
@@ -30,7 +32,7 @@ function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMe
         style={{ background: 'rgba(255,255,255,0.45)' }}
       >
         <span className="material-symbols-outlined" style={{ fontSize: '2.2cqw' }}>add</span>
-        <span style={{ fontSize: s.cap, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', ...PJ }}>Add metric</span>
+        <span style={{ fontSize: s.cap, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', ...PJ }}>{t('Add metric')}</span>
       </button>
     )
   }
@@ -54,14 +56,14 @@ function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMe
       <div style={{ fontSize: s.value, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, ...PJ }}>{metric.value}</div>
       <div className="flex items-center" style={{ gap: '0.6cqw' }}>
         {metric.hasDelta === false ? (
-          <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>No prior-period data</span>
+          <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{t('No prior-period data')}</span>
         ) : (
           <>
             <span className="flex items-center rounded-full" style={{ gap: '0.2cqw', fontSize: s.trend, fontWeight: 800, padding: '0.2cqh 0.7cqw', color: good ? '#16a34a' : '#dc2626', background: good ? '#f0fdf4' : '#fef2f2', ...PJ }}>
               <span className="material-symbols-outlined" style={{ fontSize: `calc(${s.trend} + 0.4cqw)` }}>{metric.delta >= 0 ? 'arrow_outward' : 'south_east'}</span>
               {Math.abs(metric.delta)}%
             </span>
-            <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>vs last period</span>
+            <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{t('vs last period')}</span>
           </>
         )}
       </div>
@@ -83,6 +85,7 @@ export default function KpiSlide({
   onChange?: (next: ContentSlide) => void
   onConfigure?: (block: ConfigBlock) => void
 }) {
+  const t = useT()
   const [countOpen, setCountOpen] = useState(false)
   const count = slide.metricCount
   const kpi = useReportKpi()
@@ -98,7 +101,7 @@ export default function KpiSlide({
         {editable && (
           <button
             onClick={() => setCountOpen(true)}
-            title="Number of metrics"
+            title={t('Number of metrics')}
             className="absolute z-10 flex items-center justify-center rounded-[0.5cqw] bg-white border border-[#e2e8f0] text-[#94a3b8] hover:text-[#2C3079] hover:border-[#cbd5e1] shadow-sm transition-colors"
             style={{ top: '-3cqh', right: 0, width: '2.6cqw', height: '2.6cqw' }}
           >
@@ -137,8 +140,8 @@ export default function KpiSlide({
           <div onClick={e => e.stopPropagation()} className="relative w-full max-w-[380px] bg-white rounded-2xl shadow-[0_24px_60px_rgba(15,23,42,0.30)] p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">Number of metrics</h3>
-                <p className="text-[12px] text-[#94a3b8] mt-0.5">How many scorecards to show.</p>
+                <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{t('Number of metrics')}</h3>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5">{t('How many scorecards to show.')}</p>
               </div>
               <button onClick={() => setCountOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
                 <span className="material-symbols-outlined text-[20px]">close</span>

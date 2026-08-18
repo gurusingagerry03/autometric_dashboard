@@ -9,9 +9,11 @@ import DateRangePicker, {
   MODE_LABEL, type DateSelection,
 } from './DateRangePicker'
 import {
-  PLATFORM_META, PLATFORM_FILTERS, fmtNum,
+  PLATFORM_META, PLATFORM_FILTERS, fmtNum, fmtInt,
   type PlatformFilter, type Period, type DashBrand, type DashPlatform,
 } from './data'
+import ExactValue from '@/components/ui/ExactValue'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -109,6 +111,7 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
   children: (state: ChromeState) => React.ReactNode
 }) {
   const pathname = usePathname()
+  const t = useT()
   const orgSlug = pathname?.split('/').filter(Boolean)[1] ?? '' // /organizations/<slug>/dashboard/...
 
   const [platform, setPlatform] = useState<PlatformFilter>(lockPlatform ?? 'All')
@@ -225,7 +228,7 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
         </div>
         <div className="flex items-center gap-2.5">
           {lockPlatform ? (
-            <div style={PJ} title={`${PLATFORM_META[lockPlatform].label} only`}
+            <div style={PJ} title={t('{platform} only', { platform: PLATFORM_META[lockPlatform].label })}
               className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-[#f3f4f6] text-[12px] font-semibold text-[#6b7280]">
               <img src={PLATFORM_META[lockPlatform].logo} alt={PLATFORM_META[lockPlatform].label} className="w-[17px] h-[17px] object-contain" />
               {PLATFORM_META[lockPlatform].label}
@@ -235,12 +238,12 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
               {PLATFORM_FILTERS.map(p => {
                 const active = platform === p
                 return (
-                  <button key={p} onClick={() => setPlatform(p)} style={PJ} title={p === 'All' ? 'All platforms' : PLATFORM_META[p].label}
+                  <button key={p} onClick={() => setPlatform(p)} style={PJ} title={p === 'All' ? t('All platforms') : PLATFORM_META[p].label}
                     className={`flex items-center justify-center h-7 rounded-md text-[12px] font-semibold transition-colors ${
                       p === 'All' ? 'px-3' : 'w-9'
                     } ${active ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'}`}>
                     {p === 'All'
-                      ? 'All'
+                      ? t('All')
                       : <img src={PLATFORM_META[p].logo} alt={PLATFORM_META[p].label}
                           className={`w-[17px] h-[17px] object-contain transition-opacity ${active ? 'opacity-100' : 'opacity-55'}`} />}
                   </button>
@@ -249,7 +252,7 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
             </div>
           )}
           {range && <DateRangePicker value={range} onChange={handleRange} bounds={bounds} />}
-          <button className="w-9 h-9 flex items-center justify-center bg-white border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:text-[#1B8A80] hover:border-[#d1d5db] transition-colors">
+          <button title={t('Refresh')} className="w-9 h-9 flex items-center justify-center bg-white border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:text-[#1B8A80] hover:border-[#d1d5db] transition-colors">
             <span className="material-symbols-outlined text-[18px]">refresh</span>
           </button>
         </div>
@@ -260,15 +263,15 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
           brands === null ? (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-              <p className="text-[13px] text-[#9ca3af]">Memuat brand…</p>
+              <p className="text-[13px] text-[#9ca3af]">{t('Loading brands…')}</p>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-24 text-center">
               <span className="material-symbols-outlined text-[40px] text-[#d1d5db] mb-2">storefront</span>
               <p className="text-[13px] text-[#6b7280]">
                 {lockPlatform
-                  ? `Belum ada brand dengan akun ${PLATFORM_META[lockPlatform].label} di organisasi ini.`
-                  : 'Belum ada brand di organisasi ini.'}
+                  ? t('No brand in this organization has a {platform} account yet.', { platform: PLATFORM_META[lockPlatform].label })
+                  : t('No brands in this organization yet.')}
               </p>
             </div>
           )
@@ -294,7 +297,8 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
                   <span className="text-[12.5px] text-[#6b7280] font-medium">{brand.handle}</span>
                   <span className="text-[#d1d5db]">·</span>
                   <span className="text-[12.5px] text-[#6b7280]">
-                    <span style={PJ} className="font-bold text-[#374151]">{fmtNum(brand.followers)}</span> followers
+                    <ExactValue display={fmtNum(brand.followers)} exact={fmtInt(brand.followers)}
+                      style={PJ} className="font-bold text-[#374151]" /> {t('followers')}
                   </span>
                 </div>
               </div>
@@ -310,7 +314,7 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-center">
                 <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>
-                <p className="text-[13px] text-[#9ca3af]">Menyiapkan rentang tanggal…</p>
+                <p className="text-[13px] text-[#9ca3af]">{t('Preparing the date range…')}</p>
               </div>
             )}
           </>

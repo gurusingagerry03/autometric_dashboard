@@ -1,3 +1,5 @@
+import type { Translator } from '@/lib/i18n/translate'
+
 /**
  * Verifikasi keberadaan akun competitor.
  *
@@ -76,12 +78,19 @@ export function isValidHandle(platform: string, username: string): boolean {
   return re ? re.test(username) : username.length > 0 && !/\s/.test(username)
 }
 
-export function invalidHandleMessage(platform: string, username: string): string {
+export function invalidHandleMessage(
+  platform: string, username: string,
+  // Thrown server-side as well as shown in the UI, so the translator is optional:
+  // an error persisted in a log stays English, the same message in a modal follows
+  // whatever language the reader picked.
+  t: Translator = (k: string) => k,
+): string {
   const label = PLATFORM_LABEL[platform] ?? platform
   const allowed = platform === 'facebook'
-    ? 'huruf, angka, titik, garis bawah, dan tanda hubung'
-    : 'huruf, angka, titik, dan garis bawah'
-  return `"${username}" bukan username ${label} yang valid — hanya boleh ${allowed}, tanpa spasi.`
+    ? t('letters, numbers, dots, underscores and hyphens')
+    : t('letters, numbers, dots and underscores')
+  return t('"{username}" is not a valid {platform} username — only {allowed} are allowed, with no spaces.',
+    { username, platform: label, allowed })
 }
 
 /**

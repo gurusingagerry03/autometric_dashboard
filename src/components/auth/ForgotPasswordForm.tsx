@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import OtpForm from './OtpForm'
 import PasswordInput from './PasswordInput'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 interface Props {
   onBack: () => void
@@ -16,6 +17,7 @@ interface ResetErrors {
 }
 
 export default function ForgotPasswordForm({ onBack }: Props) {
+  const t = useT()
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
@@ -33,7 +35,7 @@ export default function ForgotPasswordForm({ onBack }: Props) {
       body: JSON.stringify({ email }),
     })
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed to send OTP.')
+    if (!res.ok) throw new Error(data.error || t('Failed to send OTP.'))
   }
 
   async function handleEmailSubmit(e: React.FormEvent) {
@@ -41,11 +43,11 @@ export default function ForgotPasswordForm({ onBack }: Props) {
     setEmailError('')
 
     if (!email.trim()) {
-      setEmailError('Email is required.')
+      setEmailError(t('Email is required.'))
       return
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError('Enter a valid email address.')
+      setEmailError(t('Enter a valid email address.'))
       return
     }
 
@@ -54,7 +56,7 @@ export default function ForgotPasswordForm({ onBack }: Props) {
       await sendOtp()
       setStep('otp')
     } catch (err) {
-      setEmailError(err instanceof Error ? err.message : 'Something went wrong.')
+      setEmailError(err instanceof Error ? err.message : t('Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -66,14 +68,14 @@ export default function ForgotPasswordForm({ onBack }: Props) {
 
     const errs: ResetErrors = {}
     if (!newPassword) {
-      errs.password = 'Password is required.'
+      errs.password = t('Password is required.')
     } else if (newPassword.length < 8) {
-      errs.password = 'Password must be at least 8 characters.'
+      errs.password = t('Password must be at least 8 characters.')
     }
     if (!confirmPassword) {
-      errs.confirmPassword = 'Please confirm your password.'
+      errs.confirmPassword = t('Please confirm your password.')
     } else if (newPassword !== confirmPassword) {
-      errs.confirmPassword = 'Passwords do not match.'
+      errs.confirmPassword = t('Passwords do not match.')
     }
 
     if (Object.keys(errs).length > 0) {
@@ -89,10 +91,10 @@ export default function ForgotPasswordForm({ onBack }: Props) {
         body: JSON.stringify({ email, otp, newPassword, confirmPassword }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Something went wrong.')
+      if (!res.ok) throw new Error(data.error || t('Something went wrong.'))
       setStep('done')
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : 'Something went wrong.')
+      setApiError(err instanceof Error ? err.message : t('Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -112,7 +114,7 @@ export default function ForgotPasswordForm({ onBack }: Props) {
             body: JSON.stringify({ email, otp: enteredOtp }),
           })
           const data = await res.json()
-          if (!res.ok) throw new Error(data.error || 'Verification failed.')
+          if (!res.ok) throw new Error(data.error || t('Verification failed.'))
           setOtp(enteredOtp)
           setStep('reset')
         }}
@@ -133,7 +135,7 @@ export default function ForgotPasswordForm({ onBack }: Props) {
         </div>
 
         <div>
-          <h2 className="font-h2 text-h2 text-on-surface mb-1">Set new password</h2>
+          <h2 className="font-h2 text-h2 text-on-surface mb-1">{t('Set new password')}</h2>
           <p className="font-body-md text-body-md text-on-surface-variant">
             Choose a strong password for your account.
           </p>
@@ -143,8 +145,8 @@ export default function ForgotPasswordForm({ onBack }: Props) {
           <PasswordInput
             id="new-password"
             name="newPassword"
-            label="New Password"
-            placeholder="At least 8 characters"
+            label={t('New Password')}
+            placeholder={t('At least 8 characters')}
             value={newPassword}
             onChange={e => { setNewPassword(e.target.value); setResetErrors(p => ({ ...p, password: undefined })) }}
             hasError={!!resetErrors.password}
@@ -153,8 +155,8 @@ export default function ForgotPasswordForm({ onBack }: Props) {
           <PasswordInput
             id="confirm-password"
             name="confirmPassword"
-            label="Confirm Password"
-            placeholder="Re-enter your password"
+            label={t('Confirm Password')}
+            placeholder={t('Re-enter your password')}
             value={confirmPassword}
             onChange={e => { setConfirmPassword(e.target.value); setResetErrors(p => ({ ...p, confirmPassword: undefined })) }}
             hasError={!!resetErrors.confirmPassword}

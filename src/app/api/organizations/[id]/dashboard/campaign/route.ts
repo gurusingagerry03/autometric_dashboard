@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgMemberById } from '@/lib/reports/access'
 import { getCampaignPosts, getCampaignAnalysis, type PlatformParam } from '@/lib/dashboard/campaign'
+import { langFromRequest } from '@/lib/i18n/server'
+import { translatorFor } from '@/lib/i18n/translate'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     const platform: PlatformParam = PLATFORMS.includes(platformRaw as PlatformParam) ? (platformRaw as PlatformParam) : 'all'
     const brandId = sp.get('brand') || null
 
-    const posts = await getCampaignPosts(orgId, platform, brandId)
+    const posts = await getCampaignPosts(orgId, platform, brandId, translatorFor(await langFromRequest(req.nextUrl)))
     return NextResponse.json({ posts })
   } catch (err) {
     console.error('[GET /api/organizations/[id]/dashboard/campaign]', err)

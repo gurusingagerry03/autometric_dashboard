@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 interface Props {
   orgId: string
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function RenameOrgModal({ orgId, currentName, onClose, onRenamed }: Props) {
+  const t = useT()
   const [name, setName] = useState(currentName)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -22,7 +24,7 @@ export default function RenameOrgModal({ orgId, currentName, onClose, onRenamed 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed) { setError('Name is required.'); return }
+    if (!trimmed) { setError(t('Name is required.')); return }
     if (trimmed === currentName) { onClose(); return }
     onRenamed(orgId, trimmed)
     onClose()
@@ -33,8 +35,8 @@ export default function RenameOrgModal({ orgId, currentName, onClose, onRenamed 
       <div className="absolute inset-0 bg-black/25" onClick={onClose} />
       <div className="relative bg-white rounded-lg w-full max-w-[440px] mx-4 shadow-xl shadow-black/5 border border-[#e5e7eb]">
         <div className="px-6 pt-5 pb-4">
-          <h2 className="text-[15px] font-semibold text-[#111827]">Rename Organization</h2>
-          <p className="text-[13px] text-[#9ca3af] mt-0.5">Update the name for this organization.</p>
+          <h2 className="text-[15px] font-semibold text-[#111827]">{t('Rename Organization')}</h2>
+          <p className="text-[13px] text-[#9ca3af] mt-0.5">{t('Update the name for this organization.')}</p>
         </div>
 
         <div className="border-t border-[#f3f4f6]" />

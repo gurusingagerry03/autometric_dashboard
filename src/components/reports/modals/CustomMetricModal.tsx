@@ -7,6 +7,7 @@ import {
   previewValue, formatMetric, formulaText, isDefinitionValid, hasMixedPrecedence,
 } from '@/lib/reports/data/customMetrics'
 import { createCustomMetric, updateCustomMetric, deleteCustomMetric } from '@/lib/reports/data/customMetricsApi'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -145,13 +146,14 @@ function ListView({
   onDelete: (id: string) => void
   onClose: () => void
 }) {
+  const t = useT()
   return (
     <>
       <div className="flex-1 overflow-y-auto p-4 px-6">
         {metrics.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-8">
             <span className="material-symbols-outlined text-[40px] text-[#cbd5e1] mb-2">calculate</span>
-            <p style={PJ} className="text-[13.5px] font-bold text-[#475569]">No custom metrics yet</p>
+            <p style={PJ} className="text-[13.5px] font-bold text-[#475569]">{t('No custom metrics yet')}</p>
             <p className="text-[12px] text-[#94a3b8] mt-1 max-w-[340px] leading-snug">
               Chain fields with + − × ÷ to build any calculation — e.g. Likes + Comments − Shares —
               and it becomes available as a table column.
@@ -192,7 +194,7 @@ function ListView({
           </button>
           {error && <span className="text-[11.5px] text-[#dc2626]">{error}</span>}
         </div>
-        <button onClick={onClose} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">Done</button>
+        <button onClick={onClose} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">{t('Done')}</button>
       </div>
     </>
   )
@@ -200,6 +202,7 @@ function ListView({
 
 /* ── field dropdown (shared) ───────────────────────────────────────────────────── */
 function FieldSelect({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const t = useT()
   return (
     <div className="relative flex-1 min-w-0">
       <select
@@ -208,7 +211,7 @@ function FieldSelect({ value, onChange }: { value: string; onChange: (id: string
         style={PJ}
         className="w-full appearance-none px-3 py-2.5 pr-8 rounded-lg border border-[#e5e7eb] bg-white text-[12.5px] text-[#334155] outline-none focus:border-[#2C3079] focus:ring-1 focus:ring-[#2C3079] transition-all"
       >
-        <option value="">Select a field…</option>
+        <option value="">{t('Select a field…')}</option>
         {FIELDS_BY_LAYER.map(([layer, fields]) => (
           <optgroup key={layer} label={LAYER_LABEL[layer]}>
             {fields.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
@@ -232,6 +235,7 @@ function EditView({
   onCancel: () => void
   onSave: () => void
 }) {
+  const t = useT()
   const preview = previewValue(draft)
   const mixed = hasMixedPrecedence(draft.terms)
 
@@ -246,11 +250,11 @@ function EditView({
       <div className="flex-1 overflow-y-auto p-4 px-6 space-y-5">
         {/* Name */}
         <div>
-          <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-1.5">Metric name</label>
+          <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-1.5">{t('Metric name')}</label>
           <input
             value={draft.name}
             onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
-            placeholder="e.g. Interaction Score"
+            placeholder={t('e.g. Interaction Score')}
             style={PJ}
             className="w-full px-3 py-2.5 rounded-lg border border-[#e5e7eb] text-[13px] text-[#334155] placeholder:text-[#cbd5e1] outline-none focus:border-[#2C3079] focus:ring-1 focus:ring-[#2C3079] transition-all"
           />
@@ -258,13 +262,13 @@ function EditView({
 
         {/* Expression builder */}
         <div>
-          <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-2">Calculation</label>
+          <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-2">{t('Calculation')}</label>
           <div className="space-y-2">
             {draft.terms.map((term, i) => (
               <div key={i} className="flex items-center gap-2">
                 {/* operator (hidden for the first operand) */}
                 {i === 0 ? (
-                  <span className="w-11 shrink-0 text-center text-[11px] font-semibold text-[#cbd5e1]">start</span>
+                  <span className="w-11 shrink-0 text-center text-[11px] font-semibold text-[#cbd5e1]">{t('start')}</span>
                 ) : (
                   <div className="relative w-11 shrink-0">
                     <select
@@ -280,14 +284,14 @@ function EditView({
                 <div className="flex shrink-0 rounded-lg border border-[#e5e7eb] overflow-hidden h-[40px]">
                   <button
                     onClick={() => setTerm(i, { kind: 'field' })}
-                    title="Use a field"
+                    title={t('Use a field')}
                     className={`w-8 flex items-center justify-center transition-colors ${term.kind === 'field' ? 'bg-[#2C3079] text-white' : 'text-[#94a3b8] hover:bg-[#f1f5f9]'}`}
                   >
                     <span className="material-symbols-outlined text-[17px]">database</span>
                   </button>
                   <button
                     onClick={() => setTerm(i, { kind: 'const' })}
-                    title="Use a number"
+                    title={t('Use a number')}
                     style={PJ}
                     className={`w-8 flex items-center justify-center text-[11px] font-extrabold border-l border-[#e5e7eb] transition-colors ${term.kind === 'const' ? 'bg-[#2C3079] text-white' : 'text-[#94a3b8] hover:bg-[#f1f5f9]'}`}
                   >
@@ -310,7 +314,7 @@ function EditView({
                   onClick={() => removeTerm(i)}
                   disabled={draft.terms.length <= 1}
                   className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-[#b6bcc4] hover:text-[#dc2626] hover:bg-[#fef2f2] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-[#b6bcc4] transition-colors"
-                  title="Remove"
+                  title={t('Remove')}
                 >
                   <span className="material-symbols-outlined text-[18px]">close</span>
                 </button>
@@ -331,7 +335,7 @@ function EditView({
 
         {/* Format */}
         <div>
-          <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-1.5">Format</label>
+          <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-1.5">{t('Format')}</label>
           <div className="relative">
             <select
               value={draft.format}
@@ -348,8 +352,8 @@ function EditView({
         {/* Live preview */}
         <div className="rounded-xl border border-[#e5e7eb] bg-[#fafbfb] p-4">
           <div className="flex items-center justify-between mb-2">
-            <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">Live preview</span>
-            <span className="text-[10px] text-[#b0b8c1]">sample data</span>
+            <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Live preview')}</span>
+            <span className="text-[10px] text-[#b0b8c1]">{t('sample data')}</span>
           </div>
           <p className="text-[12.5px] font-mono text-[#475569]">{formulaText(draft)}</p>
           <p style={PJ} className="text-[26px] font-extrabold text-[#2C3079] mt-1 leading-none">
@@ -360,7 +364,7 @@ function EditView({
 
       <div className="p-4 px-6 border-t border-[#f0f1f2] flex justify-end items-center gap-2">
         {error && <span className="text-[11.5px] text-[#dc2626] mr-auto">{error}</span>}
-        <button onClick={onCancel} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">Cancel</button>
+        <button onClick={onCancel} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">{t('Cancel')}</button>
         <button
           onClick={onSave}
           disabled={!valid || busy}

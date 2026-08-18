@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { OrgMember } from '@/lib/organizations/members'
 import type { UserSearchResult } from '@/app/api/organizations/[id]/members/search/route'
+import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) {
+  const t = useT()
   const [email,        setEmail]        = useState('')
   const [searchState,  setSearchState]  = useState<SearchState>('idle')
   const [searchResult, setSearchResult] = useState<UserSearchResult | null>(null)
@@ -107,11 +109,11 @@ export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) 
         body: JSON.stringify({ email: selected.email, role }),
       })
       const json = await res.json()
-      if (!res.ok) { setSubmitError(json.error ?? 'Something went wrong.'); return }
+      if (!res.ok) { setSubmitError(json.error ?? t('Something went wrong.')); return }
       onInvited(json.data as OrgMember)
       onClose()
     } catch {
-      setSubmitError('Network error. Please try again.')
+      setSubmitError(t('Network error. Please try again.'))
     } finally {
       setSubmitting(false)
     }
@@ -125,8 +127,8 @@ export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) 
 
         {/* ── Header ── */}
         <div className="px-6 pt-5 pb-4">
-          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">Invite Member</h2>
-          <p className="text-[13px] text-[#9ca3af] mt-0.5">Find a user by email, then set their role.</p>
+          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('Invite Member')}</h2>
+          <p className="text-[13px] text-[#9ca3af] mt-0.5">{t('Find a user by email, then set their role.')}</p>
         </div>
 
         <div className="border-t border-[#f3f4f6]" />
@@ -177,7 +179,7 @@ export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) 
                       <p className="text-[12px] text-[#9ca3af] truncate">{searchResult.email}</p>
                     )}
                   </div>
-                  <span className="text-[11px] font-semibold text-[#1B8A80] flex-shrink-0">Select</span>
+                  <span className="text-[11px] font-semibold text-[#1B8A80] flex-shrink-0">{t('Select')}</span>
                 </button>
               )}
 
@@ -189,7 +191,7 @@ export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) 
               )}
 
               {searchState === 'idle' && email.length > 0 && email.length < 4 && (
-                <p className="text-[12px] text-[#b0b8c4]">Keep typing to search…</p>
+                <p className="text-[12px] text-[#b0b8c4]">{t('Keep typing to search…')}</p>
               )}
             </div>
           ) : (
@@ -238,9 +240,9 @@ export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) 
                     }`}
                   >
                     <span style={PJB} className={`text-[13px] font-semibold ${role === opt.value ? 'text-[#2C3079]' : 'text-[#374151]'}`}>
-                      {opt.label}
+                      {t(opt.label)}
                     </span>
-                    <span className="text-[11.5px] text-[#9ca3af]">{opt.desc}</span>
+                    <span className="text-[11.5px] text-[#9ca3af]">{t(opt.desc)}</span>
                   </button>
                 ))}
               </div>
@@ -266,7 +268,7 @@ export default function InviteMemberModal({ orgId, onClose, onInvited }: Props) 
             style={PJB}
             className="h-8 px-4 bg-[#1B8A80] hover:bg-[#177A70] disabled:opacity-40 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-1.5"
           >
-            {submitting ? 'Sending…' : (
+            {submitting ? t('Sending…') : (
               <>
                 <span className="material-symbols-outlined text-[14px]">person_add</span>
                 Send Invite
