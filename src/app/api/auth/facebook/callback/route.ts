@@ -26,12 +26,23 @@ const GRAPH = 'https://graph.facebook.com/v21.0'
 // targetOrigin cocok dengan origin pembuka, jadi kirim ke setiap origin milik kita —
 // yang tidak cocok diabaikan browser. state tidak ditandatangani, jadi kandidat dari
 // state divalidasi dulu supaya token tidak bisa diarahkan ke origin penyerang.
-const DEFAULT_ORIGIN = new URL(APP_URL).origin
-const ALLOWED_ORIGINS = new Set([DEFAULT_ORIGIN, 'http://localhost:3000', 'https://localhost:3000'])
+// NEXT_PUBLIC_APP_URL tidak ada saat `next build` — .env.local dikecualikan
+// .dockerignore dan Dockerfile tidak menyuntikkannya di stage build. Jangan pernah
+// mengurai URL di lingkup modul: itu membuat "Failed to collect page data".
+function appOrigin(): string {
+  try {
+    return new URL(APP_URL).origin
+  } catch {
+    return ''
+  }
+}
 
 function safeTargets(candidate?: unknown): string[] {
-  const targets = new Set<string>([DEFAULT_ORIGIN])
-  if (typeof candidate === 'string' && ALLOWED_ORIGINS.has(candidate)) targets.add(candidate)
+  const origin  = appOrigin()
+  const allowed = new Set([origin, 'http://localhost:3000', 'https://localhost:3000'].filter(Boolean))
+  const targets = new Set<string>()
+  if (origin) targets.add(origin)
+  if (typeof candidate === 'string' && allowed.has(candidate)) targets.add(candidate)
   return [...targets]
 }
 
@@ -236,7 +247,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-function popupPage(error: string | null, targets: string[] = [DEFAULT_ORIGIN], data?: object) {
+function popupPage(error: string | null, targets: string[] = safeTargets(), data?: object) {
   const script = error
     ? `${JSON.stringify(targets)}.forEach(t=>window.opener?.postMessage({type:'OAUTH_ERROR',error:${JSON.stringify(error)}},t));window.close();`
     : `${JSON.stringify(targets)}.forEach(t=>window.opener?.postMessage({type:'OAUTH_CONNECTED',...${JSON.stringify(data)}},t));window.close();`
