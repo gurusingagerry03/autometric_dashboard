@@ -239,7 +239,29 @@
       "PowerShell(npx tsc --noEmit -p tsconfig.json 2>&1 | Select-Object -First 25)",
       "PowerShell(npx eslint \"src/lib/apify/sync.ts\" \"src/lib/competitors/verify.ts\" \"src/app/api/brands/[brandId]/competitors/route.ts\" \"src/app/api/brands/[brandId]/csv/ingest/route.ts\")",
       "PowerShell(npx tsc --noEmit -p tsconfig.json; if \\($?\\) { \"TYPECHECK OK\" })",
-      "PowerShell(gh auth *)"
+      "PowerShell(gh auth *)",
+      "PowerShell(git remote -v; echo \"---SCRIPTS---\"; node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,2\\)\\)\")",
+      "PowerShell(Select-String -Path \"D:\\\\alva\\\\phase 2\\\\Kepiai\\\\autometric_dashboard\\\\src\\\\components\\\\reports\\\\ReportsView.tsx\" -Pattern 'template|Template' | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })",
+      "PowerShell(git commit *)",
+      "PowerShell(git push *)",
+      "PowerShell(git *)",
+      "Bash(sed -i \"s/import { CompetitorAccount, Platform, PLATFORM_CONFIG, PLATFORM_LIST } from '@\\\\/lib\\\\/brands\\\\/types'/import { CompetitorAccount, Platform, PLATFORM_CONFIG, COMPETITOR_PLATFORM_LIST } from '@\\\\/lib\\\\/brands\\\\/types'/\" src/components/brands/modals/CompetitorModal.tsx)",
+      "Bash(sed -i \"s/{PLATFORM_LIST.map\\(p => {/{COMPETITOR_PLATFORM_LIST.map\\(p => {/\" src/components/brands/modals/CompetitorModal.tsx)",
+      "Bash(sed -i \"s/import { Brand, CompetitorAccount, Platform, SocialAccount, PLATFORM_LIST, PLATFORM_CONFIG } from '@\\\\/lib\\\\/brands\\\\/types'/import { Brand, CompetitorAccount, Platform, SocialAccount, COMPETITOR_PLATFORM_LIST, PLATFORM_CONFIG } from '@\\\\/lib\\\\/brands\\\\/types'/\" src/components/brands/modals/CreateBrandModal.tsx)",
+      "Bash(sed -i \"s/{PLATFORM_LIST.map\\(p => {/{COMPETITOR_PLATFORM_LIST.map\\(p => {/\" src/components/brands/modals/CreateBrandModal.tsx)",
+      "Bash(echo \"--- exit $? ---\")",
+      "Bash(PYTHONPATH=./pylibs PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(grep -nE \">[A-Za-z][A-Za-z0-9 ',.…—·&\\(\\)/@?!:%-]{3,}<|\\(title|placeholder\\)=\\\\\\\\{?[\\\\\"'\\\\`][^\\\\\"'\\\\`]+[\\\\\"'\\\\`]|set[A-Za-z]*Err\\(or\\)?\\\\\\\\\\(['\\\\`]|: '[A-Z][a-z]\" src/components/brands/modals/CreateBrandModal.tsx)",
+      "Bash(ssh -V)",
+      "Bash(ping -n 2 10.100.14.69)",
+      "Read(//c/Users/ASUS/.ssh/**)",
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new aan@10.100.14.69 'echo KEY_AUTH_OK; hostname')",
+      "Bash(ssh-keygen -t ed25519 -N \"\" -C \"claude-code@$\\(hostname\\)-autometric-deploy\" -f ~/.ssh/id_ed25519)",
+      "Bash(grep -v '^$')",
+      "Read(//d/alva/**)",
+      "Bash(grep -n \"─\\\\{3,\\\\}\" src/lib/i18n/id.ts)",
+      "Bash(grep -n \"^  /\\\\* \" src/lib/i18n/id.ts)",
+      "Bash(ssh -o BatchMode=yes -o ConnectTimeout=8 aan@10.100.14.69 'echo SSH_KEY_OK; hostname')"
     ]
   }
 }
