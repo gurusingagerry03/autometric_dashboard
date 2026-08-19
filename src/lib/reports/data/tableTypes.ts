@@ -278,12 +278,34 @@ export const TABLE_TYPES: Record<string, TableType> = {
   brand_vs_competitor: {
     id: 'brand_vs_competitor', label: 'Brand vs Competitor', icon: 'group',
     description: 'Compare brand performance against competitors.', rowType: 'competitors', channelScoped: true,
+    // Public metrics only — a competitor is measured by scraping its public
+    // surface, and the three channels do not publish the same things. `channels`
+    // hides a column where the platform never exposes it, so the table shows an
+    // absent metric as absent rather than as a zero.
     columns: [
+      // ── raw ────────────────────────────────────────────────────────────────
+      { id: 'followers', label: 'Followers', format: 'compact' },
       { id: 'followers_growth', label: 'Followers Growth', format: 'compact' },
       { id: 'followers_growth_pct', label: 'Followers Growth %', format: 'percent' },
-      { id: 'post_count', label: 'Post Count', format: 'number' },
+      { id: 'post_count', label: 'Post Count', format: 'number', channels: ['instagram', 'tiktok'] },
+      { id: 'likes', label: 'Likes', format: 'compact' },
+      { id: 'comments', label: 'Comments', format: 'compact', channels: ['instagram', 'tiktok'] },
+      { id: 'shares', label: 'Shares', format: 'compact', channels: ['facebook', 'tiktok'] },
+      { id: 'views', label: 'Views', format: 'compact', channels: ['instagram', 'tiktok'] },
+      { id: 'saves', label: 'Saves', format: 'compact', channels: ['tiktok'] },
       { id: 'engagement', label: 'Engagement', format: 'compact' },
+
+      // ── calculated ─────────────────────────────────────────────────────────
+      { id: 'avg_engagement', label: 'Avg Engagement / Post', format: 'number' },
+      { id: 'avg_likes', label: 'Avg Likes / Post', format: 'number' },
+      { id: 'avg_comments', label: 'Avg Comments / Post', format: 'number', channels: ['instagram', 'tiktok'] },
+      { id: 'avg_shares', label: 'Avg Shares / Post', format: 'number', channels: ['facebook', 'tiktok'] },
+      { id: 'avg_views', label: 'Avg Views / Post', format: 'number', channels: ['instagram', 'tiktok'] },
+      { id: 'avg_saves', label: 'Avg Saves / Post', format: 'number', channels: ['tiktok'] },
       { id: 'er_followers', label: 'ER Followers (%)', format: 'percent' },
+      { id: 'views_per_follower', label: 'Views / Follower', format: 'number', channels: ['instagram', 'tiktok'] },
+
+      // ── brand-only: no public surface exposes a competitor's reach ──────────
       { id: 'post_reach', label: 'Post Reach', format: 'compact' },
       { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
     ],
@@ -379,6 +401,9 @@ export function columnsForChannel(typeId: string, channel: string): TableColumn[
   const def = TABLE_TYPES[typeId]
   if (!def) return []
   if (!def.channelScoped) return def.columns
+  // On "all", only columns without a channel restriction survive — the metrics every
+  // channel publishes. A column scoped to some platforms would otherwise compare a
+  // TikTok-only number against blanks and read as a deficit rather than an absence.
   if (channel === 'all') return def.allColumns ?? def.columns.filter(c => isColumnOnChannel(c, 'all'))
   return def.columns.filter(c => isColumnOnChannel(c, channel))
 }
@@ -399,11 +424,6 @@ export function defaultColumnsFor(typeId: string, channel: string): string[] {
  */
 export function isTypeEnabledForChannel(typeId: string, channel: string): boolean {
   if (!(typeId in TABLE_TYPES) || channel === '') return false
-  // The Brand-vs-Competitor table is inherently per-platform (a competitor lives on
-  // one channel), so it's only available on a specific platform — not on "all".
-  if (typeId === 'brand_vs_competitor') {
-    return channel === 'instagram' || channel === 'facebook' || channel === 'tiktok'
-  }
   // The per-platform comparison tables ARE the cross-channel breakdown, so they only
   // make sense on the "All Channels" view (rows = each platform).
   if (typeId === 'content_by_platform' || typeId === 'channel_by_platform') {

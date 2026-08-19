@@ -78,14 +78,31 @@ export const BAR_CATEGORIES = [
     ],
   },
   {
-    // Only metrics computable for BOTH brand and competitors (public scraping has
-    // no reach, so ER-Reach / Reach are excluded from this comparison category).
+    // Public metrics only — a competitor is measured by scraping its public surface,
+    // so reach-based metrics can never appear here. The three channels also publish
+    // different things (Instagram no shares/saves, Facebook no comments/views, only
+    // TikTok publishes all of them); a metric a channel omits is simply absent from
+    // the entity's map, so its bar is dropped rather than drawn at zero.
     id: 'competitors', label: 'Competitors Comparison', desc: 'Compare with competitors',
     metrics: [
-      { id: 'engagements', label: 'Engagements' },
-      { id: 'avg_engagements', label: 'Avg Engagements' },
+      { id: 'followers', label: 'Followers' },
       { id: 'followers_growth', label: 'Followers Growth' },
       { id: 'followers_growth_pct', label: 'Followers Growth (%)' },
+      { id: 'post_count', label: 'Post Count' },
+      { id: 'likes', label: 'Likes' },
+      { id: 'comments', label: 'Comments' },
+      { id: 'shares', label: 'Shares' },
+      { id: 'views', label: 'Views' },
+      { id: 'saves', label: 'Saves' },
+      { id: 'engagements', label: 'Engagements' },
+      { id: 'avg_engagements', label: 'Avg Engagements' },
+      { id: 'avg_likes', label: 'Avg Likes' },
+      { id: 'avg_comments', label: 'Avg Comments' },
+      { id: 'avg_shares', label: 'Avg Shares' },
+      { id: 'avg_views', label: 'Avg Views' },
+      { id: 'avg_saves', label: 'Avg Saves' },
+      { id: 'er_followers', label: 'ER Followers (%)' },
+      { id: 'views_per_follower', label: 'Views / Follower' },
     ],
   },
 ] as const

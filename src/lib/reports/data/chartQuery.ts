@@ -74,6 +74,8 @@ interface CompChartRow {
   sid: string; username: string; platform: string
   first_foll: number | null; last_foll: number | null
   post_count: number | null; engagement: number | null
+  likes: number | null; comments: number | null; shares: number | null
+  views: number | null; saves: number | null
 }
 type GoldVals = { foll: number | null; pv: number | null; pr: number | null; ng: number | null; nf: number | null; vv: number | null }
 type PostVals = {
@@ -92,15 +94,67 @@ const sumFloatNull = (vals: (number | null | undefined)[]): number | null => {
   for (const v of vals) if (v != null) { s += Number(v); has = true }
   return has ? s : null
 }
-// The four comparable competitor bar metrics from a monthly aggregate (reach-based
-// metrics are excluded — public competitor scraping has none).
-function competitorMetrics(first: number | null, last: number | null, postCount: number | null, eng: number | null): Partial<Record<string, number>> {
+const CHANNEL_LABEL: Record<string, string> = {
+  instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok',
+}
+
+// Public competitor metrics for one monthly aggregate. Reach is absent by nature —
+// no public surface exposes it — and a metric the channel does not publish stays
+// absent from the map entirely, so the bar is omitted rather than drawn at zero.
+interface CompMetricInput {
+  platform: string
+  first: number | null; last: number | null
+  posts: number | null; eng: number | null
+  likes: number | null; comments: number | null; shares: number | null
+  views: number | null; saves: number | null
+}
+
+/**
+ * What each channel exposes on a competitor's PUBLIC surface. The brand's own rows
+ * come from an authenticated API and carry more than this — Instagram reports the
+ * brand's shares and saves, for instance — but the gold competitor rollup stores 0
+ * where the scrape simply cannot see a metric. Charting both sides unfiltered would
+ * draw the brand a tall bar against a competitor's zero and read as "they get no
+ * shares", which is not what the data says. So the comparison is clamped to the
+ * public surface on BOTH sides: same instrument, or no bar at all.
+ */
+const PUBLIC_METRICS: Record<string, ReadonlySet<string>> = {
+  instagram: new Set(['likes', 'comments', 'views']),
+  facebook:  new Set(['likes', 'shares']),
+  tiktok:    new Set(['likes', 'comments', 'shares', 'views', 'saves']),
+}
+
+function competitorMetrics(i: CompMetricInput): Partial<Record<string, number>> {
   const m: Partial<Record<string, number>> = {}
-  const growth = first != null && last != null ? last - first : null
-  if (eng != null) m.engagements = eng
-  if (eng != null && postCount) m.avg_engagements = eng / postCount
-  if (growth != null) m.followers_growth = growth
-  if (growth != null && first) m.followers_growth_pct = (growth / first) * 100
+  const pub = PUBLIC_METRICS[i.platform] ?? PUBLIC_METRICS.instagram
+  const growth = i.first != null && i.last != null ? i.last - i.first : null
+  const put = (key: string, v: number | null) => { if (v != null) m[key] = v }
+  const per = (v: number | null) => (v != null && i.posts ? v / i.posts : null)
+  // Interaction metrics ride the public surface; profile-level ones (followers,
+  // growth, post count) are scrapeable everywhere and need no gate.
+  const putPub = (key: string, term: string, v: number | null) => { if (pub.has(term)) put(key, v) }
+
+  put('followers', i.last)
+  put('followers_growth', growth)
+  put('followers_growth_pct', growth != null && i.first ? (growth / i.first) * 100 : null)
+  put('post_count', i.posts)
+
+  put('engagements', i.eng)
+  putPub('likes', 'likes', i.likes)
+  putPub('comments', 'comments', i.comments)
+  putPub('shares', 'shares', i.shares)
+  putPub('views', 'views', i.views)
+  putPub('saves', 'saves', i.saves)
+
+  put('avg_engagements', per(i.eng))
+  putPub('avg_likes', 'likes', per(i.likes))
+  putPub('avg_comments', 'comments', per(i.comments))
+  putPub('avg_shares', 'shares', per(i.shares))
+  putPub('avg_views', 'views', per(i.views))
+  putPub('avg_saves', 'saves', per(i.saves))
+
+  put('er_followers', i.eng != null && i.posts && i.last ? (i.eng / i.posts / i.last) * 100 : null)
+  putPub('views_per_follower', 'views', per(i.views) != null && i.last ? per(i.views)! / i.last : null)
   return m
 }
 
@@ -445,14 +499,26 @@ export async function getReportChartMetrics(
                    FILTER (WHERE follower_count IS NOT NULL))[1]      AS first_foll,
                 (array_agg(follower_count ORDER BY metric_date DESC)
                    FILTER (WHERE follower_count IS NOT NULL))[1]      AS last_foll,
-                SUM(post_count)::int                                   AS post_count,
-                SUM(like_count + comment_count + share_count)::bigint AS engagement
+                SUM(post_count)::int                                  AS post_count,
+                -- One NULL term would discard the whole row (Facebook publishes no
+                -- comment count, Instagram no share count), so COALESCE per term and
+                -- FILTER so "nothing at all" stays NULL instead of becoming 0.
+                SUM(COALESCE(like_count,0) + COALESCE(comment_count,0) + COALESCE(share_count,0))
+                  FILTER (WHERE like_count IS NOT NULL
+                             OR comment_count IS NOT NULL
+                             OR share_count IS NOT NULL)::bigint      AS engagement,
+                SUM(like_count)::bigint                               AS likes,
+                SUM(comment_count)::bigint                            AS comments,
+                SUM(share_count)::bigint                              AS shares,
+                SUM(view_count)::bigint                               AS views,
+                SUM(save_count)::bigint                               AS saves
            FROM l2_gold.competitor_profile_metric_daily
           WHERE brand_id = $1 AND metric_date >= $2 AND metric_date < $3
           GROUP BY competitor_social_account_id, platform
        )
        SELECT comp.sid, comp.username, comp.platform,
-              agg.first_foll, agg.last_foll, agg.post_count, agg.engagement
+              agg.first_foll, agg.last_foll, agg.post_count, agg.engagement,
+              agg.likes, agg.comments, agg.shares, agg.views, agg.saves
          FROM comp
          LEFT JOIN agg ON agg.sid = comp.sid AND agg.platform = comp.platform
         ORDER BY comp.platform, agg.last_foll DESC NULLS LAST, comp.username`,
@@ -554,18 +620,85 @@ export async function getReportChartMetrics(
     const bLast = goldCur.length ? Number(goldCur[goldCur.length - 1].foll) : null
     const brand: CompetitorChartEntity = {
       id: 'brand', label: brandName,
-      metrics: competitorMetrics(bFirst, bLast, sumFloatNull(postsCur.map(r => r.posts)), sumFloatNull(postsCur.map(r => r.eng))),
+      metrics: competitorMetrics({
+        platform: p,
+        first: bFirst, last: bLast,
+        posts:    sumFloatNull(postsCur.map(r => r.posts)),
+        eng:      sumFloatNull(postsCur.map(r => r.eng)),
+        likes:    sumFloatNull(postsCur.map(r => r.likes)),
+        comments: sumFloatNull(postsCur.map(r => r.comments)),
+        shares:   sumFloatNull(postsCur.map(r => r.shares)),
+        views:    sumFloatNull(postsCur.map(r => r.views)),
+        saves:    sumFloatNull(postsCur.map(r => r.saves)),
+      }),
     }
     const competitors: CompetitorChartEntity[] = compRowsP.map(r => ({
       id: r.sid, label: '@' + r.username,
-      metrics: competitorMetrics(
-        r.first_foll != null ? Number(r.first_foll) : null,
-        r.last_foll != null ? Number(r.last_foll) : null,
-        r.post_count != null ? Number(r.post_count) : null,
-        r.engagement != null ? Number(r.engagement) : null,
-      ),
+      metrics: competitorMetrics({
+        platform: p,
+        first:    r.first_foll  != null ? Number(r.first_foll)  : null,
+        last:     r.last_foll   != null ? Number(r.last_foll)   : null,
+        posts:    r.post_count  != null ? Number(r.post_count)  : null,
+        eng:      r.engagement  != null ? Number(r.engagement)  : null,
+        likes:    r.likes       != null ? Number(r.likes)       : null,
+        comments: r.comments    != null ? Number(r.comments)    : null,
+        shares:   r.shares      != null ? Number(r.shares)      : null,
+        views:    r.views       != null ? Number(r.views)       : null,
+        saves:    r.saves       != null ? Number(r.saves)       : null,
+      }),
     }))
     competitorsOut[p] = { brand, competitors }
+  }
+
+  // "All Channels" bars, mirroring the table's section. Competitor accounts are a
+  // union across platforms (one account lives on one channel), and the brand is
+  // summed. Only metrics that EVERY present platform publishes survive the merge —
+  // summing a TikTok-only metric across channels would present a partial total as a
+  // whole one. Derived values are recomputed from the merged base, never summed:
+  // adding two ratios does not give the ratio of the sums.
+  const presentPlats = Object.keys(competitorsOut) as DashPlatform[]
+  if (presentPlats.length > 0) {
+    const BASE = ['followers', 'followers_growth', 'post_count', 'engagements',
+                  'likes', 'comments', 'shares', 'views', 'saves'] as const
+
+    const merged: Partial<Record<string, number>> = {}
+    for (const key of BASE) {
+      const vals = presentPlats.map(pl => competitorsOut[pl]!.brand.metrics[key])
+      if (vals.some(v => v === undefined)) continue   // not published everywhere
+      merged[key] = vals.reduce<number>((a, v) => a + (v ?? 0), 0)
+    }
+
+    const posts = merged.post_count
+    const foll = merged.followers
+    const per = (v: number | undefined) => (v !== undefined && posts ? v / posts : undefined)
+    const set = (k: string, v: number | undefined) => { if (v !== undefined) merged[k] = v }
+
+    const prevFoll = foll !== undefined && merged.followers_growth !== undefined
+      ? foll - merged.followers_growth : undefined
+    set('followers_growth_pct', merged.followers_growth !== undefined && prevFoll
+      ? (merged.followers_growth / prevFoll) * 100 : undefined)
+    set('avg_engagements', per(merged.engagements))
+    set('avg_likes', per(merged.likes))
+    set('avg_comments', per(merged.comments))
+    set('avg_shares', per(merged.shares))
+    set('avg_views', per(merged.views))
+    set('avg_saves', per(merged.saves))
+    set('er_followers', merged.engagements !== undefined && posts && foll
+      ? (merged.engagements / posts / foll) * 100 : undefined)
+    set('views_per_follower', per(merged.views) !== undefined && foll
+      ? per(merged.views)! / foll : undefined)
+
+    const allComps: CompetitorChartEntity[] = []
+    for (const pl of presentPlats) {
+      for (const c of competitorsOut[pl]!.competitors) {
+        allComps.push({ ...c, id: `${pl}:${c.id}`, label: `${c.label} · ${CHANNEL_LABEL[pl]}` })
+      }
+    }
+
+    competitorsOut['all' as DashPlatform] = {
+      brand: { id: 'brand', label: brandName, metrics: merged },
+      competitors: allComps,
+    }
   }
 
   return {

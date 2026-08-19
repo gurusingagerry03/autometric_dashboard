@@ -52,6 +52,8 @@ interface CompRow {
   sid: string; username: string; platform: string
   first_foll: number | null; last_foll: number | null
   post_count: number | null; engagement: number | null
+  likes: number | null; comments: number | null; shares: number | null
+  views: number | null; saves: number | null
 }
 
 // ── per-window aggregates ────────────────────────────────────────────────────
@@ -396,6 +398,18 @@ function buildSection(
   return out
 }
 
+// Per-post average that keeps a sub-1 value visible instead of collapsing to 0,
+// and stays null when the metric itself is absent (a channel that never publishes
+// it) rather than reporting a fabricated zero.
+function perPost(total: number | null, posts: number | null): number | null {
+  if (total == null || !posts) return null
+  return total / posts
+}
+
+const CHANNEL_LABEL: Record<string, string> = {
+  instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok',
+}
+
 // Brand row of the Brand-vs-Competitor table (current month, one platform).
 // Growth = last − first end-of-day followers in the month (symmetric with the
 // competitor rows). Reach columns are real for the brand (unlike competitors).
@@ -414,12 +428,30 @@ function brandCompetitorValues(pRows: PostRow[], gRows: GoldRow[]): Record<strin
     er_followers:         eng != null && cnt > 0 && last ? (eng / cnt / last) * 100 : null,
     post_reach:           sumOrNull(pRows, 'reach'),
     profile_reach:        goldSumPos(gRows, 'profile_reach_sum'),
+
+    // Public-metric columns, mirrored on the brand row so every column in the
+    // table has a brand baseline to compare the competitors against.
+    followers:            last,
+    likes:                sumOrNull(pRows, 'likes'),
+    comments:             sumOrNull(pRows, 'comments'),
+    shares:               sumOrNull(pRows, 'shares'),
+    views:                sumOrNull(pRows, 'views'),
+    saves:                sumOrNull(pRows, 'saves'),
+    avg_engagement:       perPost(eng, cnt),
+    avg_likes:            perPost(sumOrNull(pRows, 'likes'), cnt),
+    avg_comments:         perPost(sumOrNull(pRows, 'comments'), cnt),
+    avg_shares:           perPost(sumOrNull(pRows, 'shares'), cnt),
+    avg_views:            perPost(sumOrNull(pRows, 'views'), cnt),
+    avg_saves:            perPost(sumOrNull(pRows, 'saves'), cnt),
+    views_per_follower:   perPost(sumOrNull(pRows, 'views'), cnt) != null && last
+                            ? perPost(sumOrNull(pRows, 'views'), cnt)! / last : null,
   }
 }
 
 // One competitor row (current-month gold aggregate). Public scraping has no reach,
 // so post_reach / profile_reach are always null → "—".
 function competitorRowValues(r: CompRow): Record<string, number | null> {
+  const n = (v: number | null) => (v != null ? Number(v) : null)
   const first = r.first_foll != null ? Number(r.first_foll) : null
   const last  = r.last_foll  != null ? Number(r.last_foll)  : null
   const growth = first != null && last != null ? last - first : null
@@ -432,8 +464,24 @@ function competitorRowValues(r: CompRow): Record<string, number | null> {
     engagement:           eng,
     // ER by followers = avg engagement PER POST ÷ followers (see brand row).
     er_followers:         eng != null && cnt && last ? (eng / cnt / last) * 100 : null,
+    // Never published for a competitor — no public surface exposes reach.
     post_reach:           null,
     profile_reach:        null,
+
+    followers:            last,
+    likes:                n(r.likes),
+    comments:             n(r.comments),
+    shares:               n(r.shares),
+    views:                n(r.views),
+    saves:                n(r.saves),
+    avg_engagement:       perPost(eng, cnt),
+    avg_likes:            perPost(n(r.likes), cnt),
+    avg_comments:         perPost(n(r.comments), cnt),
+    avg_shares:           perPost(n(r.shares), cnt),
+    avg_views:            perPost(n(r.views), cnt),
+    avg_saves:            perPost(n(r.saves), cnt),
+    views_per_follower:   perPost(n(r.views), cnt) != null && last
+                            ? perPost(n(r.views), cnt)! / last : null,
   }
 }
 
@@ -511,14 +559,27 @@ export async function getReportTableMetrics(
                  FILTER (WHERE follower_count IS NOT NULL))[1]      AS first_foll,
               (array_agg(follower_count ORDER BY metric_date DESC)
                  FILTER (WHERE follower_count IS NOT NULL))[1]      AS last_foll,
-              SUM(post_count)::int                                   AS post_count,
-              SUM(like_count + comment_count + share_count)::bigint AS engagement
+              SUM(post_count)::int                                  AS post_count,
+              -- Menjumlahkan like+comment+share mentah membuat SATU term NULL
+              -- membuang seluruh barisnya (Facebook tidak mempublikasikan comment,
+              -- Instagram tidak mempublikasikan share). COALESCE per term, lalu
+              -- FILTER supaya "tidak ada data sama sekali" tetap NULL, bukan 0.
+              SUM(COALESCE(like_count,0) + COALESCE(comment_count,0) + COALESCE(share_count,0))
+                FILTER (WHERE like_count IS NOT NULL
+                           OR comment_count IS NOT NULL
+                           OR share_count IS NOT NULL)::bigint      AS engagement,
+              SUM(like_count)::bigint                               AS likes,
+              SUM(comment_count)::bigint                            AS comments,
+              SUM(share_count)::bigint                              AS shares,
+              SUM(view_count)::bigint                               AS views,
+              SUM(save_count)::bigint                               AS saves
          FROM l2_gold.competitor_profile_metric_daily
         WHERE brand_id = $1 AND metric_date >= $2 AND metric_date < $3
         GROUP BY competitor_social_account_id, platform
      )
      SELECT comp.sid, comp.username, comp.platform,
-            agg.first_foll, agg.last_foll, agg.post_count, agg.engagement
+            agg.first_foll, agg.last_foll, agg.post_count, agg.engagement,
+            agg.likes, agg.comments, agg.shares, agg.views, agg.saves
        FROM comp
        LEFT JOIN agg ON agg.sid = comp.sid AND agg.platform = comp.platform
       ORDER BY comp.platform, agg.last_foll DESC NULLS LAST, comp.username`,
@@ -616,6 +677,59 @@ export async function getReportTableMetrics(
       id: r.sid, label: '@' + r.username, values: competitorRowValues(r),
     }))
     competitors[ch] = { brand, competitors: comps }
+  }
+
+  // "All Channels" section. A competitor account lives on exactly one platform, so
+  // the rows are a UNION across channels, not a merge — two handles that look alike
+  // on different platforms stay separate, and the platform rides in the label.
+  // The brand row is summed over the same platforms so the comparison has a
+  // baseline; rates are recomputed from the summed parts rather than averaged,
+  // because an average of ratios is not the ratio of the totals.
+  const presentChans = Object.keys(competitors) as DashPlatform[]
+  if (presentChans.length > 0) {
+    const SUMMABLE = [
+      'followers', 'followers_growth', 'post_count', 'engagement',
+      'likes', 'comments', 'shares', 'views', 'saves',
+      'post_reach', 'profile_reach',
+    ] as const
+
+    const brandAll: Record<string, number | null> = {}
+    for (const key of SUMMABLE) {
+      let total = 0, seen = false
+      for (const ch of presentChans) {
+        const v = competitors[ch]!.brand.values[key]
+        if (v != null) { total += v; seen = true }
+      }
+      brandAll[key] = seen ? total : null
+    }
+
+    const posts = brandAll.post_count
+    const foll = brandAll.followers
+    const eng = brandAll.engagement
+    const per = (v: number | null) => (v != null && posts ? v / posts : null)
+    brandAll.followers_growth_pct =
+      brandAll.followers_growth != null && foll && foll - brandAll.followers_growth !== 0
+        ? (brandAll.followers_growth / (foll - brandAll.followers_growth)) * 100 : null
+    brandAll.avg_engagement = per(eng)
+    brandAll.avg_likes = per(brandAll.likes)
+    brandAll.avg_comments = per(brandAll.comments)
+    brandAll.avg_shares = per(brandAll.shares)
+    brandAll.avg_views = per(brandAll.views)
+    brandAll.avg_saves = per(brandAll.saves)
+    brandAll.er_followers = eng != null && posts && foll ? (eng / posts / foll) * 100 : null
+    brandAll.views_per_follower = per(brandAll.views) != null && foll ? per(brandAll.views)! / foll : null
+
+    const allComps: CompetitorEntity[] = []
+    for (const ch of presentChans) {
+      for (const c of competitors[ch]!.competitors) {
+        allComps.push({ ...c, id: `${ch}:${c.id}`, label: `${c.label} · ${CHANNEL_LABEL[ch]}` })
+      }
+    }
+
+    competitors['all' as DashPlatform] = {
+      brand: { id: 'brand', label: brandName, values: brandAll },
+      competitors: allComps,
+    }
   }
 
   // Column defs for the selected-column picker + table headers (id/label/format).
