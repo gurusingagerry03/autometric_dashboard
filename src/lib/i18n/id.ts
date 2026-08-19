@@ -972,4 +972,8 @@ export const ID: Record<string, string> = {
   'Admin only': 'Khusus admin',
   'Visible to admins only': 'Hanya terlihat oleh admin',
   'No connected accounts': 'Tidak ada akun terhubung',
+  '{name} leads on likes per follower at {rate}% — the one engagement basis all channels publish.':
+    '{name} unggul pada like per pengikut di {rate}% — satu-satunya dasar engagement yang dipublikasikan semua channel.',
+  'Not enough competitor data in this period to rank engagement.':
+    'Data kompetitor pada periode ini belum cukup untuk memeringkat engagement.',
 }
