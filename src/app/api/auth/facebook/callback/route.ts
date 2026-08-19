@@ -19,6 +19,44 @@ function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+const GRAPH = 'https://graph.facebook.com/v21.0'
+
+// Popup mendarat di NEXT_PUBLIC_APP_URL, sedangkan jendela pembukanya bisa berada di
+// origin lain (mis. localhost saat dev di balik tunnel). postMessage hanya terkirim bila
+// targetOrigin cocok dengan origin pembuka, jadi kirim ke setiap origin milik kita —
+// yang tidak cocok diabaikan browser. state tidak ditandatangani, jadi kandidat dari
+// state divalidasi dulu supaya token tidak bisa diarahkan ke origin penyerang.
+const DEFAULT_ORIGIN = new URL(APP_URL).origin
+const ALLOWED_ORIGINS = new Set([DEFAULT_ORIGIN, 'http://localhost:3000', 'https://localhost:3000'])
+
+function safeTargets(candidate?: unknown): string[] {
+  const targets = new Set<string>([DEFAULT_ORIGIN])
+  if (typeof candidate === 'string' && ALLOWED_ORIGINS.has(candidate)) targets.add(candidate)
+  return [...targets]
+}
+
+// /me/accounts hanya memuat Halaman yang menempel di profil pribadi. Lewat Facebook Login
+// for Business, Halaman milik portofolio bisnis tidak muncul di edge itu — Graph balik
+// {"data":[]} dengan HTTP 200 tanpa error. Satu-satunya tempat id-nya terekspos adalah
+// target_ids pada granular_scopes di debug_token.
+async function grantedPageIds(userToken: string): Promise<string[]> {
+  const res  = await fetch(`${GRAPH}/debug_token?input_token=${userToken}&access_token=${APP_ID}|${APP_SECRET}`)
+  const json = await res.json()
+  if (json.error) {
+    console.error('[Facebook callback] debug_token error:', JSON.stringify(json.error))
+    return []
+  }
+
+  const scopes: Array<{ scope: string; target_ids?: string[] }> = json.data?.granular_scopes ?? []
+  const ids = new Set<string>()
+  for (const sc of scopes) {
+    if (sc.scope === 'pages_show_list' || sc.scope === 'pages_read_engagement') {
+      for (const id of sc.target_ids ?? []) ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const code       = searchParams.get('code')
@@ -30,9 +68,11 @@ export async function GET(req: NextRequest) {
   }
 
   let mode: string
+  let targets: string[]
   try {
     const state = JSON.parse(Buffer.from(stateB64, 'base64url').toString())
-    mode = state.mode ?? 'instagram'
+    mode    = state.mode ?? 'instagram'
+    targets = safeTargets(state.origin)
   } catch {
     return popupPage('Invalid state')
   }
@@ -45,7 +85,7 @@ export async function GET(req: NextRequest) {
     )
     const tokenData = await tokenRes.json()
     if (!tokenRes.ok || !tokenData.access_token) {
-      return popupPage(tokenData.error?.message ?? 'Token exchange failed')
+      return popupPage(tokenData.error?.message ?? 'Token exchange failed', targets)
     }
     const shortToken: string = tokenData.access_token
 
@@ -65,9 +105,28 @@ export async function GET(req: NextRequest) {
     // 1. Try personal account Pages (/me/accounts)
     const pagesRes  = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,link&access_token=${userToken}`)
     const pagesData = await pagesRes.json()
+    if (pagesData.error) {
+      console.error('[Facebook callback] /me/accounts error:', JSON.stringify(pagesData.error))
+    }
     let pages: Array<{ id: string; name: string; access_token: string; link?: string }> = pagesData.data ?? []
 
-    // 2. Fallback: Business-owned Pages via /me/businesses
+    // 2. Fallback: Halaman yang diberikan lewat Business Login (granular scopes)
+    if (pages.length === 0) {
+      const grantedIds = await grantedPageIds(userToken)
+      console.log('[Facebook callback] Page dari granular scopes:', grantedIds.join(',') || '(kosong)')
+
+      for (const id of grantedIds) {
+        const res  = await fetch(`${GRAPH}/${id}?fields=id,name,link,access_token&access_token=${userToken}`)
+        const page = await res.json()
+        if (page.access_token) {
+          pages.push({ id: page.id, name: page.name, access_token: page.access_token, link: page.link })
+        } else {
+          console.error(`[Facebook callback] Halaman ${id} tanpa Page access token:`, JSON.stringify(page.error ?? page))
+        }
+      }
+    }
+
+    // 3. Fallback: Business-owned Pages via /me/businesses (butuh business_management)
     if (pages.length === 0) {
       const bizRes  = await fetch(`https://graph.facebook.com/v21.0/me/businesses?access_token=${userToken}`)
       const bizData = await bizRes.json()
@@ -92,8 +151,32 @@ export async function GET(req: NextRequest) {
     }
 
     if (pages.length === 0) {
-      return popupPage('No Facebook Pages found. Make sure you manage a Facebook Page.')
+      // Graph balik array kosong (bukan error) saat izin tidak diberikan, jadi cek
+      // /me/permissions untuk membedakan "izin ditolak" dari "memang tidak punya Halaman".
+      const permRes  = await fetch(`${GRAPH}/me/permissions?access_token=${userToken}`)
+      const permData = await permRes.json()
+      const perms: Array<{ permission: string; status: string }> = permData.data ?? []
+      const granted = perms.filter(x => x.status === 'granted').map(x => x.permission)
+
+      console.error('[Facebook callback] No Pages resolved.', JSON.stringify({
+        accountsError: pagesData.error ?? null,
+        granted,
+        declined: perms.filter(x => x.status !== 'granted').map(x => x.permission),
+      }))
+
+      if (!granted.includes('pages_show_list')) {
+        return popupPage(
+          'Izin daftar Halaman tidak diberikan. Ulangi koneksi, lalu pastikan Anda mencentang Halaman yang ingin dihubungkan pada layar izin Facebook.',
+          targets
+        )
+      }
+      return popupPage(
+        'Tidak ada Halaman Facebook yang bisa diakses oleh akun ini. Pastikan Anda admin penuh dari Halaman tersebut, lalu ulangi koneksi.',
+        targets
+      )
     }
+
+    console.log('[Facebook callback] Page terkumpul:', pages.map(x => `${x.id}:${x.name}`).join(', '))
 
     // ── Facebook Page mode ──
     if (mode === 'facebook') {
@@ -112,7 +195,7 @@ export async function GET(req: NextRequest) {
         }
       }))
 
-      return selectionPage(options)
+      return selectionPage(options, targets)
     }
 
     // ── Instagram Business mode ──
@@ -125,6 +208,11 @@ export async function GET(req: NextRequest) {
       )
       const igData = await igRes.json()
       const ig     = igData.instagram_business_account
+      console.log(
+        `[Facebook callback] IG di Halaman ${page.id}:`,
+        ig?.username ? `@${ig.username} (${ig.id})` : 'tidak ada',
+        igData.error ? `error=${JSON.stringify(igData.error)}` : ''
+      )
 
       if (ig?.username) {
         igOptions.push({
@@ -139,19 +227,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (igOptions.length === 0) return popupPage('No Instagram Business account found linked to your Facebook Pages.')
-    return selectionPage(igOptions)
+    if (igOptions.length === 0) return popupPage('No Instagram Business account found linked to your Facebook Pages.', targets)
+    return selectionPage(igOptions, targets)
 
   } catch (err) {
     console.error('[Facebook OAuth callback]', err)
-    return popupPage('Something went wrong')
+    return popupPage('Something went wrong', targets)
   }
 }
 
-function popupPage(error: string | null, data?: object) {
+function popupPage(error: string | null, targets: string[] = [DEFAULT_ORIGIN], data?: object) {
   const script = error
-    ? `window.opener?.postMessage({type:'OAUTH_ERROR',error:${JSON.stringify(error)}},window.location.origin);window.close();`
-    : `window.opener?.postMessage({type:'OAUTH_CONNECTED',...${JSON.stringify(data)}},window.location.origin);window.close();`
+    ? `${JSON.stringify(targets)}.forEach(t=>window.opener?.postMessage({type:'OAUTH_ERROR',error:${JSON.stringify(error)}},t));window.close();`
+    : `${JSON.stringify(targets)}.forEach(t=>window.opener?.postMessage({type:'OAUTH_CONNECTED',...${JSON.stringify(data)}},t));window.close();`
 
   const html = `<!DOCTYPE html><html><head><title>Connecting…</title></head><body>
 <p style="font-family:sans-serif;text-align:center;margin-top:40px;color:#6b7280">
@@ -163,7 +251,7 @@ function popupPage(error: string | null, data?: object) {
   return new NextResponse(html, { headers: { 'Content-Type': 'text/html' } })
 }
 
-function selectionPage(options: Option[]) {
+function selectionPage(options: Option[], targets: string[]) {
   const safeOpts = JSON.stringify(options).replace(/<\/script>/gi, '<\\/script>')
 
   const items = options.map((opt, i) => `
@@ -220,12 +308,13 @@ body{margin:0;font-family:-apple-system,'Segoe UI',sans-serif;background:#f9fafb
   <p>Connecting…</p>
 </div>
 <script>
-const O=${safeOpts};
+const O=${safeOpts},TARGETS=${JSON.stringify(targets)};
 function pick(i){
   document.getElementById('list').style.display='none';
   document.getElementById('overlay').classList.add('on');
   const o=O[i];
-  window.opener?.postMessage({type:'OAUTH_CONNECTED',platform:o.platform,platformUserId:o.platformUserId,username:o.username,avatarUrl:o.avatarUrl,profileUrl:o.profileUrl,oauthToken:o.oauthToken,tokenExpiresAt:o.tokenExpiresAt},window.location.origin);
+  const msg={type:'OAUTH_CONNECTED',platform:o.platform,platformUserId:o.platformUserId,username:o.username,avatarUrl:o.avatarUrl,profileUrl:o.profileUrl,oauthToken:o.oauthToken,tokenExpiresAt:o.tokenExpiresAt};
+  TARGETS.forEach(t=>window.opener?.postMessage(msg,t));
   setTimeout(()=>window.close(),400);
 }
 </script>

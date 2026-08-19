@@ -15,7 +15,14 @@ const SCOPES = [
 ].join(',')
 
 export async function GET(req: NextRequest) {
-  const { searchParams, origin } = new URL(req.url)
+  const { searchParams } = new URL(req.url)
+
+  // Di balik tunnel/proxy, req.url memuat host internal (mis. localhost:3000), bukan
+  // domain yang dilihat browser. Popup memakai origin ini sebagai target postMessage,
+  // jadi harus diambil dari header yang diteruskan proxy.
+  const fwdHost  = req.headers.get('x-forwarded-host') ?? req.headers.get('host')
+  const fwdProto = req.headers.get('x-forwarded-proto') ?? 'https'
+  const origin   = fwdHost ? `${fwdProto}://${fwdHost}` : new URL(req.url).origin
   const brandId = searchParams.get('brandId')
   const mode    = searchParams.get('mode') ?? 'instagram'   // 'instagram' | 'facebook'
   if (!brandId) return NextResponse.json({ error: 'brandId required' }, { status: 400 })
