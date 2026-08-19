@@ -159,6 +159,15 @@ async function funnel(orgId: string, platform: PlatformParam, w: Window, brandId
   return { funnel: steps, funnelInsight: insight }
 }
 
+// Rata-rata di bawah 1 lenyap jadi 0 kalau dibulatkan ke bilangan bulat — dan replies
+// per story memang sering begitu (mis. 1 reply / 24 story). Simpan dua desimal untuk
+// nilai kecil supaya angkanya tidak terbaca "tidak ada data".
+function avgPerStory(sum: number, count: number): number {
+  if (count <= 0) return 0
+  const v = sum / count
+  return v > 0 && v < 1 ? Math.round(v * 100) / 100 : Math.round(v)
+}
+
 async function typePerf(orgId: string, platform: PlatformParam, w: Window, brandId: string | null, t: Translator) {
   const { rows } = await pool.query<{ story_type: string; reach: number; replies: number; cnt: number }>(
     `SELECT s.story_type,
@@ -176,8 +185,8 @@ async function typePerf(orgId: string, platform: PlatformParam, w: Window, brand
   )
   const types: StoryTypeRow[] = rows.map(r => ({
     type: t(TYPE_LABEL[r.story_type] ?? r.story_type),
-    reach: Math.round(r.cnt > 0 ? r.reach / r.cnt : 0),
-    replies: Math.round(r.cnt > 0 ? r.replies / r.cnt : 0),
+    reach: avgPerStory(r.reach, r.cnt),
+    replies: avgPerStory(r.replies, r.cnt),
   }))
   // finding: type with the highest replies-per-reach (interaction efficiency)
   const ranked = rows
