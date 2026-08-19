@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import BrandSwitcher from './BrandSwitcher'
 import BrandAvatar from './BrandAvatar'
+import { usePipelineStatus, PipelinePanel, PipelineStrip } from './DataPipelineStatus'
 import DateRangePicker, {
   fmtSelection, isRangeMode, resolveSelection, withResolved,
   MODE_LABEL, type DateSelection,
@@ -152,12 +153,27 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
     return () => { cancelled = true }
   }, [orgSlug])
 
+  /**
+   * Progres pipeline brand terpilih (scrape awal → Silver → Gold). Selama belum
+   * siap, tab tidak punya apa-apa untuk digambar — panel progres yang menggantikan
+   * isinya, atau strip tipis kalau brand-nya sudah punya data lama.
+   *
+   * Saat statusnya berubah jadi siap, `dataNonce` naik: itu memaksa lookup rentang
+   * tanggal dijalankan ulang dan me-remount tab, karena fetch pertama tadi dijawab
+   * tabel Gold yang saat itu masih kosong.
+   */
+  const brandId = brand?.id
+  const [dataNonce, setDataNonce] = useState(0)
+  const { status: pipeline, refresh: refreshPipeline } = usePipelineStatus(
+    brandId,
+    () => setDataNonce(n => n + 1),
+  )
+
   // Earliest/latest metric_date for the current brand + platform. Feeds the
   // picker's data-availability hint, and seeds the opening range for a brand the
   // user hasn't picked dates for yet: the last 30 days that actually have data,
   // rather than the last 30 calendar days, so a brand whose scrape lags doesn't
   // open on an empty dashboard.
-  const brandId = brand?.id
   useEffect(() => {
     if (!orgSlug || !brandId) { setBounds(null); return }
     let cancelled = false
@@ -180,7 +196,7 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
       })
       .catch(() => { if (!cancelled) { setBounds(null); seedFallback() } })
     return () => { cancelled = true }
-  }, [orgSlug, brandId, platform])
+  }, [orgSlug, brandId, platform, dataNonce])
 
   // No bounds to seed from (no data, or the lookup failed) — fall back to the
   // last 30 calendar days so the tabs still get a concrete range to query.
@@ -210,6 +226,9 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
   const resolved = range ? resolveSelection(range) : null
   const start = resolved?.start ?? null
   const end = resolved?.end ?? null
+
+  const preparingPipeline = !!pipeline && pipeline.state !== 'ready' && pipeline.state !== 'idle'
+  const blockingPipeline  = preparingPipeline && !pipeline!.hasData
 
   function handleRange(next: DateSelection) {
     rangeChosen.current = true
@@ -306,11 +325,31 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
               </BrandSwitcher>
             </div>
 
-            {/* Hold the tabs until the range is known — firing their fetches
-                without start/end would only make the server guess a window and
-                force an immediate refetch. */}
-            {start && end ? (
-              children({ brand, platform, period: 'Custom', start, end })
+            {/* Data brand belum sampai Gold dan belum ada data lama sama sekali:
+                tab tidak punya apa pun untuk digambar, jadi progres pipeline yang
+                menggantikannya. Kalau brand-nya sudah punya data (mis. akun baru
+                menyusul di brand lama), dashboard tetap tampil dan progresnya
+                cukup jadi strip di atas — menyembunyikan angka yang sudah benar
+                lebih merugikan daripada memberi tahu bahwa ada yang menyusul. */}
+            {blockingPipeline ? (
+              <PipelinePanel
+                status={pipeline!}
+                brandId={brand.id}
+                brandName={brand.name}
+                onRetry={refreshPipeline}
+              />
+            ) : /* Hold the tabs until the range is known — firing their fetches
+                   without start/end would only make the server guess a window and
+                   force an immediate refetch. */
+            start && end ? (
+              <>
+                {preparingPipeline && (
+                  <PipelineStrip status={pipeline!} brandId={brand.id} onRetry={refreshPipeline} />
+                )}
+                <Fragment key={dataNonce}>
+                  {children({ brand, platform, period: 'Custom', start, end })}
+                </Fragment>
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-center">
                 <span className="material-symbols-outlined text-[34px] text-[#cbd1d8] animate-spin mb-2">progress_activity</span>

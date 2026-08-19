@@ -14,10 +14,23 @@ import { checkAccountExists } from '@/lib/accounts/verifyAccount'
 import { initialIgSync } from '@/lib/instagram/sync'
 import { initialTtSync } from '@/lib/tiktok/sync'
 import { initialFbSync } from '@/lib/facebook/sync'
-import { logSyncEntries } from '@/lib/monitoring/logger'
+import { logSyncEntries, logInitialScrape, summarizeScrapeResult } from '@/lib/monitoring/logger'
 
 type Params = { params: Promise<{ brandId: string }> }
 
+/**
+ * Menjalankan scrape awal di latar belakang lalu mencatat hasilnya DUA kali,
+ * karena keduanya punya pembaca yang berbeda:
+ *
+ * - `scheduler_logs` — rincian per kategori, dipakai layar Monitoring.
+ * - `initial_scrape_logs` — satu baris agregat "scrape akun ini sudah tuntas".
+ *   Ini bukan sekadar audit: `new_account_sensor` di Dagster menuntut baris
+ *   success di sini sebelum mau menjalankan procedure Silver/Gold. Tanpa itu,
+ *   akun yang ditambahkan lewat endpoint ini datanya berhenti di l0_raw sampai
+ *   rebuild harian 03:15 — persis yang terjadi sebelum baris ini ditambahkan,
+ *   sementara akun dari wizard brand baru lolos karena wizard-nya memanggil
+ *   endpoint /{platform}/initial-sync yang sudah menulis baris ini.
+ */
 function runInitialSync(
   fn: () => Promise<Record<string, { count: number; error: string | null }>>,
   meta: { platform: string; socialAccountId: string; brandId: string; orgId: string }
@@ -45,6 +58,16 @@ function runInitialSync(
         finishedAt,
       }))
     ).catch(e => console.error('[runInitialSync] log failed:', e))
+
+    await logInitialScrape({
+      socialAccountId: meta.socialAccountId,
+      platform:        meta.platform,
+      brandId:         meta.brandId,
+      orgId:           meta.orgId,
+      ...summarizeScrapeResult(result),
+      startedAt,
+      finishedAt,
+    }).catch(e => console.error('[runInitialSync] initial-scrape log failed:', e))
   }).catch(async (err) => {
     const finishedAt = new Date()
     const msg = err instanceof Error ? err.message : String(err)
@@ -63,6 +86,21 @@ function runInitialSync(
       startedAt,
       finishedAt,
     }]).catch(e => console.error('[runInitialSync] log failed:', e))
+
+    // Kegagalan juga dicatat: baris failed membuat dashboard bisa membedakan
+    // "scrape-nya gagal, ini pesannya" dari "belum ada log sama sekali" (yang
+    // berarti prosesnya mati di tengah jalan dan perlu dijalankan ulang).
+    await logInitialScrape({
+      socialAccountId: meta.socialAccountId,
+      platform:        meta.platform,
+      brandId:         meta.brandId,
+      orgId:           meta.orgId,
+      status:          'failed',
+      recordsSynced:   null,
+      errorMessage:    msg,
+      startedAt,
+      finishedAt,
+    }).catch(e => console.error('[runInitialSync] initial-scrape log failed:', e))
   })
 }
 

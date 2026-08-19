@@ -137,6 +137,39 @@ export const ID: Record<string, string> = {
   'Audience': 'Audiens',
   'Trend': 'Tren',
 
+  /* ── Dashboard: penyiapan data akun baru ──────────────────────────── */
+  'Preparing your data': 'Menyiapkan data',
+  'Data is not ready yet': 'Data belum siap',
+  'We are getting {brand} ready. This happens once, right after an account is connected.':
+    'Data {brand} sedang disiapkan. Ini hanya sekali, setelah akun dihubungkan.',
+  '{brand} has no usable data yet. See what needs attention below.':
+    'Belum ada data yang bisa dipakai untuk {brand}. Cek hal yang perlu ditangani di bawah.',
+  'Collecting account data': 'Mengambil data akun',
+  'Organizing the data': 'Merapikan data',
+  'Calculating metrics': 'Menghitung metrik',
+  '{count} records': '{count} data',
+  'running…': 'berjalan…',
+  'failed': 'gagal',
+  'Running for {duration}': 'Sudah berjalan {duration}',
+  'this page refreshes itself': 'halaman ini menyegar sendiri',
+  'less than a minute': 'kurang dari semenit',
+  '{minutes} minutes': '{minutes} menit',
+  '{hours} hours': '{hours} jam',
+  'This is taking longer than usual. It keeps running in the background — you can leave this page and come back.':
+    'Ini lebih lama dari biasanya. Prosesnya tetap berjalan di belakang layar — halaman ini boleh ditinggal dulu.',
+  'Still preparing newer data': 'Data terbaru masih disiapkan',
+  'Some accounts need attention': 'Ada akun yang perlu ditangani',
+  'Numbers below may be incomplete.': 'Angka di bawah mungkin belum lengkap.',
+  'Details': 'Detail',
+  'Hide': 'Sembunyikan',
+  'We could not collect data from @{username}.': 'Data dari @{username} gagal diambil.',
+  'The first data pull for @{username} never started.':
+    'Pengambilan data pertama untuk @{username} tidak pernah jalan.',
+  '@{username} has no content to analyze yet.': '@{username} belum punya konten untuk dianalisis.',
+  'Try again': 'Coba lagi',
+  'Competitor data: {ready} of {total} ready. The rest arrives with the next daily update.':
+    'Data kompetitor: {ready} dari {total} siap. Sisanya menyusul di pembaruan harian berikutnya.',
+
   /* ── Metric & KPI labels ──────────────────────────────────────────── */
   'Total Reach': 'Total Jangkauan',
   'Total Engagement': 'Total Interaksi',
@@ -593,6 +626,8 @@ export const ID: Record<string, string> = {
   'The file gets uploaded later, in the': 'Filenya diunggah nanti, di tab',
   'tab on the brand page.': 'pada halaman brand.',
   'Your plan limits': 'Batas paket kamu',
+  'Brand limit reached — this organization can have at most {max} brands.':
+    'Batas brand tercapai — organization ini maksimal punya {max} brand.',
   'brands per organization': 'brand per organization',
   'account per platform, per brand': 'akun per platform, per brand',
   'competitors per platform, per brand': 'competitor per platform, per brand',
