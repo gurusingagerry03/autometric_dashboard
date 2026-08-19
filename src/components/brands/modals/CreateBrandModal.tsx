@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { Brand, CompetitorAccount, Platform, SocialAccount, COMPETITOR_PLATFORM_LIST, PLATFORM_CONFIG } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
@@ -12,6 +13,7 @@ import { competitorQuotaMessage } from '@/lib/quotas'
 import { useOrgLimits } from '@/components/organizations/OrgLimitsContext'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
 import { pollVerification } from '@/lib/competitors/pollVerification'
+import { rememberBrand } from '@/components/dashboard/filterStorage'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -158,6 +160,10 @@ function AddedList({ items, onRemove, emptyLabel, notFound = [], busy = false }:
 export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
   const { maxCompetitorsPerPlatform: maxPerPlatform } = useOrgLimits()
   const t = useT()
+  const router = useRouter()
+  // Wizard ini selalu dibuka dari /organizations/[orgSlug]/brands, jadi slug-nya
+  // ada di route — tidak perlu ditambahkan sebagai prop di semua pemanggil.
+  const orgSlug = (useParams()?.orgSlug as string | undefined) ?? ''
   const [step,    setStep]    = useState<Step>(1)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState('')
@@ -394,6 +400,29 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
           .catch(err => console.error('[fb initial-sync]', err))
       }
       onClose()
+
+      /**
+       * Brand yang punya akun langsung dibuka di dashboard, bukan ditinggal di
+       * daftar brand: di sanalah progres penyiapan datanya terlihat, dan itu
+       * satu-satunya hal yang bisa dilihat user beberapa menit ke depan.
+       *
+       * `rememberBrand` wajib duluan — dashboard membuka brand terakhir yang
+       * dipilih dari localStorage, jadi tanpa ini user malah mendarat di brand
+       * lamanya dan brand yang barusan dibuat tidak kelihatan sama sekali.
+       *
+       * Navigasinya `router.push`, BUKAN `location.href`: tiga POST initial-sync
+       * di atas sengaja tidak di-await (masing-masing puluhan detik), dan
+       * navigasi keras akan membatalkannya di tengah jalan — akunnya berakhir
+       * tanpa baris initial_scrape_logs, yang berarti Dagster tidak akan pernah
+       * mengolahnya sampai rebuild malam.
+       *
+       * Brand tanpa akun tetap di halaman daftar: tidak ada data yang sedang
+       * disiapkan, jadi melemparnya ke dashboard kosong tidak menjelaskan apa pun.
+       */
+      if (orgSlug && accounts.length > 0) {
+        rememberBrand(orgSlug, brandId)
+        router.push(`/organizations/${orgSlug}/dashboard/overview`)
+      }
     } catch (err) {
       // Pesan dari server (format handle salah, pre-check, kuota) jauh lebih
       // berguna daripada "Something went wrong" — jangan ditelan.

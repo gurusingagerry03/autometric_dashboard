@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import BrandSwitcher from './BrandSwitcher'
 import BrandAvatar from './BrandAvatar'
 import { usePipelineStatus, PipelinePanel, PipelineStrip } from './DataPipelineStatus'
+import { readFilters, writeFilters, type SavedFilters } from './filterStorage'
 import DateRangePicker, {
   fmtSelection, isRangeMode, resolveSelection, withResolved,
   MODE_LABEL, type DateSelection,
@@ -27,34 +28,6 @@ function defaultRange(min: string, max: string): { start: string; end: string } 
   const start = new Date(end); start.setUTCDate(start.getUTCDate() - 29)
   const minD = new Date(min + 'T00:00:00Z')
   return { start: start < minD ? min : start.toISOString().slice(0, 10), end: max }
-}
-
-// Dashboard filter selection persisted across all tabs of one org via localStorage.
-// Picking a brand/platform/range on any tab carries to the sibling tabs (each tab
-// is a separate route that would otherwise reset to the first brand) and survives a
-// refresh. Keyed by org slug so different orgs don't cross-contaminate.
-interface SavedFilters {
-  brandId?: string
-  platform?: PlatformFilter
-  range?: DateSelection
-  // Pre-picker shape, still read so an existing localStorage entry doesn't reset
-  // the user's dates on first load after deploy. Never written again.
-  period?: Period
-  customStart?: string
-  customEnd?: string
-}
-const FILTER_KEY = (slug: string) => `autometric:dashboard-filters:${slug}`
-
-function readFilters(slug: string): SavedFilters | null {
-  if (typeof window === 'undefined' || !slug) return null
-  try {
-    const raw = window.localStorage.getItem(FILTER_KEY(slug))
-    return raw ? (JSON.parse(raw) as SavedFilters) : null
-  } catch { return null }
-}
-function writeFilters(slug: string, f: SavedFilters) {
-  if (typeof window === 'undefined' || !slug) return
-  try { window.localStorage.setItem(FILTER_KEY(slug), JSON.stringify(f)) } catch { /* quota / private mode — ignore */ }
 }
 
 const LEGACY_MODE: Record<string, DateSelection['mode']> = {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useParams } from 'next/navigation'
 import { PLATFORM_META, type DashPlatform } from './data'
 import { useT } from '@/lib/i18n/LanguageContext'
 import type { AccountProgress, PipelineStatus, StepKey, StepStatus } from '@/lib/brands/pipelineStatus'
@@ -271,6 +272,11 @@ function StepList({ steps, className = '' }: { steps: PipelineStatus['steps']; c
  * tidak pernah utuh — sensor Dagster tidak akan pernah memicu run untuk akun itu
  * sampai scrape-nya diulang. `no_content` tidak: akunnya memang belum punya
  * konten, mengulang scrape tidak mengubah apa pun.
+ *
+ * Akun CSV tidak pernah dapat tombol itu apa pun keadaannya: endpoint
+ * initial-sync butuh token OAuth yang memang tidak dimiliki akun CSV, jadi
+ * tombolnya dijamin gagal. Pemulihannya mengunggah file — makanya yang diberikan
+ * tautan ke tab Data Sources.
  */
 function ProblemRow({ account, brandId, onRetry }: {
   account: AccountProgress
@@ -278,10 +284,13 @@ function ProblemRow({ account, brandId, onRetry }: {
   onRetry: () => void
 }) {
   const t = useT()
+  const params = useParams()
+  const orgSlug = (params?.orgSlug as string | undefined) ?? ''
   const [isPending, startTransition] = useTransition()
   const [err, setErr] = useState<string | null>(null)
   const meta = PLATFORM_META[account.platform as DashPlatform]
-  const canRetry = account.state === 'failed' || account.state === 'stalled'
+  const isCsv = account.dataSource === 'csv'
+  const canRetry = !isCsv && (account.state === 'failed' || account.state === 'stalled')
 
   function retry() {
     setErr(null)
@@ -301,7 +310,10 @@ function ProblemRow({ account, brandId, onRetry }: {
   }
 
   const message =
-    account.state === 'failed'     ? t('We could not collect data from @{username}.', { username: account.username })
+    account.state === 'awaiting_upload' ? t('@{username} gets its data from uploads — nothing has been uploaded yet.', { username: account.username })
+    : account.state === 'failed'     ? (isCsv
+        ? t('The uploaded data for @{username} could not be processed.', { username: account.username })
+        : t('We could not collect data from @{username}.', { username: account.username }))
     : account.state === 'stalled'  ? t('The first data pull for @{username} never started.', { username: account.username })
     : t('@{username} has no content to analyze yet.', { username: account.username })
 
@@ -310,6 +322,14 @@ function ProblemRow({ account, brandId, onRetry }: {
       {meta && <img src={meta.logo} alt={meta.label} className="w-[15px] h-[15px] object-contain mt-0.5 flex-shrink-0" />}
       <div className="min-w-0 flex-1">
         <p className="text-[12px] text-[#374151] leading-snug">{message}</p>
+        {isCsv && orgSlug && (
+          <a href={`/organizations/${orgSlug}/brands/${brandId}/data-sources`}
+             style={PJ}
+             className="inline-flex items-center gap-1 text-[11.5px] font-bold text-[#1B8A80] hover:underline mt-1">
+            <span className="material-symbols-outlined text-[13px]">upload</span>
+            {t('Upload data')}
+          </a>
+        )}
         {account.error && (
           <p className="text-[11px] text-[#9ca3af] mt-0.5 break-words line-clamp-2">{account.error}</p>
         )}

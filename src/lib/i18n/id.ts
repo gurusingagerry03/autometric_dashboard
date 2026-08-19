@@ -166,6 +166,11 @@ export const ID: Record<string, string> = {
   'The first data pull for @{username} never started.':
     'Pengambilan data pertama untuk @{username} tidak pernah jalan.',
   '@{username} has no content to analyze yet.': '@{username} belum punya konten untuk dianalisis.',
+  '@{username} gets its data from uploads — nothing has been uploaded yet.':
+    'Data @{username} berasal dari unggahan — belum ada file yang diunggah.',
+  'The uploaded data for @{username} could not be processed.':
+    'Data yang diunggah untuk @{username} gagal diproses.',
+  // 'Upload data' sudah ada di grup CSV upload di bawah — satu entri saja.
   'Try again': 'Coba lagi',
   'Competitor data: {ready} of {total} ready. The rest arrives with the next daily update.':
     'Data kompetitor: {ready} dari {total} siap. Sisanya menyusul di pembaruan harian berikutnya.',

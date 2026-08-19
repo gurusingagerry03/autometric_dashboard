@@ -48,13 +48,20 @@ export type StepStatus = 'done' | 'running' | 'pending' | 'failed'
  * - `stalled`    sudah lama terhubung tapi belum ada log scrape sama sekali —
  *                indikasi request initial-sync mati di tengah jalan (app restart /
  *                deploy), jadi user ditawari re-run alih-alih menunggu sia-sia
+ * - `awaiting_upload`
+ *                akun CSV yang belum pernah diunggahi file. Tidak ada yang sedang
+ *                menarik data — bolanya di user, di tab Data Sources. Ini kondisi
+ *                tersendiri karena spinner "sedang mengambil data" untuk akun
+ *                seperti ini bukan cuma tidak informatif, tapi bohong.
  */
-export type AccountState = 'done' | 'running' | 'failed' | 'no_content' | 'stalled'
+export type AccountState = 'done' | 'running' | 'failed' | 'no_content' | 'stalled' | 'awaiting_upload'
 
 export interface AccountProgress {
   id:         string
   platform:   Platform
   username:   string
+  /** Akun CSV tidak punya jalur re-scrape — pemulihannya unggah ulang file. */
+  dataSource: 'api' | 'csv'
   state:      AccountState
   /** Langkah yang sedang dikerjakan; null kalau akunnya sudah selesai/berhenti. */
   step:       StepKey | null
@@ -199,17 +206,24 @@ const STEP_ORDER: StepKey[] = ['ingest', 'silver', 'gold']
 
 function progressOf(row: AccountRow, now: number): AccountProgress {
   const base = {
-    id:       row.id,
-    platform: row.platform,
-    username: row.username,
-    records:  row.scrape_records,
-    error:    row.scrape_error,
+    id:         row.id,
+    platform:   row.platform,
+    username:   row.username,
+    dataSource: row.data_source,
+    records:    row.scrape_records,
+    error:      row.scrape_error,
   }
 
   // Gold duluan yang dicek: begitu ada, akun ini selesai apa pun isi lognya —
   // termasuk akun lama yang sudah punya data jauh sebelum logging ada.
   if (row.has_gold)                 return { ...base, state: 'done',       step: null }
   if (row.scrape_status === 'failed') return { ...base, state: 'failed',   step: 'ingest' }
+
+  // Akun CSV tanpa satu pun unggahan: tidak ada proses yang berjalan dan tidak
+  // akan ada, sampai user mengunggah filenya sendiri.
+  if (row.data_source === 'csv' && row.scrape_status === null) {
+    return { ...base, state: 'awaiting_upload', step: null }
+  }
 
   if (row.scrape_status === 'success') {
     if (!row.has_raw)               return { ...base, state: 'no_content', step: null }
@@ -232,6 +246,8 @@ function progressOf(row: AccountRow, now: number): AccountProgress {
 function rankOf(p: AccountProgress): number {
   if (p.state === 'done') return STEP_ORDER.length
   if (p.state === 'no_content') return 1
+  // Menunggu unggahan = belum melewati langkah pertama sama sekali.
+  if (p.state === 'awaiting_upload') return 0
   return p.step ? STEP_ORDER.indexOf(p.step) : STEP_ORDER.length
 }
 
@@ -263,7 +279,7 @@ export async function getBrandPipelineStatus(brandId: string): Promise<PipelineS
 
   const hasData = rows.some(r => r.has_gold)
   const running = accounts.filter(a => a.state === 'running')
-  const stuck   = accounts.filter(a => a.state === 'failed' || a.state === 'stalled' || a.state === 'no_content')
+  const stuck   = accounts.filter(a => a.state !== 'done' && a.state !== 'running')
 
   const state: PipelineStatus['state'] =
     accounts.length === 0                         ? 'idle'
