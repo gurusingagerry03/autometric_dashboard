@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getMemberRole } from '@/lib/organizations/queries'
 import { listBrandsForOrg, createBrand, countBrandsForOrg } from '@/lib/brands/queries'
-import { MAX_BRANDS_PER_ORG, BRAND_QUOTA_MESSAGE } from '@/lib/quotas'
+import { brandQuotaMessage } from '@/lib/quotas'
+import { getOrgLimits } from '@/lib/organizations/limits'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -41,8 +42,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!name) return NextResponse.json({ error: 'Brand name is required.' }, { status: 400 })
     if (name.length > 255) return NextResponse.json({ error: 'Brand name is too long.' }, { status: 400 })
 
-    if (await countBrandsForOrg(id) >= MAX_BRANDS_PER_ORG) {
-      return NextResponse.json({ error: BRAND_QUOTA_MESSAGE }, { status: 409 })
+    // Batas brand diatur admin per organization (/admin/org-limits); org yang
+    // belum pernah diatur memakai default app-wide.
+    const limits = await getOrgLimits(id)
+    if (await countBrandsForOrg(id) >= limits.maxBrands) {
+      return NextResponse.json({ error: brandQuotaMessage(limits.maxBrands) }, { status: 409 })
     }
 
     const brand = await createBrand(id, name)

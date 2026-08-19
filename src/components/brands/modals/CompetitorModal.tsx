@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react'
 import { CompetitorAccount, Platform, PLATFORM_CONFIG, COMPETITOR_PLATFORM_LIST } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
-import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
+import { competitorQuotaMessage } from '@/lib/quotas'
+import { useOrgLimits } from '@/components/organizations/OrgLimitsContext'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -23,6 +24,7 @@ interface Props {
 
 export default function CompetitorModal({ brandName, competitors, onClose, onAdded }: Props) {
   const t = useT()
+  const { maxCompetitorsPerPlatform: maxPerPlatform } = useOrgLimits()
   const [platform, setPlatform] = useState<Platform | null>(null)
   const [username, setUsername] = useState('')
   const [error,    setError]    = useState('')
@@ -38,12 +40,12 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
     return used
   }, [competitors])
 
-  const selectedFull = platform ? (usedPerPlatform[platform] ?? 0) >= MAX_COMPETITORS_PER_PLATFORM : false
+  const selectedFull = platform ? (usedPerPlatform[platform] ?? 0) >= maxPerPlatform : false
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!platform) { setError(t('Select a platform.')); return }
-    if (selectedFull) { setError(competitorQuotaMessage(PLATFORM_CONFIG[platform].label, t)); return }
+    if (selectedFull) { setError(competitorQuotaMessage(PLATFORM_CONFIG[platform].label, maxPerPlatform, t)); return }
     const trimmed = username.trim().replace(/^@/, '')
     if (!trimmed) { setError(t('Enter a username.')); return }
     // Cermin validasi server: handle berspasi bikin actor Apify menolak start-run.
@@ -92,17 +94,17 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
           <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between">
               <label style={PJB} className="text-[11px] font-bold uppercase tracking-widest text-[#6b7280]">{t('Platform')}</label>
-              <span className="text-[11px] text-[#9ca3af]">{t('Max {max} per platform', { max: MAX_COMPETITORS_PER_PLATFORM })}</span>
+              <span className="text-[11px] text-[#9ca3af]">{t('Max {max} per platform', { max: maxPerPlatform })}</span>
             </div>
             <div className="grid grid-cols-5 gap-2">
               {COMPETITOR_PLATFORM_LIST.map(p => {
                 const cfg    = PLATFORM_CONFIG[p]
                 const active = platform === p
                 const used   = usedPerPlatform[p] ?? 0
-                const full   = used >= MAX_COMPETITORS_PER_PLATFORM
+                const full   = used >= maxPerPlatform
                 return (
                   <button key={p} type="button" disabled={full}
-                    title={full ? competitorQuotaMessage(cfg.label, t) : undefined}
+                    title={full ? competitorQuotaMessage(cfg.label, maxPerPlatform, t) : undefined}
                     onClick={() => { setPlatform(p); setError('') }}
                     className={`flex flex-col items-center gap-1.5 py-3 rounded-lg border-2 transition-all ${
                       full     ? 'border-[#f3f4f6] bg-[#fafafa] opacity-45 cursor-not-allowed' :
@@ -114,7 +116,7 @@ export default function CompetitorModal({ brandName, competitors, onClose, onAdd
                     </span>
                     {used > 0 && (
                       <span style={PJB} className={`text-[9px] font-bold ${full ? 'text-[#ef4444]' : 'text-[#9ca3af]'}`}>
-                        {used}/{MAX_COMPETITORS_PER_PLATFORM}
+                        {used}/{maxPerPlatform}
                       </span>
                     )}
                   </button>

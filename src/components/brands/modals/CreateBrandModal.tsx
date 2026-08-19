@@ -8,7 +8,8 @@ import PlanLimits from '../PlanLimits'
 import { CSV_PLATFORMS } from '@/lib/csv/types'
 import { useOAuthConnect, CONNECT_OPTIONS } from '@/hooks/useOAuthConnect'
 import { COMPETITOR_ADD_ENABLED } from '@/lib/featureFlags'
-import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
+import { competitorQuotaMessage } from '@/lib/quotas'
+import { useOrgLimits } from '@/components/organizations/OrgLimitsContext'
 import { isValidHandle, invalidHandleMessage } from '@/lib/competitors/verify'
 import { pollVerification } from '@/lib/competitors/pollVerification'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -73,17 +74,18 @@ function PlatformPicker({ selected, onSelect, used }: {
   used: Partial<Record<Platform, number>>
 }) {
   const t = useT()
+  const { maxCompetitorsPerPlatform: maxPerPlatform } = useOrgLimits()
   return (
     <div className="flex gap-2">
       {COMPETITOR_PLATFORM_LIST.map(p => {
         const count = used[p] ?? 0
-        const full  = count >= MAX_COMPETITORS_PER_PLATFORM
+        const full  = count >= maxPerPlatform
         return (
           <button
             key={p}
             type="button"
             disabled={full}
-            title={full ? competitorQuotaMessage(PLATFORM_CONFIG[p].label, t) : undefined}
+            title={full ? competitorQuotaMessage(PLATFORM_CONFIG[p].label, maxPerPlatform, t) : undefined}
             onClick={() => onSelect(p)}
             className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${
               full
@@ -95,7 +97,7 @@ function PlatformPicker({ selected, onSelect, used }: {
           >
             <PlatformIcon platform={p} size={24} />
             <span className={`text-[9px] font-bold ${selected === p && !full ? 'text-[#1B8A80]' : 'text-[#9ca3af]'}`}>
-              {count > 0 ? `${count}/${MAX_COMPETITORS_PER_PLATFORM}` : PLATFORM_CONFIG[p].short}
+              {count > 0 ? `${count}/${maxPerPlatform}` : PLATFORM_CONFIG[p].short}
             </span>
           </button>
         )
@@ -154,6 +156,7 @@ function AddedList({ items, onRemove, emptyLabel, notFound = [], busy = false }:
 }
 
 export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
+  const { maxCompetitorsPerPlatform: maxPerPlatform } = useOrgLimits()
   const t = useT()
   const [step,    setStep]    = useState<Step>(1)
   const [loading, setLoading] = useState(false)
@@ -305,8 +308,8 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
     if (!u) { setCompErr(t('Enter a username.')); return }
     // Cermin validasi server: handle berspasi bikin actor Apify menolak start-run.
     if (!isValidHandle(compPlatform, u)) { setCompErr(invalidHandleMessage(compPlatform, u)); return }
-    if ((compUsed[compPlatform] ?? 0) >= MAX_COMPETITORS_PER_PLATFORM) {
-      setCompErr(competitorQuotaMessage(PLATFORM_CONFIG[compPlatform].label)); return
+    if ((compUsed[compPlatform] ?? 0) >= maxPerPlatform) {
+      setCompErr(competitorQuotaMessage(PLATFORM_CONFIG[compPlatform].label, maxPerPlatform)); return
     }
     setCompetitors(prev => [...prev, { platform: compPlatform, username: u }])
     setCompUsername('')
@@ -683,7 +686,7 @@ export default function CreateBrandModal({ orgId, onClose, onCreated }: Props) {
             <div>
               <p style={PJB} className="text-[13px] font-semibold text-[#111827]">{t('Add competitors')}</p>
               <p className="text-[12px] text-[#9ca3af] mt-0.5">
-                {t('Track competitor accounts to benchmark against — up to {max} per platform.', { max: MAX_COMPETITORS_PER_PLATFORM })}
+                {t('Track competitor accounts to benchmark against — up to {max} per platform.', { max: maxPerPlatform })}
               </p>
             </div>
 

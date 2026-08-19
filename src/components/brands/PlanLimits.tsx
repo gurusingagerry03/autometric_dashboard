@@ -1,6 +1,7 @@
 'use client'
 
-import { PLAN_LIMITS } from '@/lib/quotas'
+import { MAX_ACCOUNTS_PER_PLATFORM_PER_BRAND } from '@/lib/quotas'
+import { useOrgLimits } from '@/components/organizations/OrgLimitsContext'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -11,10 +12,23 @@ const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
  * Connecting a social account is where someone forms an expectation of how much
  * the tool will track for them, and finding out about a cap only when a button
  * greys out reads as the product breaking. So the caps are stated up front, in
- * the same modal, straight from `PLAN_LIMITS` — the numbers the API enforces.
+ * the same modal, with the same numbers the API enforces.
+ *
+ * The brand and competitor caps come from `useOrgLimits()` rather than a
+ * constant: an admin sets them per organization (/admin/org-limits), so a
+ * bundled constant would quietly lie to every org that was given a different
+ * plan. Only the one-account-per-platform rule is fixed app-wide.
  */
 export default function PlanLimits({ className = '' }: { className?: string }) {
   const t = useT()
+  const { maxBrands, maxCompetitorsPerPlatform } = useOrgLimits()
+
+  const limits = [
+    { count: maxBrands,                       label: t('brands per organization') },
+    { count: MAX_ACCOUNTS_PER_PLATFORM_PER_BRAND, label: t('account per platform, per brand') },
+    { count: maxCompetitorsPerPlatform,       label: t('competitors per platform, per brand') },
+  ]
+
   return (
     <div className={`rounded-xl border border-[#e5e7eb] bg-[#fafbfb] px-4 py-3 ${className}`}>
       <p style={PJB} className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[#6b7280]">
@@ -22,14 +36,11 @@ export default function PlanLimits({ className = '' }: { className?: string }) {
         {t('Your plan limits')}
       </p>
       <ul className="mt-2 flex flex-col gap-1">
-        {PLAN_LIMITS.map(l => (
-          <li key={l.key} className="flex items-start gap-2 text-[12px] leading-snug text-[#4b5563]">
+        {limits.map(l => (
+          <li key={l.label} className="flex items-start gap-2 text-[12px] leading-snug text-[#4b5563]">
             <span className="mt-[6px] w-1 h-1 rounded-full bg-[#c4c9d4] flex-shrink-0" />
             <span>
-              <span className="font-semibold text-[#111827]">{l.count}</span>{' '}
-              {l.key === 'brands' && t('brands per organization')}
-              {l.key === 'accounts' && t('account per platform, per brand')}
-              {l.key === 'competitors' && t('competitors per platform, per brand')}
+              <span className="font-semibold text-[#111827]">{l.count}</span> {l.label}
             </span>
           </li>
         ))}

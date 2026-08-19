@@ -7,7 +7,7 @@ import BrandGroup from './BrandGroup'
 import ChannelGroup from './ChannelGroup'
 import StatusGroup, { AccountEntry } from './StatusGroup'
 import CreateBrandModal from '../modals/CreateBrandModal'
-import { MAX_BRANDS_PER_ORG } from '@/lib/quotas'
+import { useOrgLimits } from '@/components/organizations/OrgLimitsContext'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -35,6 +35,7 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 
 export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
   const t       = useT()
+  const { maxBrands } = useOrgLimits()
   const params  = useParams()
   const orgSlug = params?.orgSlug as string
 
@@ -69,7 +70,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
   const currentStatus = STATUS_OPTIONS.find(o => o.value === statusFilter)!
 
   const hasFilter    = search || statusFilter !== 'all'
-  const brandsMaxed  = brands.length >= MAX_BRANDS_PER_ORG
+  const brandsMaxed  = brands.length >= maxBrands
 
   return (
     <div className="min-h-screen bg-white">
@@ -81,7 +82,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
             <h1 style={PJB} className="text-[22px] font-bold text-[#111827] tracking-tight">{t('Brands')}</h1>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               {[
-                { val: `${brands.length}/${MAX_BRANDS_PER_ORG}`, label: t('brands') },
+                { val: `${brands.length}/${maxBrands}`, label: t('brands') },
                 { val: totalChannels,    label: t('channels')    },
                 { val: totalCompetitors, label: t('competitors') },
               ].map((s, i) => (
@@ -101,7 +102,7 @@ export default function BrandsPage({ orgId, orgName, initialBrands }: Props) {
           <button
             onClick={() => !brandsMaxed && setShowCreate(true)}
             disabled={brandsMaxed}
-            title={brandsMaxed ? t('The limit of {max} brands per organization has been reached', { max: MAX_BRANDS_PER_ORG }) : undefined}
+            title={brandsMaxed ? t('The limit of {max} brands per organization has been reached', { max: maxBrands }) : undefined}
             style={PJB}
             className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold transition-colors ${
               brandsMaxed

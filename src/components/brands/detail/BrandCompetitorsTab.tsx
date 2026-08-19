@@ -6,13 +6,14 @@ import { Platform } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
 import CompetitorModal from '../modals/CompetitorModal'
 import { COMPETITOR_ADD_ENABLED } from '@/lib/featureFlags'
-import { MAX_COMPETITORS_PER_PLATFORM } from '@/lib/quotas'
+import { useOrgLimits } from '@/components/organizations/OrgLimitsContext'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
 export default function BrandCompetitorsTab() {
   const t = useT()
+  const { maxCompetitorsPerPlatform: maxPerPlatform } = useOrgLimits()
   const {
     brand, addCompetitor, awaitCompetitorVerification, removeCompetitor,
     competitorNotice, clearCompetitorNotice,
@@ -48,8 +49,8 @@ export default function BrandCompetitorsTab() {
           <h2 style={PJB} className="text-[14px] font-bold text-[#111827]">{t('Competitors')}</h2>
           <p className="text-[12.5px] text-[#9ca3af] mt-0.5">
             {brand.competitors.length === 0
-              ? `No competitors tracked yet. Up to ${MAX_COMPETITORS_PER_PLATFORM} per platform.`
-              : `Tracking ${brand.competitors.length} competitor account${brand.competitors.length !== 1 ? 's' : ''} · max ${MAX_COMPETITORS_PER_PLATFORM} per platform.`}
+              ? `No competitors tracked yet. Up to ${maxPerPlatform} per platform.`
+              : `Tracking ${brand.competitors.length} competitor account${brand.competitors.length !== 1 ? 's' : ''} · max ${maxPerPlatform} per platform.`}
           </p>
         </div>
         <button onClick={() => COMPETITOR_ADD_ENABLED && toggleAdd(true)} disabled={!COMPETITOR_ADD_ENABLED} style={PJB}

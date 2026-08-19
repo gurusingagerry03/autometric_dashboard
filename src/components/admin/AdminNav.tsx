@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/admin',                      label: 'Monitoring',           icon: 'monitor_heart' },
   { href: '/admin/scheduler',            label: 'Scheduler',            icon: 'schedule'      },
   { href: '/admin/competitor-scheduler', label: 'Competitor Scheduler', icon: 'groups'        },
+  { href: '/admin/org-limits',           label: 'Batas Organization',   icon: 'tune'          },
 ] as const
 
 export default function AdminNav() {

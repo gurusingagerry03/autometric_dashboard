@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { verifyBrandAccess, addCompetitor, listBrandCompetitors, countBrandCompetitorsOnPlatform } from '@/lib/brands/queries'
 import { COMPETITOR_PLATFORM_LIST, PLATFORM_CONFIG, type Platform } from '@/lib/brands/types'
-import { MAX_COMPETITORS_PER_PLATFORM, competitorQuotaMessage } from '@/lib/quotas'
+import { competitorQuotaMessage } from '@/lib/quotas'
+import { getOrgLimits } from '@/lib/organizations/limits'
 import {
   initialFbCompetitorSync, initialTiktokCompetitorSync, initialIgCompetitorSync,
   type SyncLeg,
@@ -76,12 +77,14 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: invalidHandleMessage(platform, username) }, { status: 400 })
     }
 
-    // Quota is per platform, so a full Instagram slot doesn't block TikTok/Facebook.
+    // Kuota dihitung per platform, jadi slot Instagram yang penuh tidak memblokir
+    // TikTok/Facebook. Angkanya diatur admin per organization (/admin/org-limits).
     // Username ini dikecualikan dari hitungan: menambahkan ulang yang sudah ada
     // tidak memakai slot baru, sehingga percobaan ulang tidak tertolak 409.
-    if (await countBrandCompetitorsOnPlatform(brandId, platform, username) >= MAX_COMPETITORS_PER_PLATFORM) {
+    const { maxCompetitorsPerPlatform } = await getOrgLimits(orgId)
+    if (await countBrandCompetitorsOnPlatform(brandId, platform, username) >= maxCompetitorsPerPlatform) {
       return NextResponse.json(
-        { error: competitorQuotaMessage(PLATFORM_CONFIG[platform as Platform].label) },
+        { error: competitorQuotaMessage(PLATFORM_CONFIG[platform as Platform].label, maxCompetitorsPerPlatform) },
         { status: 409 }
       )
     }
