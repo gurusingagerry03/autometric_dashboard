@@ -7,6 +7,7 @@ import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { NumCell } from '@/components/ui/ExactValue'
 import { PLATFORM_META, type PlatformFilter, type Period } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
+import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { CommunityPayload } from '@/lib/dashboard/community'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -78,6 +79,8 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
   const { lang } = useLanguage()
   const [data, setData] = useState<CommunityPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Ada area data yang tabelnya masih dibangun pipeline. */
+  const building = useAnyBuilding()
 
   useEffect(() => {
     let cancelled = false
@@ -99,6 +102,14 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
       </div>
     )
   }
+  /**
+   * Brand yang baru dihubungkan: payload kosong BUKAN berarti datanya tidak ada, tapi
+   * pipeline belum selesai membangunnya. Pesan "No data for this filter yet." di bawah
+   * akan menyesatkan di titik itu, jadi selama masih ada area yang dibangun tab
+   * menampilkan bentuknya dulu — dan card asli menggantikannya begitu datanya masuk.
+   */
+  if (building && (!data || data.empty || data.kpis.length === 0)) return <TabSkeleton />
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -120,11 +131,11 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
     <>
       <SectionHeader icon="diversity_3" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.map(k => <FlexKpiCard area="comment_activity_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-        <Card className="flex flex-col">
+        <Card area="comment_activity_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Comment Volume by Platform')} metricKey="comment_activity.comment_count" sub={t('Comments tracked per week')} />
           <div className="flex items-center justify-center gap-5 pb-1">
             {data.commentVolume.map(s => (
@@ -140,7 +151,7 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card area="comment_activity_hourly" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Comment Activity by Hour of Day')} metricKey="comment_activity.hour_of_day" sub={t('When your audience comments (WIB)')} />
           <div className="px-4 pb-3 pt-3">
             {data.commentByHour.some(v => v > 0)
@@ -154,7 +165,7 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
       </div>
 
       <SectionHeader icon="leaderboard">{t('Top Commenters — Community Leaderboard')}</SectionHeader>
-      <Card className="overflow-hidden">
+      <Card area="community_contributors" skeleton="table" className="overflow-hidden">
         <CardHead title={t('Top Commenters — Community Leaderboard')} metricKey="community_contributors.composite_score" sub={t('Ranked by comments, likes received and replies')} />
         <div className="overflow-x-auto">
           <div className="min-w-[720px]">

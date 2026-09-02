@@ -8,6 +8,7 @@ import MetricInfo from '@/components/ui/MetricInfo'
 import ExactValue, { NumCell } from '@/components/ui/ExactValue'
 import { TREND_METRICS, HEATMAP_DAYS, HEATMAP_TIME_LABELS, PLATFORM_META, fmtNum, fmtInt, type TrendMetric, type PlatformFilter, type Period } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
+import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { OverviewPayload } from '@/lib/dashboard/overview'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -43,6 +44,8 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
   const [metric, setMetric] = useState<TrendMetric>('Engagement')
   const [data, setData] = useState<OverviewPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Ada area data yang tabelnya masih dibangun pipeline. */
+  const building = useAnyBuilding()
 
   useEffect(() => {
     let cancelled = false
@@ -64,6 +67,14 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
       </div>
     )
   }
+  /**
+   * Brand yang baru dihubungkan: payload kosong BUKAN berarti datanya tidak ada, tapi
+   * pipeline belum selesai membangunnya. Pesan "No data for this filter yet." di bawah
+   * akan menyesatkan di titik itu, jadi selama masih ada area yang dibangun tab
+   * menampilkan bentuknya dulu — dan card asli menggantikannya begitu datanya masuk.
+   */
+  if (building && (!data || data.empty || data.kpis.length === 0)) return <TabSkeleton />
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -89,12 +100,12 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {/* Performance KPIs */}
       <SectionHeader icon="monitoring" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       {/* Engagement over time + platform share */}
       <div className="grid grid-cols-12 gap-3 mb-3">
-        <Card span="col-span-12 lg:col-span-8">
+        <Card area="brand_metric_daily" skeleton="chart" span="col-span-12 lg:col-span-8">
           <div className="flex items-start justify-between px-4 pt-3.5 pb-2 flex-wrap gap-2">
             <div>
               <h3 style={PJ} className="flex items-center gap-1 text-[12.5px] font-bold text-[#111827] tracking-[-0.01em]">
@@ -126,7 +137,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
           </div>
         </Card>
 
-        <Card span="col-span-12 lg:col-span-4" className="flex flex-col">
+        <Card area="brand_metric_daily" skeleton="chart" span="col-span-12 lg:col-span-4" className="flex flex-col">
           <CardHead title={t('Platform Share')} metricKey="derived.platform_share" sub={t('by reach')} />
           <div className="px-4 pb-5 pt-3 flex-1 flex items-center">
             {data.platformReachShare.length
@@ -142,7 +153,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
 
       {/* Brand performance matrix */}
       <SectionHeader icon="flag">{t('Brand Performance Matrix')}</SectionHeader>
-      <Card className="overflow-hidden">
+      <Card area="brand_metric_daily" skeleton="table" className="overflow-hidden">
         <CardHead title={t('Cross-brand, cross-platform benchmarking')} metricKey="derived.brand_benchmarking" sub={t('Engagement benchmarking across the portfolio')} />
         <div className="overflow-x-auto">
           <div className="min-w-[760px]">
@@ -176,7 +187,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
       <SectionHeader icon="insights">{t('Content & Timing')}</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Content attribute breakdown */}
-        <Card className="flex flex-col">
+        <Card area="content_attribute_daily" skeleton="chart" className="flex flex-col">
           <div className="flex items-center justify-between px-5 pt-4 pb-1 gap-2">
             <span style={PJ} className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">
               {t('Content Attribute Breakdown')}
@@ -204,7 +215,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </Card>
 
         {/* Best posting times */}
-        <Card className="flex flex-col">
+        <Card area="posting_time_heatmap" skeleton="chart" className="flex flex-col">
           <div className="flex items-center justify-between px-5 pt-4 pb-3 gap-2">
             <span style={PJ} className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">{t('Best Posting Times')}</span>
             <span style={PJ} className="text-[10px] font-bold uppercase tracking-wide text-[#b8915a] bg-[#fbf4e8] px-2.5 py-1 rounded-full">WIB</span>

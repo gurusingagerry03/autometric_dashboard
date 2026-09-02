@@ -160,7 +160,7 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
   return (
     <>
       <SectionHeader icon="campaign" first>{t('Campaign Analysis')}</SectionHeader>
-      <Card className="mb-3">
+      <Card area={null} className="mb-3">
         <div className="px-5 pt-4 pb-1">
           <h3 style={PJ} className="text-[15px] font-bold text-[#111827] tracking-[-0.01em]">{t('Campaign Analysis')}</h3>
           <p className="text-[12.5px] text-[#9ca3af] mt-1">{t('Select posts by pillar or individually. Run analysis to see per-post contribution, comment timeline distribution, and cleaned word cloud.')}</p>
@@ -176,7 +176,7 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
         </div>
       </Card>
 
-      <Card className="mb-3">
+      <Card area={null} className="mb-3">
         <div className="flex items-center justify-between gap-3 px-5 py-4 flex-wrap">
           <div className="flex items-center gap-3">
             <span style={PJ} className="text-[12.5px] font-bold text-white bg-[#6c4cd6] rounded-full px-3.5 py-1.5">{t('{count} posts selected', { count: selected.size })}</span>
@@ -194,7 +194,7 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
 
       {analysis && selectedPosts.length > 0 && (
         <div className="grid grid-cols-12 gap-3 mb-3">
-          <Card span="col-span-12 lg:col-span-7">
+          <Card area="post_metric" skeleton="chart" span="col-span-12 lg:col-span-7">
             <CardHead title={t('Per-Post Contribution')} metricKey="post_metric.engagement_owned" sub={t('Share of campaign engagement (likes + comments)')} />
             <div className="px-4 pb-4 pt-3">
               <HBars items={[...selectedPosts].sort((a, b) => (b.likes + b.comments) - (a.likes + a.comments)).map(p => {
@@ -204,7 +204,7 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
             </div>
           </Card>
 
-          <Card span="col-span-12 lg:col-span-5" className="flex flex-col">
+          <Card area="post_comment_timeline" skeleton="chart" span="col-span-12 lg:col-span-5" className="flex flex-col">
             <CardHead title={t('Comment Timeline Distribution')} metricKey="post_comment_timeline.days_since_post" sub={t('Comments by days since post')} />
             <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
               {analysis.timeline.length > 0
@@ -213,7 +213,7 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
             </div>
           </Card>
 
-          <Card span="col-span-12">
+          <Card area="post_wordcloud" skeleton="text" span="col-span-12">
             <CardHead title={t('Cleaned Word Cloud')} metricKey="post_wordcloud.word" sub={t('Stop-words & emojis removed · weighted by frequency')} />
             {analysis.wordcloud.length > 0 ? (
               <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-6 py-7">

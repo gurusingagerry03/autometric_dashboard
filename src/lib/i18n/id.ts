@@ -139,24 +139,25 @@ export const ID: Record<string, string> = {
 
   /* ── Dashboard: penyiapan data akun baru ──────────────────────────── */
   'Preparing your data': 'Menyiapkan data',
-  'Data is not ready yet': 'Data belum siap',
-  'We are getting {brand} ready. This happens once, right after an account is connected.':
-    'Data {brand} sedang disiapkan. Ini hanya sekali, setelah akun dihubungkan.',
-  '{brand} has no usable data yet. See what needs attention below.':
-    'Belum ada data yang bisa dipakai untuk {brand}. Cek hal yang perlu ditangani di bawah.',
   'Collecting account data': 'Mengambil data akun',
   'Organizing the data': 'Merapikan data',
   'Calculating metrics': 'Menghitung metrik',
+
+  // Onboarding brand baru: dashboard tampil apa adanya dengan card berbentuk skeleton,
+  // dan strip di atas yang menjelaskan fasenya (DataPipelineStatus.tsx).
+  'Each card fills in as its metric is calculated.':
+    'Tiap card terisi begitu metriknya selesai dihitung.',
+  'This is taking longer than usual — it keeps running in the background.':
+    'Ini lebih lama dari biasanya — prosesnya tetap berjalan di latar belakang.',
+  'Cards below will stay empty until this is resolved.':
+    'Card di bawah akan tetap kosong sampai ini dibereskan.',
   '{count} records': '{count} data',
   'running…': 'berjalan…',
   'failed': 'gagal',
   'Running for {duration}': 'Sudah berjalan {duration}',
-  'this page refreshes itself': 'halaman ini menyegar sendiri',
   'less than a minute': 'kurang dari semenit',
   '{minutes} minutes': '{minutes} menit',
   '{hours} hours': '{hours} jam',
-  'This is taking longer than usual. It keeps running in the background — you can leave this page and come back.':
-    'Ini lebih lama dari biasanya. Prosesnya tetap berjalan di belakang layar — halaman ini boleh ditinggal dulu.',
   'Still preparing newer data': 'Data terbaru masih disiapkan',
   'Some accounts need attention': 'Ada akun yang perlu ditangani',
   'Numbers below may be incomplete.': 'Angka di bawah mungkin belum lengkap.',

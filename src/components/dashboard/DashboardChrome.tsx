@@ -4,7 +4,8 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import BrandSwitcher from './BrandSwitcher'
 import BrandAvatar from './BrandAvatar'
-import { usePipelineStatus, PipelinePanel, PipelineStrip } from './DataPipelineStatus'
+import { usePipelineStatus, PipelineStrip } from './DataPipelineStatus'
+import { DataReadinessProvider } from './dataReadiness'
 import { readFilters, writeFilters, type SavedFilters } from './filterStorage'
 import DateRangePicker, {
   fmtSelection, isRangeMode, resolveSelection, withResolved,
@@ -201,7 +202,6 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
   const end = resolved?.end ?? null
 
   const preparingPipeline = !!pipeline && pipeline.state !== 'ready' && pipeline.state !== 'idle'
-  const blockingPipeline  = preparingPipeline && !pipeline!.hasData
 
   function handleRange(next: DateSelection) {
     rangeChosen.current = true
@@ -298,30 +298,27 @@ export default function DashboardChrome({ title, subtitle, lockPlatform, childre
               </BrandSwitcher>
             </div>
 
-            {/* Data brand belum sampai Gold dan belum ada data lama sama sekali:
-                tab tidak punya apa pun untuk digambar, jadi progres pipeline yang
-                menggantikannya. Kalau brand-nya sudah punya data (mis. akun baru
-                menyusul di brand lama), dashboard tetap tampil dan progresnya
-                cukup jadi strip di atas — menyembunyikan angka yang sudah benar
-                lebih merugikan daripada memberi tahu bahwa ada yang menyusul. */}
-            {blockingPipeline ? (
-              <PipelinePanel
-                status={pipeline!}
-                brandId={brand.id}
-                brandName={brand.name}
-                onRetry={refreshPipeline}
-              />
-            ) : /* Hold the tabs until the range is known — firing their fetches
-                   without start/end would only make the server guess a window and
-                   force an immediate refetch. */
-            start && end ? (
+            {/* Brand yang datanya belum ada pun tetap melihat dashboard yang sebenarnya,
+                bukan satu panel selayar penuh: tiap card menampilkan skeleton sendiri
+                lalu terisi begitu procedure pembangunnya selesai. User jadi tahu sejak
+                awal apa saja yang akan didapat, dan progresnya terasa karena card
+                betulan berubah satu per satu. Strip di atas yang menjelaskan fase mana
+                yang sedang berjalan; semua yang dulu ada di panel — daftar langkah,
+                tombol coba-lagi per akun, catatan kompetitor — ada di balik "Details"
+                milik strip itu. */}
+            {/* Hold the tabs until the range is known — firing their fetches
+                without start/end would only make the server guess a window and
+                force an immediate refetch. */}
+            {start && end ? (
               <>
                 {preparingPipeline && (
                   <PipelineStrip status={pipeline!} brandId={brand.id} onRetry={refreshPipeline} />
                 )}
-                <Fragment key={dataNonce}>
-                  {children({ brand, platform, period: 'Custom', start, end })}
-                </Fragment>
+                <DataReadinessProvider areas={pipeline?.areas ?? {}}>
+                  <Fragment key={dataNonce}>
+                    {children({ brand, platform, period: 'Custom', start, end })}
+                  </Fragment>
+                </DataReadinessProvider>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-center">

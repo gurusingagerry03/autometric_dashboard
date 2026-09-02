@@ -6,6 +6,7 @@ import { HBars, ComboBarLine, MultiLineChart, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { fmtNum, fmtInt, type PlatformFilter, type Period } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
+import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { StoriesPayload } from '@/lib/dashboard/stories'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -37,6 +38,8 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
   const { lang } = useLanguage()
   const [data, setData] = useState<StoriesPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Ada area data yang tabelnya masih dibangun pipeline. */
+  const building = useAnyBuilding()
 
   useEffect(() => {
     let cancelled = false
@@ -58,6 +61,14 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       </div>
     )
   }
+  /**
+   * Brand yang baru dihubungkan: payload kosong BUKAN berarti datanya tidak ada, tapi
+   * pipeline belum selesai membangunnya. Pesan "No data for this filter yet." di bawah
+   * akan menyesatkan di titik itu, jadi selama masih ada area yang dibangun tab
+   * menampilkan bentuknya dulu — dan card asli menggantikannya begitu datanya masuk.
+   */
+  if (building && (!data || data.empty || data.kpis.length === 0)) return <TabSkeleton />
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -82,11 +93,11 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     <>
       <SectionHeader icon="amp_stories" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.map(k => <FlexKpiCard area="story_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-        <Card className="flex flex-col">
+        <Card area="story_metric_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Story Retention Funnel')} metricKey="story_metric_daily.taps_fwd_sum" sub={t('How audiences navigate through your story sequences')}
             action={<FieldTag>{t('Taps forward · Taps back · Exits')}</FieldTag>} />
           <div className="px-4 pb-4 pt-3">
@@ -101,7 +112,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card area="story_type_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Story Type Performance')} metricKey="story_type_daily.story_type" action={<FieldTag>{t('By story type')}</FieldTag>} />
           <div className="flex items-center justify-center gap-6 pb-1">
             <Badge text={t('Avg Reach')} color="#e7a6bd" />
@@ -125,7 +136,7 @@ function StoriesBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       </div>
 
       <SectionHeader icon="show_chart">{t('Trend')}</SectionHeader>
-      <Card>
+      <Card area="story_metric_daily" skeleton="chart">
         <CardHead title={t('Story Performance Over Time')} metricKey="story_metric_daily.story_count" sub={t('Views, exits & swipe-ups by week')} />
         <div className="px-4 pb-3 pt-3">
           {data.overTime.some(s => s.data.length)

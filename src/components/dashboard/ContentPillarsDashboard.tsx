@@ -98,7 +98,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
     <>
       <SectionHeader icon="dashboard_customize" first>{t('Content Pillars')}</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Card>
+        <Card area={null}>
           <div className="px-5 pt-4 pb-1">
             <h3 style={PJ} className="text-[15px] font-bold text-[#111827]">{t('Define Your Content Pillars')}</h3>
             <p className="text-[12.5px] text-[#9ca3af] mt-1 leading-relaxed">
@@ -161,7 +161,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card area="pillar_performance_daily" skeleton="chart" className="flex flex-col">
           {comparisonRun && pillars.length >= 2 ? (
             <>
               <CardHead title={t('Pillar Performance Comparison')} metricKey="pillar_performance_daily.engagement_sum" sub={t('Engagement rate averaged across each pillar')} />

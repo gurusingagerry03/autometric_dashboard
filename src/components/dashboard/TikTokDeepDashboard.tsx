@@ -7,6 +7,7 @@ import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import ExactValue from '@/components/ui/ExactValue'
 import { fmtNum, fmtInt, type PlatformFilter, type Period } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
+import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { TiktokPayload } from '@/lib/dashboard/tiktok'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -35,6 +36,8 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
   const { lang } = useLanguage()
   const [data, setData] = useState<TiktokPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Ada area data yang tabelnya masih dibangun pipeline. */
+  const building = useAnyBuilding()
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +59,14 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
       </div>
     )
   }
+  /**
+   * Brand yang baru dihubungkan: payload kosong BUKAN berarti datanya tidak ada, tapi
+   * pipeline belum selesai membangunnya. Pesan "No data for this filter yet." di bawah
+   * akan menyesatkan di titik itu, jadi selama masih ada area yang dibangun tab
+   * menampilkan bentuknya dulu — dan card asli menggantikannya begitu datanya masuk.
+   */
+  if (building && (!data || data.empty || data.kpis.length === 0)) return <TabSkeleton />
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -82,12 +93,12 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
     <>
       <SectionHeader icon="music_note" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.map(k => <FlexKpiCard area="tiktok_churn_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       {/* Follower churn */}
       <SectionHeader icon="sync_alt">{t('Follower Churn Analysis')}</SectionHeader>
-      <Card className="mb-3">
+      <Card area="tiktok_churn_daily" skeleton="chart" className="mb-3">
         <CardHead title={t('Follower Churn Analysis')} metricKey="tiktok_churn_daily.net_growth" sub={t('Only TikTok reports followers gained and lost day by day')}
           action={<FieldTag>{t('Followers gained · Followers lost · Net growth')}</FieldTag>} />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 px-4 pt-1">
@@ -120,7 +131,7 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
       {/* Duration vs completion + watch time */}
       <SectionHeader icon="insights">{t('Retention Drivers')}</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Card className="flex flex-col">
+        <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Duration vs. Completion Rate')} metricKey="post_metric.completion_rate" action={<FieldTag>{t('Video length · Completion rate')}</FieldTag>} />
           <div className="px-4 pb-4 pt-3 flex-1">
             {data.durationCompletion.length
@@ -132,7 +143,7 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card area="pillar_performance_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Avg Watch Time by Content Pillar')} metricKey="pillar_performance_daily.watch_time_sum" action={<FieldTag>{t('Avg watch time · Content pillar')}</FieldTag>} />
           <div className="px-4 pb-4 pt-3">
             {data.watchByPillar.length

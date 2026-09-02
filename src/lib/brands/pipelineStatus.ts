@@ -1,5 +1,6 @@
 import pool from '@/lib/db'
 import type { Platform } from './types'
+import { ALL_AREAS, DATA_AREAS, type AreaState, type DataArea } from '@/lib/dashboard/dataAreas'
 
 /**
  * Progres pipeline data sebuah brand: scrape awal → Silver → Gold.
@@ -100,6 +101,13 @@ export interface PipelineStatus {
   elapsedSeconds: number
   /** Sudah lewat SLOW_MINUTES — UI menurunkan nada dari "sebentar lagi" jadi "lebih lama dari biasanya". */
   slow:        boolean
+  /**
+   * Kesiapan tiap area data, supaya card bisa menampilkan skeleton sendiri-sendiri
+   * alih-alih seluruh dashboard diganti satu panel. Hanya area yang TIDAK `ready` yang
+   * dikirim — absen berarti "gambar seperti biasa", dan itu juga yang terjadi kalau
+   * query-nya gagal. Kegagalan selalu jatuh ke sisi menampilkan data, bukan skeleton.
+   */
+  areas:       Partial<Record<DataArea, AreaState>>
 }
 
 /**
@@ -251,6 +259,91 @@ function rankOf(p: AccountProgress): number {
   return p.step ? STEP_ORDER.indexOf(p.step) : STEP_ORDER.length
 }
 
+/**
+ * Satu query untuk seluruh area: "brand ini sudah punya baris di sana?" dan "procedure-nya
+ * sudah jalan sejak akun terbaru dihubungkan?".
+ *
+ * Nama tabel dan kolom berasal dari konstanta DATA_AREAS, bukan dari input user, jadi
+ * merangkainya sebagai string aman. Nilai tetap lewat parameter.
+ *
+ * PERBANDINGAN WAKTU SENGAJA DILAKUKAN DI SQL
+ *   `built_at` bertipe `timestamp without time zone` dan diisi procedure dengan
+ *   `now() AT TIME ZONE 'Asia/Jakarta'` — jam dinding WIB tanpa zona. Membawanya ke Date
+ *   JavaScript lalu membandingkan di sisi Node akan meleset 7 jam begitu app berjalan di
+ *   server UTC (dan diam-diam benar di laptop yang kebetulan zonanya WIB — jenis bug yang
+ *   paling sulit ketahuan). Karena itu `$3` diubah ke ruang naif-WIB yang sama di sini.
+ */
+const AREA_SQL = ALL_AREAS.map(area => {
+  const d = DATA_AREAS[area]
+
+  const hasRows = d.match === 'none'
+    // Tabel per-post tanpa kolom brand: tidak ada sinyal per-brand yang murah, jadi
+    // pertanyaannya diturunkan jadi "tabelnya sudah terisi sama sekali belum".
+    ? `EXISTS (SELECT 1 FROM l2_gold.${d.table})`
+    : `EXISTS (SELECT 1 FROM l2_gold.${d.table} x WHERE x.${d.column} = ${d.match === 'account' ? 'ANY($2)' : '$1'})`
+
+  const builtSince = d.builtAt
+    ? `(SELECT max(built_at) FROM l2_gold.${d.table}) > ($3::timestamptz AT TIME ZONE 'Asia/Jakarta')`
+    : `NULL::boolean`
+
+  return `SELECT '${area}' AS area, ${hasRows} AS has_rows, ${builtSince} AS built_since`
+}).join('\n  UNION ALL ')
+
+interface AreaRow {
+  area:        DataArea
+  has_rows:    boolean
+  built_since: boolean | null
+}
+
+/**
+ * Kesiapan tiap area untuk satu brand.
+ *
+ * `since` adalah waktu akun TERBARU dihubungkan: sebuah procedure baru bisa dianggap
+ * "sudah melihat" akun itu kalau ia dibangun setelahnya.
+ */
+async function getAreaStates(
+  brandId: string,
+  accountIds: string[],
+  onboarding: boolean,
+  since: Date | null,
+): Promise<Partial<Record<DataArea, AreaState>>> {
+  // Tidak ada akun sama sekali -> tidak ada yang bisa ditunggu, dan ANY([]) cuma bikin
+  // semua EXISTS false yang akan disalahartikan sebagai "sedang dibangun".
+  if (accountIds.length === 0) return {}
+
+  let rows: AreaRow[]
+  try {
+    rows = (await pool.query<AreaRow>(AREA_SQL, [brandId, accountIds, since])).rows
+  } catch (err) {
+    // Kesiapan per-card itu penyempurnaan, bukan syarat dashboard bisa dipakai. Kalau
+    // query-nya gagal, kembalikan kosong: seluruh card menggambar apa adanya, persis
+    // seperti sebelum fitur ini ada.
+    console.error('[pipelineStatus] gagal membaca kesiapan area', err)
+    return {}
+  }
+
+  const out: Partial<Record<DataArea, AreaState>> = {}
+  for (const r of rows) {
+    if (r.has_rows) continue                       // ready — tidak perlu dikirim
+
+    // `built_since` sudah menjawab pertanyaannya sendiri dan SENGAJA tidak dikaitkan
+    // dengan status akun. Alasannya penting: `post_metric` dibangun paling awal di layer
+    // gold, jadi begitu ia terisi akun langsung dianggap `done` — padahal belasan mart
+    // lain belum jalan. Mengaitkan area ke status akun membuat semua skeleton hilang
+    // serentak di titik itu dan memperlihatkan angka nol yang belum sempat di-refetch.
+    if (r.built_since !== null) {
+      out[r.area] = r.built_since ? 'empty' : 'building'
+      continue
+    }
+
+    // Hanya area tanpa `built_at` yang terpaksa bersandar pada status akun: tidak ada
+    // cara lain membedakan "belum dibangun" dari "memang kosong", dan berakhirnya
+    // onboarding jadi satu-satunya pengaman agar skeleton tidak berputar selamanya.
+    out[r.area] = onboarding ? 'building' : 'empty'
+  }
+  return out
+}
+
 export async function getBrandPipelineStatus(brandId: string): Promise<PipelineStatus> {
   const [accountsRes, competitorsRes] = await Promise.all([
     pool.query<AccountRow>(ACCOUNTS_SQL, [brandId]),
@@ -340,6 +433,31 @@ export async function getBrandPipelineStatus(brandId: string): Promise<PipelineS
 
   const elapsedSeconds = startedAtMs ? Math.floor((now - startedAtMs) / 1000) : 0
 
+  /**
+   * Kesiapan per-area hanya berarti selama masih ada akun yang diproses. Begitu semua
+   * akun berhenti — selesai, gagal, atau memang tanpa konten — tidak ada lagi yang akan
+   * datang, jadi card wajib berhenti menampilkan skeleton dan menggambar empty state
+   * yang jujur.
+   */
+  const onboarding = accounts.some(a => a.state === 'running')
+
+  /**
+   * Titik banding untuk `built_at`: akun yang PALING BARU dihubungkan. Sebuah procedure
+   * baru bisa dianggap sudah memperhitungkan seluruh akun kalau ia dibangun setelah yang
+   * terakhir masuk — memakai yang paling lama justru bikin procedure lama terlihat
+   * seolah sudah memproses akun yang baru saja ditambahkan.
+   */
+  const since = tracked.length
+    ? new Date(Math.max(...tracked.map(r => r.linked_at.getTime())))
+    : null
+
+  const areas = await getAreaStates(
+    brandId,
+    tracked.map(r => r.id),
+    onboarding,
+    since,
+  )
+
   return {
     state,
     hasData,
@@ -349,5 +467,6 @@ export async function getBrandPipelineStatus(brandId: string): Promise<PipelineS
     startedAt: startedAtMs ? new Date(startedAtMs).toISOString() : null,
     elapsedSeconds,
     slow: elapsedSeconds > SLOW_MINUTES * 60,
+    areas,
   }
 }

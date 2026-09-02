@@ -24,6 +24,11 @@ const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
 /* ── Polling ──────────────────────────────────────────────────────────────── */
 
+/** Jumlah area data yang tabelnya masih dibangun pipeline. */
+function countBuilding(s: PipelineStatus): number {
+  return Object.values(s.areas).filter(v => v === 'building').length
+}
+
 /** Selagi ada yang jalan, kabar baru layak ditunggu tiap 10 detik. */
 const POLL_ACTIVE_MS = 10_000
 /** Sudah tidak ada yang jalan (gagal/mandek): cukup dicek sesekali. */
@@ -37,9 +42,17 @@ const POLL_IDLE_MS = 30_000
  * disembunyikan (dan langsung menyusul sekali saat tab dilihat lagi), supaya tab
  * yang ditinggal seharian tidak menembak ribuan request percuma.
  *
- * `onReady` dipanggil sekali, tepat saat status berubah dari "masih diproses" jadi
- * "siap" — itu isyarat buat tab dashboard menarik ulang datanya, karena fetch
- * pertamanya tadi dijawab tabel Gold yang masih kosong.
+ * `onReady` adalah isyarat "data di bawah mungkin sudah berubah, tarik ulang". Ia
+ * dipanggil di DUA keadaan, dan yang kedua wajib ada:
+ *
+ *   1. status berubah dari "masih diproses" jadi "siap"
+ *   2. jumlah area yang masih dibangun BERKURANG
+ *
+ * Tanpa (2) ada bug yang pasti terjadi: `post_metric` dibangun paling awal di layer
+ * gold, jadi akun langsung dianggap `done` dan status melompat ke `ready` padahal
+ * belasan mart lain belum jalan. Refetch tunggal di titik itu menarik tabel yang masih
+ * kosong, polling lalu berhenti, dan angka nol bertahan di layar sampai user menekan
+ * refresh sendiri.
  */
 export function usePipelineStatus(brandId: string | undefined, onReady?: () => void) {
   const [status, setStatus] = useState<PipelineStatus | null>(null)
@@ -48,6 +61,8 @@ export function usePipelineStatus(brandId: string | undefined, onReady?: () => v
   // tiap kali datanya berubah).
   const latest  = useRef<PipelineStatus | null>(null)
   const wasBusy = useRef(false)
+  /** Berapa area yang masih dibangun di poll sebelumnya; null = belum pernah poll. */
+  const prevBuilding = useRef<number | null>(null)
   const readyCb = useRef(onReady)
   readyCb.current = onReady
 
@@ -59,7 +74,15 @@ export function usePipelineStatus(brandId: string | undefined, onReady?: () => v
       const next = (await res.json()) as PipelineStatus
       latest.current = next
       setStatus(next)
-      if (wasBusy.current && next.state === 'ready') readyCb.current?.()
+
+      const building = countBuilding(next)
+      // Ada area yang baru saja selesai -> tabelnya sudah terisi, tapi tab masih
+      // memegang hasil fetch lama yang isinya nol.
+      const areaFinished = prevBuilding.current !== null && building < prevBuilding.current
+      const becameReady  = wasBusy.current && next.state === 'ready'
+      if (becameReady || areaFinished) readyCb.current?.()
+
+      prevBuilding.current = building
       wasBusy.current = next.state === 'preparing' || next.state === 'attention'
     } catch {
       // Jaringan putus sesaat bukan alasan mengubah tampilan — status terakhir
@@ -71,6 +94,7 @@ export function usePipelineStatus(brandId: string | undefined, onReady?: () => v
     latest.current = null
     setStatus(null)
     wasBusy.current = false
+    prevBuilding.current = null
     if (!brandId) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -80,7 +104,13 @@ export function usePipelineStatus(brandId: string | undefined, onReady?: () => v
       if (document.visibilityState === 'visible') await load()
       if (cancelled) return
       const current = latest.current
-      if (current && (current.state === 'ready' || current.state === 'idle')) return
+      // Status akun boleh sudah `ready` sementara sebagian mart gold masih dibangun —
+      // polling harus tetap jalan sampai area terakhir selesai, kalau tidak card yang
+      // menyusul tidak akan pernah di-refetch.
+      const settled = current
+        && (current.state === 'ready' || current.state === 'idle')
+        && countBuilding(current) === 0
+      if (settled) return
       timer = setTimeout(tick, current?.state === 'attention' ? POLL_IDLE_MS : POLL_ACTIVE_MS)
     }
 
@@ -119,63 +149,18 @@ function fmtCount(n: number): string {
   return n.toLocaleString('id-ID')
 }
 
-/* ── Panel penuh: brand yang dashboardnya memang masih kosong ─────────────── */
-
-export function PipelinePanel({ status, brandId, brandName, onRetry }: {
-  status: PipelineStatus
-  brandId: string
-  brandName: string
-  onRetry: () => void
-}) {
-  const t = useT()
-  const busy = status.state === 'preparing'
-  const problems = status.accounts.filter(a => a.state !== 'done' && a.state !== 'running')
-
-  return (
-    <div className="flex justify-center py-14">
-      <div className="w-full max-w-[460px] bg-white border border-[#e5e7eb] rounded-xl px-6 py-7">
-        <div className="flex flex-col items-center text-center">
-          <span
-            className={`material-symbols-outlined text-[34px] mb-2 ${busy ? 'animate-spin' : ''}`}
-            style={{ color: busy ? '#1B8A80' : '#d97706' }}
-          >
-            {busy ? 'progress_activity' : 'schedule'}
-          </span>
-          <h2 style={PJ} className="text-[15px] font-bold text-[#111827] tracking-[-0.01em]">
-            {busy ? t('Preparing your data') : t('Data is not ready yet')}
-          </h2>
-          <p className="text-[12.5px] text-[#6b7280] mt-1.5 leading-relaxed">
-            {busy
-              ? t('We are getting {brand} ready. This happens once, right after an account is connected.', { brand: brandName })
-              : t('{brand} has no usable data yet. See what needs attention below.', { brand: brandName })}
-          </p>
-        </div>
-
-        <StepList steps={status.steps} className="mt-6" />
-
-        {busy && (
-          <p className="text-[11.5px] text-[#9ca3af] text-center mt-5 leading-relaxed">
-            {status.slow
-              ? t('This is taking longer than usual. It keeps running in the background — you can leave this page and come back.')
-              : `${t('Running for {duration}', { duration: fmtDuration(status.elapsedSeconds, t) })} · ${t('this page refreshes itself')}`}
-          </p>
-        )}
-
-        {problems.length > 0 && (
-          <div className="mt-5 pt-5 border-t border-[#f3f4f6] flex flex-col gap-3">
-            {problems.map(a => (
-              <ProblemRow key={a.id} account={a} brandId={brandId} onRetry={onRetry} />
-            ))}
-          </div>
-        )}
-
-        <CompetitorNote status={status} />
-      </div>
-    </div>
-  )
-}
-
-/* ── Strip tipis: dashboard sudah ada isinya, ada akun baru yang nyusul ───── */
+/* ── Strip: penjelas fase, di atas dashboard ─────────────────────────────── */
+/*
+ * Dipakai dua keadaan, dan kalimatnya berbeda karena taruhannya berbeda:
+ *
+ *   Brand BARU (belum ada data)   — card di bawah masih skeleton. Yang perlu diketahui
+ *                                   user: ini normal, dan tiap card akan terisi sendiri.
+ *   Brand LAMA (sudah ada data)   — angka di bawah nyata tapi mungkin belum lengkap
+ *                                   karena ada akun baru yang menyusul.
+ *
+ * Semua detail — daftar langkah, tombol coba-lagi per akun, catatan kompetitor — ada di
+ * balik "Details"; dulu isinya panel selayar penuh yang menggantikan seluruh dashboard.
+ */
 
 export function PipelineStrip({ status, brandId, onRetry }: {
   status: PipelineStatus
@@ -186,6 +171,8 @@ export function PipelineStrip({ status, brandId, onRetry }: {
   const [open, setOpen] = useState(false)
   const busy = status.state === 'preparing'
   const current = status.steps.find(s => s.status === 'running' || s.status === 'failed')
+  /** Belum ada data sama sekali: card di bawah masih skeleton, bukan angka. */
+  const firstRun = !status.hasData
 
   return (
     <div className={`mb-4 rounded-lg border ${busy ? 'border-[#cfe8e4] bg-[#f2faf9]' : 'border-[#f0dcc4] bg-[#fdf8f0]'}`}>
@@ -199,13 +186,26 @@ export function PipelineStrip({ status, brandId, onRetry }: {
         <p className="text-[12.5px] text-[#374151] flex-1 leading-snug">
           {busy
             ? <>
-                <span className="font-semibold">{t('Still preparing newer data')}</span>
+                <span className="font-semibold">
+                  {firstRun ? t('Preparing your data') : t('Still preparing newer data')}
+                </span>
                 {current && ` — ${t(STEP_LABEL[current.key]).toLowerCase()}.`}{' '}
-                <span className="text-[#6b7280]">{t('Numbers below may be incomplete.')}</span>
+                <span className="text-[#6b7280]">
+                  {firstRun
+                    ? `${t('Each card fills in as its metric is calculated.')} ${
+                        status.slow
+                          ? t('This is taking longer than usual — it keeps running in the background.')
+                          : t('Running for {duration}', { duration: fmtDuration(status.elapsedSeconds, t) })
+                      }`
+                    : t('Numbers below may be incomplete.')}
+                </span>
               </>
             : <>
                 <span className="font-semibold">{t('Some accounts need attention')}</span>{' '}
-                <span className="text-[#6b7280]">{t('Numbers below may be incomplete.')}</span>
+                <span className="text-[#6b7280]">
+                  {firstRun ? t('Cards below will stay empty until this is resolved.')
+                            : t('Numbers below may be incomplete.')}
+                </span>
               </>}
         </p>
         <button

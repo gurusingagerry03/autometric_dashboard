@@ -1,20 +1,48 @@
 'use client'
 
+import { Children, isValidElement } from 'react'
 import { Sparkline } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
 import ExactValue from '@/components/ui/ExactValue'
 import type { Kpi, OverviewKpi } from './data'
 import { useT } from '@/lib/i18n/LanguageContext'
+import type { DataArea } from '@/lib/dashboard/dataAreas'
+import { CardSkeleton, useAreaState, type SkeletonKind } from './dataReadiness'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
-/* Card shell — the building block of the dense grid. */
-export function Card({ children, className = '', span }: {
+/* Card shell — the building block of the dense grid.
+ *
+ * `area` names the l2_gold table behind this card. While a newly connected brand is
+ * still being processed and that table has nothing for it yet, the card draws a
+ * skeleton instead of its content — see dataReadiness.tsx. Cards that show filters,
+ * notes, or user-edited settings should leave `area` out; they are never "pending".
+ *
+ * The card's own <CardHead> is deliberately kept while the skeleton shows: the metric's
+ * name is the one thing already known for certain, and swallowing it would turn an
+ * informative wait into a grey box. Cards with a custom header (not CardHead) simply
+ * render the skeleton alone. */
+export function Card({ children, className = '', span, area, skeleton = 'chart' }: {
   children: React.ReactNode; className?: string; span?: string
+  area?: DataArea | null
+  /** Shape of the placeholder, so the layout does not jump when real data lands. */
+  skeleton?: SkeletonKind
 }) {
+  const state = useAreaState(area)
+  const shell = `bg-white border border-[#e5e7eb] rounded-xl ${span ?? ''} ${className}`
+
+  // Only `building` swaps the body. `empty` means the procedure already ran and this
+  // brand genuinely has nothing — the card's own empty state is the honest answer.
+  if (state !== 'building') {
+    return <div className={shell}>{children}</div>
+  }
+
+  const head = Children.toArray(children).find(c => isValidElement(c) && c.type === CardHead)
+
   return (
-    <div className={`bg-white border border-[#e5e7eb] rounded-xl ${span ?? ''} ${className}`}>
-      {children}
+    <div className={shell}>
+      {head}
+      <CardSkeleton kind={skeleton} />
     </div>
   )
 }
@@ -104,8 +132,14 @@ export function Delta({ delta, good, bare = false }: { delta: number; good: bool
   )
 }
 
-/* KPI card with a free-form delta string (mixed units: %, pts, notes). */
-export function FlexKpiCard({ kpi, color }: { kpi: OverviewKpi; color: string }) {
+/* KPI card with a free-form delta string (mixed units: %, pts, notes).
+ *
+ * `area` matters here as much as on any chart: a KPI row showing zeros next to
+ * skeleton charts reads as "the numbers really are zero", which is worse than
+ * showing nothing. Pass the gold table the tab's KPI query actually reads. */
+export function FlexKpiCard({ kpi, color, area }: {
+  kpi: OverviewKpi; color: string; area?: DataArea | null
+}) {
   const t = useT()
   const c = kpi.flat ? '#6b7280' : kpi.good ? '#3d8a5f' : '#c2553f'
   const bg = kpi.flat ? '#f3f4f6' : kpi.good ? '#eaf5ef' : '#fcefec'
@@ -116,7 +150,7 @@ export function FlexKpiCard({ kpi, color }: { kpi: OverviewKpi; color: string })
   // zero would read as a measurement, which is the thing to avoid.
   if (kpi.unavailable) {
     return (
-      <Card className="px-4 py-3.5 flex flex-col gap-2.5">
+      <Card area={area} skeleton="kpi" className="px-4 py-3.5 flex flex-col gap-2.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="material-symbols-outlined text-[15px] text-[#cbd1d8]">{kpi.icon}</span>
           <span style={PJ} className="text-[10px] font-bold uppercase tracking-wider text-[#c4c9d4] truncate">{kpi.label}</span>
@@ -131,7 +165,7 @@ export function FlexKpiCard({ kpi, color }: { kpi: OverviewKpi; color: string })
   }
 
   return (
-    <Card className="px-4 py-3.5 flex flex-col gap-2.5">
+    <Card area={area} skeleton="kpi" className="px-4 py-3.5 flex flex-col gap-2.5">
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="material-symbols-outlined text-[15px] text-[#9ca3af]">{kpi.icon}</span>
         <span style={PJ} className="text-[10px] font-bold uppercase tracking-wider text-[#9ca3af] truncate">{kpi.label}</span>

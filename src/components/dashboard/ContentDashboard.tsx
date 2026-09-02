@@ -8,6 +8,7 @@ import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { NumCell } from '@/components/ui/ExactValue'
 import { PLATFORM_META, fmtNum, fmtInt, type PlatformFilter, type Period } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
+import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { ContentOverviewPayload } from '@/lib/dashboard/content'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -50,6 +51,8 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
   const [format, setFormat] = useState<(typeof FORMATS)[number]>('All Formats')
   const [data, setData] = useState<ContentOverviewPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Ada area data yang tabelnya masih dibangun pipeline. */
+  const building = useAnyBuilding()
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +79,14 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       </div>
     )
   }
+  /**
+   * Brand yang baru dihubungkan: payload kosong BUKAN berarti datanya tidak ada, tapi
+   * pipeline belum selesai membangunnya. Pesan "No data for this filter yet." di bawah
+   * akan menyesatkan di titik itu, jadi selama masih ada area yang dibangun tab
+   * menampilkan bentuknya dulu — dan card asli menggantikannya begitu datanya masuk.
+   */
+  if (building && (!data || data.empty || data.kpis.length === 0)) return <TabSkeleton />
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -98,12 +109,12 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       {/* Performance KPIs */}
       <SectionHeader icon="monitoring" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       {/* Post type performance + content volume */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-        <Card className="flex flex-col">
+        <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Post Type Performance')} metricKey="post_metric.post_type" sub={t('Instagram · avg reach by format')} />
           <div className="px-4 pb-4 pt-3">
             {data.postTypePerf.length
@@ -118,7 +129,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card area="brand_metric_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Content Volume by Week')} metricKey="derived.content_volume_weekly" sub={t('Posts published per week')}
             action={<Badge text={t('Posts')} color={SERIES} />} />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
@@ -136,7 +147,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
 
       {/* Top posts table */}
       <SectionHeader icon="emoji_events">{t('Top Posts — Performance Table')}</SectionHeader>
-      <Card className="overflow-hidden">
+      <Card area="post_metric" skeleton="table" className="overflow-hidden">
         <div className="flex items-start justify-between px-4 pt-3.5 pb-2 flex-wrap gap-2">
           <div>
             <h3 style={PJ} className="flex items-center gap-1 text-[12.5px] font-bold text-[#111827] tracking-[-0.01em]">
@@ -195,7 +206,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
       {/* TikTok video analytics */}
       <SectionHeader icon="smart_display">{t('Video Analytics')}</SectionHeader>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Card className="flex flex-col">
+        <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('TikTok Completion Rate Distribution')} metricKey="derived.completion_rate_distribution" sub={t('Share of videos by how much of them gets watched')} />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.completionDist.some(d => d.value > 0)
@@ -209,7 +220,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Reel Watch Time by Duration')} metricKey="derived.reel_watch_by_duration" sub={t('Average watch time and completion by reel length')} />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.reelWatch.some(d => d.value > 0)
