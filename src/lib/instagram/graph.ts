@@ -240,7 +240,7 @@ const STORY_INSIGHT_METRICS = [
   'reach', 'replies', 'shares', 'follows',
   'profile_visits', 'profile_activity',
   'reposts', 'total_interactions', 'total_views', 'facebook_views',
-].join(',')
+]
 
 export async function fetchIgStories(igUserId: string, accessToken: string) {
   const res = await fetch(
@@ -249,26 +249,56 @@ export async function fetchIgStories(igUserId: string, accessToken: string) {
   const json = await res.json()
   if (json.error) {
     console.error(`[fetchIgStories] igUserId=${igUserId}:`, JSON.stringify(json.error))
+    // Jangan kembalikan objek error diam-diam: pemanggil cuma membaca json.data,
+    // jadi tanpa throw akun yang gagal izin tercatat "success, 0 story".
+    throw new Error(`fetchIgStories ${igUserId}: ${json.error.message ?? 'unknown Graph error'}`)
   }
   return json
 }
 
+// Instagram menolak SELURUH request insight kalau ada satu metrik saja yang
+// tidak berlaku untuk story itu — mis. facebook_views pada akun yang tidak
+// crosspost ke Facebook (subcode 2207086), atau total_views yang kadang balas
+// (#200) Permissions error. Efeknya semua metrik ikut kosong, bukan hanya yang
+// bermasalah. Jadi: coba batch dulu (1 request), kalau ditolak ambil per metrik
+// dan simpan yang berhasil.
+async function fetchStoryMetrics(mediaId: string, accessToken: string) {
+  const url = (metric: string) =>
+    `${GRAPH}/${mediaId}/insights?metric=${metric}&access_token=${accessToken}`
+
+  const batchJson = await (await fetch(url(STORY_INSIGHT_METRICS.join(',')))).json()
+  if (!batchJson.error) return batchJson.data ?? []
+
+  console.warn(
+    `[fetchIgStoryInsights] batch ditolak mediaId=${mediaId}, fallback per metrik:`,
+    JSON.stringify(batchJson.error)
+  )
+
+  const perMetric = await Promise.all(
+    STORY_INSIGHT_METRICS.map(async (metric) => {
+      const json = await (await fetch(url(metric))).json()
+      if (json.error) {
+        console.error(`[fetchIgStoryInsights] ${metric} mediaId=${mediaId}:`, JSON.stringify(json.error))
+        return []
+      }
+      return json.data ?? []
+    })
+  )
+  return perMetric.flat()
+}
+
 export async function fetchIgStoryInsights(mediaId: string, accessToken: string) {
-  const [mainRes, navRes] = await Promise.all([
-    fetch(`${GRAPH}/${mediaId}/insights?metric=${STORY_INSIGHT_METRICS}&access_token=${accessToken}`),
+  const [mainData, navRes] = await Promise.all([
+    fetchStoryMetrics(mediaId, accessToken),
     fetch(`${GRAPH}/${mediaId}/insights?metric=navigation&breakdown=story_navigation_action_type&access_token=${accessToken}`),
   ])
 
-  const [mainJson, navJson] = await Promise.all([mainRes.json(), navRes.json()])
-
-  if (mainJson.error) {
-    console.error(`[fetchIgStoryInsights] mediaId=${mediaId}:`, JSON.stringify(mainJson.error))
-  }
+  const navJson = await navRes.json()
   if (navJson.error) {
     console.error(`[fetchIgStoryInsights navigation] mediaId=${mediaId}:`, JSON.stringify(navJson.error))
   }
 
-  return { data: [...(mainJson.data ?? []), ...(navJson.data ?? [])] }
+  return { data: [...mainData, ...(navJson.data ?? [])] }
 }
 
 export async function fetchIgFollowsUnfollows(igUserId: string, accessToken: string) {
