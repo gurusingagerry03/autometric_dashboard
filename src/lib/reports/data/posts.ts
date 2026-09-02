@@ -58,18 +58,34 @@ export interface PostCandidate {
 // and the PPTX exporter.
 export type ReportPostMetrics = Record<string, PostCandidate[]>
 
-// Normalize the messy source `format` (photo/Motion/Static/reels/Reels-Tiktok/…)
-// into the slide's filter buckets.
-export function normFormat(raw?: string | null): { id: string; label: string } {
-  const s = (raw ?? '').trim().toLowerCase()
-  if (!s) return { id: 'other', label: 'Other' }
+function formatBucket(s: string): { id: string; label: string } | null {
   if (s.includes('reel')) return { id: 'reel', label: 'Reel' }
   if (s.includes('carousel')) return { id: 'carousel', label: 'Carousel' }
   if (s.includes('video') || s.includes('motion')) return { id: 'video', label: 'Video' }
   if (s.includes('photo') || s.includes('feed') || s.includes('static') || s.includes('image')) return { id: 'image', label: 'Image' }
   if (s.includes('link')) return { id: 'link', label: 'Link' }
   if (s.includes('story')) return { id: 'story', label: 'Story' }
-  return { id: s, label: (raw ?? '').trim() }
+  return null
+}
+
+// Normalize the messy source `format` (photo/Motion/Static/reels/Reels-Tiktok/…)
+// into the slide's filter buckets. `format` is an editorial tag from
+// l0_extra.*_post_extra_attribute and stays null unless the brand tags its posts,
+// so `post` carries the platform's own media type as the fallback — without it
+// every API-synced post lands in "Other".
+export function normFormat(
+  raw?: string | null,
+  post?: { postType?: string | null; link?: string | null; durationS?: number | null },
+): { id: string; label: string } {
+  const s = (raw ?? '').trim().toLowerCase()
+  if (s) return formatBucket(s) ?? { id: s, label: (raw ?? '').trim() }
+  const pt = (post?.postType ?? '').trim().toLowerCase()
+  // Instagram reports a Reel as media_type='VIDEO' — recover it from the
+  // permalink or a non-zero runtime, same rule as the Content dashboard.
+  if (pt === 'video' && ((post?.link ?? '').includes('/reel/') || (post?.durationS ?? 0) > 0)) {
+    return { id: 'reel', label: 'Reel' }
+  }
+  return (pt ? formatBucket(pt) : null) ?? { id: 'other', label: 'Other' }
 }
 
 // Content pillars are brand-specific free text → slug id + verbatim label.

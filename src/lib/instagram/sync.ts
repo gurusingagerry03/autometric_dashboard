@@ -86,7 +86,10 @@ export async function initialIgSync(
             mediaId:                media.id,
             postedAt:               media.timestamp        ?? null,
             caption:                media.caption          ?? null,
-            mediaType:              media.media_type       ?? null,
+            // store the resolved type, not the raw one: Instagram returns
+            // media_type='VIDEO' for reels and l0_raw has no media_product_type
+            // column, so the REELS signal is lost forever if we drop it here.
+            mediaType:              effectiveType          ?? null,
             permalink:              media.permalink        ?? null,
             reach:                  m.reach                ?? null,
             saved:                  m.saved                ?? null,

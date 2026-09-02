@@ -36,9 +36,28 @@ export interface ContentOverviewPayload {
 
 const PALETTE = ['#1B8A80', '#e0a458', '#5fa783', '#d97a7a', '#8b7fc7', '#5b94b8']
 
-// IG format -> card label for Post Type Performance.
+// IG format -> card label for Post Type Performance. `format` is an editorial tag
+// (l0_extra.instagram_post_extra_attribute) that stays null unless the brand tags
+// its posts, so post_type — the platform's own media type, carried down from
+// l0_raw.ig_media_snapshots.media_type — has to be mapped here too.
 const IG_FORMAT_LABEL: Record<string, string> = {
   reels: 'Reels', carousel: 'Carousel', feed: 'Image', story: 'Story',
+  carousel_album: 'Carousel', image: 'Image', video: 'Video',
+}
+// Instagram reports a Reel as media_type='VIDEO' — media_product_type carries the
+// REELS flag but never reaches l0_raw — so recover it from the permalink or a
+// non-zero runtime. Every VIDEO row synced from a live account is in fact a Reel.
+function igFormatLabel(format: string | null, postType: string | null, link: string | null, durationS: number | null): string {
+  const fmt = (format ?? '').trim()
+  const tagged = IG_FORMAT_LABEL[fmt.toLowerCase()]
+  if (tagged) return tagged
+  const pt = (postType ?? '').trim().toLowerCase()
+  if (pt === 'video' && ((link ?? '').includes('/reel/') || (durationS ?? 0) > 0)) return 'Reels'
+  const known = IG_FORMAT_LABEL[pt]
+  if (known) return known
+  // an editorial tag the map does not know ('Motion'/'Static'/…) still deserves a bar
+  const raw = fmt || (postType ?? '').trim()
+  return raw ? raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—'
 }
 // per-platform media format -> Top Posts "Format" column label. Raw values differ
 // per source (IG media_product_type, FB post_type, TikTok), so match on lower case.
@@ -215,24 +234,36 @@ function buildKpis(
   ]
 }
 
-// ── Post Type Performance — IG avg reach by format (silver) ───────────────────
+// ── Post Type Performance — IG avg reach by format (gold) ─────────────────────
 async function postTypePerf(orgId: string, w: Window, brandId: string | null, t: Translator) {
-  const { rows } = await pool.query<{ format: string; reach: number }>(
-    `SELECT p.format, AVG(p.reach)::float reach
+  // Bucketing happens in JS, not GROUP BY, because the label rules (editorial
+  // `format` first, then post_type, plus the Reel recovery) live in igFormatLabel.
+  const { rows } = await pool.query<{
+    format: string | null; post_type: string | null; link: string | null
+    duration_s: number; reach: number
+  }>(
+    `SELECT p.format, p.post_type, p.link,
+            COALESCE(p.duration_s,0)::float duration_s,
+            COALESCE(p.reach,0)::float      reach
        FROM l2_gold.post_metric p
        JOIN public.brand_social_accounts bsa ON bsa.social_account_id = p.brand_id
        JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND p.platform = 'instagram'
         AND p.post_date::date BETWEEN $2 AND $3
-        AND p.format IS NOT NULL
-        AND ($4::uuid IS NULL OR bsa.brand_id = $4)
-      GROUP BY p.format
-      ORDER BY reach DESC`,
+        AND COALESCE(NULLIF(btrim(p.format), ''), p.post_type) IS NOT NULL
+        AND ($4::uuid IS NULL OR bsa.brand_id = $4)`,
     [orgId, w.start, w.end, brandId],
   )
-  const bars: NamedBar[] = rows.map((r, i) => ({
-    label: t(IG_FORMAT_LABEL[r.format] ?? r.format), value: Math.round(r.reach), color: PALETTE[i % PALETTE.length],
-  }))
+  const agg = new Map<string, { sum: number; n: number }>()
+  for (const r of rows) {
+    const key = igFormatLabel(r.format, r.post_type, r.link, r.duration_s)
+    const cur = agg.get(key) ?? { sum: 0, n: 0 }
+    agg.set(key, { sum: cur.sum + r.reach, n: cur.n + 1 })
+  }
+  const bars: NamedBar[] = [...agg.entries()]
+    .map(([label, a]) => ({ label, value: Math.round(a.sum / a.n) }))
+    .sort((a, b) => b.value - a.value)
+    .map((bar, i) => ({ ...bar, label: t(bar.label), color: PALETTE[i % PALETTE.length] }))
   // finding: top format vs the next one
   const [top, second] = bars
   const insight = top

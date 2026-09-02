@@ -22,6 +22,7 @@ export async function getReportPostMetrics(
 
   const { rows } = await pool.query<Record<string, any>>(
     `SELECT p.id, p.platform, p.cover_image, p.format, p.content_pillar,
+            p.post_type, p.link, COALESCE(p.duration_s,0)::float duration_s,
             COALESCE(p.follows,0)::float      follows,
             COALESCE(p.reach,0)::float        reach,
             COALESCE(p.impressions,0)::float  impressions,
@@ -48,7 +49,7 @@ export async function getReportPostMetrics(
 
   const out: ReportPostMetrics = { instagram: [], facebook: [], tiktok: [] }
   for (const r of rows) {
-    const f = normFormat(r.format)
+    const f = normFormat(r.format, { postType: r.post_type, link: r.link, durationS: num(r.duration_s) })
     const pil = normPillar(r.content_pillar)
     // Awareness: Facebook reports impressions, Instagram/TikTok report views.
     const impressionsViews = r.platform === 'facebook' ? num(r.impressions) : num(r.views)

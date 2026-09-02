@@ -79,7 +79,9 @@ export async function POST(_req: NextRequest, { params }: Params) {
           mediaId:                media.id,
           postedAt:               media.timestamp        ?? null,
           caption:                media.caption          ?? null,
-          mediaType:              media.media_type       ?? null,
+          // resolved type, not the raw one — l0_raw has no media_product_type
+          // column, so storing media_type='VIDEO' loses the REELS signal for good.
+          mediaType:              effectiveType          ?? null,
           permalink:              media.permalink        ?? null,
           reach:                  m.reach                ?? null,
           saved:                  m.saved                ?? null,
