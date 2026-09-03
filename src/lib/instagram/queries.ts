@@ -104,7 +104,7 @@ export async function saveIgSnapshot(payload: IgSnapshotPayload): Promise<void> 
       social_account_id,
       username, name, biography, website,
       followers_count, follows_count, media_count,
-      accounts_engaged, comments, likes, profile_links_taps,
+      accounts_engaged, comments, likes, profile_links_taps, profile_views,
       reach, replies, reposts, saves, shares, total_interactions, views,
       follows_and_unfollows,
       demographics_age, demographics_city, demographics_country, demographics_gender
@@ -112,10 +112,10 @@ export async function saveIgSnapshot(payload: IgSnapshotPayload): Promise<void> 
       $1,
       $2, $3, $4, $5,
       $6, $7, $8,
-      $9, $10, $11, $12,
-      $13, $14, $15, $16, $17, $18, $19,
-      $20,
-      $21, $22, $23, $24
+      $9, $10, $11, $12, $13,
+      $14, $15, $16, $17, $18, $19, $20,
+      $21,
+      $22, $23, $24, $25
     )
     ON CONFLICT (social_account_id, DATE(fetched_at AT TIME ZONE 'Asia/Jakarta'))
     DO NOTHING`,
@@ -132,18 +132,19 @@ export async function saveIgSnapshot(payload: IgSnapshotPayload): Promise<void> 
       m.comments           ?? null, // $10
       m.likes              ?? null, // $11
       m.profile_links_taps ?? null, // $12
-      m.reach              ?? null, // $13
-      m.replies            ?? null, // $14
-      m.reposts            ?? null, // $15
-      m.saves              ?? null, // $16
-      m.shares             ?? null, // $17
-      m.total_interactions ?? null, // $18
-      m.views              ?? null, // $19
-      JSON.stringify(payload.followsAndUnfollows        ?? {}), // $20
-      JSON.stringify(payload.insightsLifetime?.age      ?? {}), // $21
-      JSON.stringify(payload.insightsLifetime?.city     ?? {}), // $22
-      JSON.stringify(payload.insightsLifetime?.country  ?? {}), // $23
-      JSON.stringify(payload.insightsLifetime?.gender   ?? {}), // $24
+      m.profile_views      ?? null, // $13
+      m.reach              ?? null, // $14
+      m.replies            ?? null, // $15
+      m.reposts            ?? null, // $16
+      m.saves              ?? null, // $17
+      m.shares             ?? null, // $18
+      m.total_interactions ?? null, // $19
+      m.views              ?? null, // $20
+      JSON.stringify(payload.followsAndUnfollows        ?? {}), // $21
+      JSON.stringify(payload.insightsLifetime?.age      ?? {}), // $22
+      JSON.stringify(payload.insightsLifetime?.city     ?? {}), // $23
+      JSON.stringify(payload.insightsLifetime?.country  ?? {}), // $24
+      JSON.stringify(payload.insightsLifetime?.gender   ?? {}), // $25
     ]
   )
 }

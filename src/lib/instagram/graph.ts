@@ -26,12 +26,17 @@ const PROFILE_FIELDS = [
   'media_count',
 ].join(',')
 
+// follows_and_unfollows SENGAJA TIDAK di sini: metrik itu wajib dibarengi
+// breakdown=follow_type, dan parameter breakdown tidak bisa dipasang di request
+// gabungan. Tanpa breakdown Meta tetap membalas 200, tapi isinya kerangka kosong
+// (total_value.breakdowns tanpa results maupun value) — terlihat sukses, nilainya
+// tidak ada. Diambil terpisah lewat fetchIgFollowsUnfollows().
 const INSIGHTS_DAY_METRICS = [
   'accounts_engaged',
   'comments',
-  'follows_and_unfollows',
   'likes',
   'profile_links_taps',
+  'profile_views',
   'reach',
   'replies',
   'reposts',
@@ -302,7 +307,13 @@ export async function fetchIgStoryInsights(mediaId: string, accessToken: string)
 }
 
 export async function fetchIgFollowsUnfollows(igUserId: string, accessToken: string) {
-  const until = wibMidnight(0)
+  // Mundur satu hari, BUKAN wibMidnight(0). Data follows_and_unfollows untuk hari
+  // yang baru saja berakhir belum tersedia di Meta saat sync jalan 02:00 WIB —
+  // request-nya sukses tapi breakdown-nya pulang tanpa results. Diuji 1 Sep 2026
+  // pada akun Fitbar: window ke hari-kemarin kosong, digeser satu hari langsung
+  // keluar FOLLOWER 267 / NON_FOLLOWER 53, dan konsisten untuk hari-hari sebelumnya.
+  // Konsekuensinya angka hari ini baru muncul besok — memang belum ada di sumbernya.
+  const until = wibMidnight(-1)
   const since = until - 86400
 
   const res = await fetch(

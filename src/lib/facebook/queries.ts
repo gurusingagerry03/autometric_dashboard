@@ -17,6 +17,16 @@ function extractPageInsight(data: unknown[], metricName: string): number | null 
   return typeof val === 'number' ? val : null
 }
 
+// Metrik demografi (page_follows_city / page_follows_country) bernilai objek
+// {dimensi: jumlah}, bukan angka — extractPageInsight sengaja mengembalikan null
+// untuk itu, jadi butuh pembaca sendiri. Mengembalikan {} bila metriknya tidak
+// ada di response supaya kolom jsonb tetap terisi bentuk yang konsisten.
+function extractPageBreakdown(data: unknown[], metricName: string): Record<string, number> {
+  const item = (data as FbInsightItem[]).find(i => i.name === metricName)
+  const val = item?.values?.[item.values.length - 1]?.value
+  return val && typeof val === 'object' ? (val as Record<string, number>) : {}
+}
+
 // ─── Post Insights helpers ────────────────────────────────────────────────────
 
 type FbPostInsightItem = {
@@ -53,7 +63,9 @@ export async function saveFbSnapshot(payload: FbSnapshotPayload): Promise<void> 
       page_follows, page_daily_follows_unique,
       page_media_view, page_total_media_view_unique,
       page_video_views, page_views_total,
-      content_interactions, link_clicks, profile_reach
+      content_interactions, link_clicks, profile_reach,
+      page_daily_unfollows_unique,
+      demographics_city, demographics_country
     ) VALUES (
       $1,
       $2, $3, $4, $5, $6,
@@ -61,7 +73,9 @@ export async function saveFbSnapshot(payload: FbSnapshotPayload): Promise<void> 
       $12, $13,
       $14, $15,
       $16, $17,
-      $18, $19, $20
+      $18, $19, $20,
+      $21,
+      $22, $23
     )
     ON CONFLICT (social_account_id, DATE(fetched_at AT TIME ZONE 'Asia/Jakarta'))
     DO NOTHING`,
@@ -84,8 +98,15 @@ export async function saveFbSnapshot(payload: FbSnapshotPayload): Promise<void> 
       extractPageInsight(dayData, 'page_video_views'),                             // $16
       extractPageInsight(dayData, 'page_views_total'),                             // $17
       extractPageInsight(dayData, 'page_post_engagements'),                        // $18
-      extractPageInsight(dayData, 'page_website_clicks'),                          // $19
-      extractPageInsight(dayData, 'page_impressions_unique'),                      // $20
+      // link_clicks & profile_reach: nama kolom tetap, metrik pengisinya yang
+      // berganti — page_website_clicks dan page_impressions_unique sudah dihapus
+      // Meta. page_total_media_view_unique memang juga disimpan di kolomnya sendiri
+      // di atas; duplikasi ini disengaja agar layer baca tidak perlu diubah.
+      extractPageInsight(dayData, 'page_total_actions'),                           // $19
+      extractPageInsight(dayData, 'page_total_media_view_unique'),                 // $20
+      extractPageInsight(dayData, 'page_daily_unfollows_unique'),                  // $21
+      JSON.stringify(extractPageBreakdown(dayData, 'page_follows_city')),          // $22
+      JSON.stringify(extractPageBreakdown(dayData, 'page_follows_country')),       // $23
     ]
   )
 }

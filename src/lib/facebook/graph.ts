@@ -17,17 +17,34 @@ export async function fetchFbProfile(pageId: string, accessToken: string) {
   return res.json()
 }
 
-// Request each daily metric individually — one bad metric won't block the rest
+// Request each daily metric individually — one bad metric won't block the rest.
+//
+// page_website_clicks dan page_impressions_unique DIBUANG: keduanya dihapus Meta
+// per 15 Nov 2025 dan membalas "(#100) The value must be a valid insights metric"
+// di SEMUA versi v19–v26, termasuk di Page yang izinnya lengkap — jadi setiap sync
+// menyisakan dua request yang pasti gagal. Penggantinya page_total_actions dan
+// page_total_media_view_unique (yang terakhir sudah ada di daftar ini).
+//
+// page_follows_city / page_follows_country menggantikan page_fans_city /
+// page_fans_country yang ikut dihapus. Keduanya metrik lifetime bernilai objek,
+// bukan angka harian — karena itu dipisah ke FB_PAGE_LIFETIME_METRICS.
 const FB_PAGE_DAILY_METRICS = [
   'page_follows',
   'page_daily_follows_unique',
+  'page_daily_unfollows_unique',
   'page_media_view',
   'page_total_media_view_unique',
   'page_video_views',
   'page_views_total',
   'page_post_engagements',
-  'page_website_clicks',
-  'page_impressions_unique',
+  'page_total_actions',
+] as const
+
+// Metrik demografi: period=lifetime dan nilainya objek {dimensi: jumlah},
+// jadi tidak bisa ikut request harian di atas.
+const FB_PAGE_LIFETIME_METRICS = [
+  'page_follows_city',
+  'page_follows_country',
 ] as const
 
 export async function fetchFbPageInsightsDay(pageId: string, accessToken: string) {
@@ -55,6 +72,29 @@ export async function fetchFbPageInsightsDay(pageId: string, accessToken: string
       }
     }
   }
+
+  // Demografi ikut digabung ke data yang sama supaya pemanggilnya cukup membaca
+  // satu koleksi; extractor di queries.ts yang membedakan nilai angka vs objek.
+  const lifetime = await Promise.allSettled(
+    FB_PAGE_LIFETIME_METRICS.map(m =>
+      fetch(
+        `${GRAPH}/${pageId}/insights?metric=${m}` +
+        `&period=lifetime` +
+        `&access_token=${accessToken}`
+      ).then(r => r.json())
+    )
+  )
+  for (const [i, r] of lifetime.entries()) {
+    if (r.status === 'fulfilled') {
+      const json = r.value as { data?: unknown[]; error?: unknown }
+      if (json.error) {
+        console.error(`[fetchFbPageInsightsLifetime] ${FB_PAGE_LIFETIME_METRICS[i]} pageId=${pageId}:`, JSON.stringify(json.error))
+      } else {
+        combined.push(...(json.data ?? []))
+      }
+    }
+  }
+
   return { data: combined }
 }
 
