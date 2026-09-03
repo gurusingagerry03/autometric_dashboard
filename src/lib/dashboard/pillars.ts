@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { getLivePillarComparison } from './pillarTags'
 
 /**
  * Content Pillars dashboard data access, per docs §5 Content Pillars:
@@ -24,35 +25,37 @@ async function brandInOrg(orgId: string, brandId: string): Promise<boolean> {
 
 export async function getPillarsData(orgId: string, brandId: string | null): Promise<PillarsPayload> {
   const [dim, perf] = await Promise.all([
-    pool.query<{ id: string; content_pillar: string; color: string | null; hashtags: string[] }>(
-      `SELECT d.id::text id, d.content_pillar, d.color, d.hashtags
+    pool.query<{ id: string; content_pillar: string; color: string | null; hashtags: string[]; is_active: boolean }>(
+      `SELECT d.id::text id, d.content_pillar, d.color, d.hashtags, d.is_active
          FROM l2_gold.dim_content_pillar d
          JOIN public.brands b ON b.id = d.brand_id AND b.deleted_at IS NULL
-        WHERE b.organization_id = $1 AND d.is_active
+        WHERE b.organization_id = $1
           AND ($2::uuid IS NULL OR d.brand_id = $2)
-        ORDER BY d.display_order NULLS LAST, d.content_pillar`,
+        ORDER BY d.is_active DESC, d.display_order NULLS LAST, d.content_pillar`,
       [orgId, brandId],
     ),
-    pool.query<{ content_pillar: string; posts: number; eng: number; den: number }>(
-      `SELECT pp.content_pillar,
-              SUM(pp.post_count)::int posts,
-              SUM(pp.engagement_sum)::float eng,
-              SUM(pp.er_denominator_sum)::float den
-         FROM l2_gold.pillar_performance_daily pp
-         JOIN public.brands b ON b.id = pp.brand_id AND b.deleted_at IS NULL
-        WHERE b.organization_id = $1 AND pp.content_pillar IS NOT NULL
-          AND ($2::uuid IS NULL OR pp.brand_id = $2)
-        GROUP BY pp.content_pillar`,
-      [orgId, brandId],
-    ),
+    // Dihitung langsung dari silver + tag l0_extra, BUKAN dari
+    // l2_gold.pillar_performance_daily — gold dibangun semalam sekali dan hanya
+    // mengenal satu pilar per post, jadi tag baru tidak akan pernah muncul di sini.
+    getLivePillarComparison(orgId, brandId),
   ])
 
-  const pillars: PillarRow[] = dim.rows.map(r => ({
-    id: r.id, name: r.content_pillar, color: colorFor(r.content_pillar, r.color), hashtags: r.hashtags ?? [],
+  // Kartu "Tentukan Pilar" hanya menampilkan yang aktif; chart perbandingan perlu
+  // tahu yang nonaktif juga, karena sebagian masih dipakai ratusan post.
+  const allPillars = dim.rows.map(r => ({
+    id: r.id, name: r.content_pillar, color: colorFor(r.content_pillar, r.color),
+    hashtags: r.hashtags ?? [], isActive: r.is_active,
   }))
+  const pillars: PillarRow[] = allPillars.filter(p => p.isActive)
+    .map(({ id, name, color, hashtags }) => ({ id, name, color, hashtags }))
 
-  const perfByName = new Map(perf.rows.map(r => [r.content_pillar, r]))
-  const comparison: PillarComparison[] = pillars.map(p => {
+  const perfByName = new Map(perf.map(r => [r.name, r]))
+
+  // Pilar aktif selalu tampil walau nol post — supaya skema brand terbaca utuh.
+  // Pilar nonaktif hanya tampil kalau masih menempel di post; menyembunyikannya
+  // akan menghilangkan ratusan post dari perbandingan tanpa penjelasan.
+  const inChart = allPillars.filter(p => p.isActive || (perfByName.get(p.name)?.posts ?? 0) > 0)
+  const comparison: PillarComparison[] = inChart.map(p => {
     const m = perfByName.get(p.name)
     const er = m && m.den > 0 ? (m.eng / m.den) * 100 : 0
     return { name: p.name, color: p.color, er: +er.toFixed(1), posts: m?.posts ?? 0 }

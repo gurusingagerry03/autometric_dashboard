@@ -5,6 +5,7 @@ import { Card, CardHead, SectionHeader } from './ui'
 import { HBars } from './charts'
 import DashboardChrome from './DashboardChrome'
 import { PILLAR_COLORS } from './data'
+import PillarTagging from './PillarTagging'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import type { PillarsPayload } from '@/lib/dashboard/pillars'
 
@@ -52,17 +53,27 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
     setTagInput('')
   }
 
+  /**
+   * Satu-satunya jalur pembuatan pilar. Kartu di atas dan permukaan penandaan di
+   * bawah sama-sama lewat sini, supaya tidak ada dua perilaku yang bisa menyimpang.
+   */
+  async function createPillar(name: string, color: string, hashtags: string[]): Promise<boolean> {
+    const r = await fetch(`/api/organizations/${orgId}/dashboard/pillars`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brandId, name, color, hashtags }),
+    })
+    if (!r.ok) return false
+    setData(await r.json())
+    setComparisonRun(false)
+    return true
+  }
+
   async function addPillar() {
     if (!draftName.trim() || busy) return
     setBusy(true)
     try {
-      const r = await fetch(`/api/organizations/${orgId}/dashboard/pillars`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brandId, name: draftName.trim(), color: draftColor, hashtags: draftTags }),
-      })
-      if (r.ok) {
-        setData(await r.json())
-        setDraftName(''); setDraftTags([]); setComparisonRun(false)
+      if (await createPillar(draftName.trim(), draftColor, draftTags)) {
+        setDraftName(''); setDraftTags([])
         setDraftColor(PILLAR_COLORS[(pillars.length + 1) % PILLAR_COLORS.length])
       }
     } finally { setBusy(false) }
@@ -102,7 +113,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
           <div className="px-5 pt-4 pb-1">
             <h3 style={PJ} className="text-[15px] font-bold text-[#111827]">{t('Define Your Content Pillars')}</h3>
             <p className="text-[12.5px] text-[#9ca3af] mt-1 leading-relaxed">
-              {t('Name each pillar, assign a color, and add relevant hashtags. Posts matching those hashtags are grouped under the pillar, and their performance is summed up in the comparison below.')}
+              {t('Name each pillar and assign a color. Hashtags are kept for reference only — they do not tag posts on their own. Assign posts in the tagging section below.')}
             </p>
           </div>
 
@@ -150,9 +161,9 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
                       <button onClick={() => removePillar(p.id)} disabled={busy} className="material-symbols-outlined text-[16px] text-[#cbd1d8] hover:text-[#c2553f] disabled:opacity-40">delete</button>
                     </div>
                   ))}
-                  <button onClick={() => setComparisonRun(true)} disabled={pillars.length < 2} style={PJ}
+                  <button onClick={() => setComparisonRun(true)} disabled={comparison.length < 2} style={PJ}
                     className={`self-start mt-1 inline-flex items-center gap-1.5 text-[13px] font-bold rounded-lg px-4 py-2.5 ${
-                      pillars.length < 2 ? 'bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed' : 'bg-[#1f2937] text-white hover:bg-[#374151]'
+                      comparison.length < 2 ? 'bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed' : 'bg-[#1f2937] text-white hover:bg-[#374151]'
                     }`}>
                     <span className="material-symbols-outlined text-[16px]">bar_chart</span>{t('Run Comparison')}
                   </button>
@@ -162,7 +173,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
         </Card>
 
         <Card area="pillar_performance_daily" skeleton="chart" className="flex flex-col">
-          {comparisonRun && pillars.length >= 2 ? (
+          {comparisonRun && comparison.length >= 2 ? (
             <>
               <CardHead title={t('Pillar Performance Comparison')} metricKey="pillar_performance_daily.engagement_sum" sub={t('Engagement rate averaged across each pillar')} />
               <div className="px-4 pb-5 pt-3 flex-1 flex flex-col justify-center">
@@ -184,6 +195,10 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
           )}
         </Card>
       </div>
+
+      <SectionHeader icon="sell">{t('Tagging')}</SectionHeader>
+      <PillarTagging orgId={orgId} brandId={brandId}
+        onCreatePillar={(name, color) => createPillar(name, color, [])} />
     </>
   )
 }
