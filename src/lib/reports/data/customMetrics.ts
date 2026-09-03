@@ -62,8 +62,12 @@ export const METRIC_FIELDS: MetricField[] = [
 export const FIELD_BY_ID: Record<string, MetricField> = Object.fromEntries(METRIC_FIELDS.map(f => [f.id, f]))
 
 export const LAYER_LABEL: Record<FieldLayer, string> = {
-  l1: 'Per-post · l1_silver',
-  l2: 'Daily / profile · l2_gold',
+  // Nama tabel/layer warehouse sengaja TIDAK ditampilkan. Pemakai report tidak
+  // punya urusan dengan l1_silver / l2_gold, dan membocorkannya membuat pemilih
+  // field terbaca seperti alat internal. Yang membedakan kedua grup ini bagi
+  // pemakai adalah butiran datanya: per-post vs per-hari.
+  l1: 'Per-post',
+  l2: 'Daily / profile',
   derived: 'Derived',
 }
 

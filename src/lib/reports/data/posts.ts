@@ -7,7 +7,13 @@ import { groupInt } from './format'
 // Engagement → Efficiency). "Impressions/Views" is one combined metric (Facebook
 // = impressions, Instagram/TikTok = views). ER is split into Reach/Views/Followers.
 // All of them are always offered as options; ones with no data render as 0.
-export const POST_METRICS: { id: string; label: string }[] = [
+export const POST_METRICS: { id: string; label: string; channels?: string[] }[] = [
+  // Kapan post tayang. Nilainya BUKAN angka untuk dibaca — tanggal disimpan
+  // sebagai epoch di `values` supaya pengurutan tetap jalan, dan bentuk yang
+  // dibaca orang ada di `text`. Tanpa epoch, "Rank by Post Date" akan diam-diam
+  // mengurutkan berdasarkan 0.
+  { id: 'post_date',     label: 'Post Date' },
+  { id: 'post_datetime', label: 'Post Date & Time' },
   { id: 'new_follow', label: 'New Follow' },
   { id: 'reach', label: 'Reach' },
   { id: 'impressions_views', label: 'Impressions/Views' },
@@ -20,7 +26,36 @@ export const POST_METRICS: { id: string; label: string }[] = [
   { id: 'er_reach', label: 'ER Reach' },
   { id: 'er_views', label: 'ER Views' },
   { id: 'er_followers', label: 'ER Followers' },
+  // TikTok-only: kolom sumbernya (avg_watch_time, completion_rate) hanya terisi
+  // untuk TikTok. Ditawarkan di channel lain hanya akan menghasilkan kartu berisi
+  // nol yang menyesatkan, jadi pemilihnya disaring lewat metricsForChannel().
+  { id: 'watch_time',      label: 'Avg. Watch Time', channels: ['tiktok'] },
+  { id: 'completion_rate', label: 'Completion Rate', channels: ['tiktok'] },
 ]
+
+/** Metrik yang masuk akal untuk sebuah channel — dipakai pemilih di Visual slide. */
+export const metricsForChannel = (channel: string) =>
+  POST_METRICS.filter(m => !m.channels || m.channels.includes(channel))
+
+// Kompetitor diukur dari permukaan publiknya, jadi metriknya terbatas pada yang
+// benar-benar dipublikasikan platform — dan ketiganya tidak sama. ER tidak ada di
+// sini dengan sengaja: menghitungnya butuh jumlah follower saat post tayang, yang
+// tidak tersedia per-post untuk kompetitor.
+const COMPETITOR_METRICS: Record<string, string[]> = {
+  instagram: ['post_date', 'post_datetime', 'likes', 'comments', 'impressions_views', 'engagement'],
+  tiktok:    ['post_date', 'post_datetime', 'likes', 'comments', 'shares', 'saves', 'impressions_views', 'engagement'],
+}
+export const metricsForCompetitor = (channel: string) => {
+  const ids = COMPETITOR_METRICS[channel] ?? []
+  return POST_METRICS.filter(m => ids.includes(m.id))
+}
+/** Channel yang punya data visual kompetitor sama sekali (Facebook tidak: tabel
+ *  mentahnya tidak menyimpan cover image). */
+export const competitorVisualSupported = (channel: string) => channel in COMPETITOR_METRICS
+
+/** Metrik yang nilainya teks (tanggal), bukan angka yang bisa diformat. */
+const TEXT_METRIC_IDS = new Set(['post_date', 'post_datetime'])
+export const isTextMetric = (id: string) => TEXT_METRIC_IDS.has(id)
 
 // ER metrics render as percentages (and get the ER highlight color in the card).
 const ER_METRIC_IDS = new Set(['er_reach', 'er_views', 'er_followers'])
@@ -51,6 +86,9 @@ export interface PostCandidate {
   formatId: string; format: string
   pillarId: string; pillar: string
   values: Record<string, number>   // numeric per POST_METRICS id (er_* are percent numbers)
+  /** Bentuk siap-baca untuk metrik yang bukan angka (tanggal). Kalau ada, dipakai
+   *  apa adanya; `values` untuk id yang sama hanya dipakai mengurutkan. */
+  text?: Record<string, string>
 }
 
 // Live candidate pool for a report (brand + month), keyed by channel. Built by
@@ -95,7 +133,10 @@ export function normPillar(raw?: string | null): { id: string; label: string } {
   return { id: t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''), label: t }
 }
 
-const fmtValue = (id: string, v: number) => (isErMetric(id) ? v.toFixed(2) + '%' : groupInt(v))
+const fmtValue = (id: string, v: number) =>
+  isErMetric(id) || id === 'completion_rate' ? v.toFixed(2) + '%'
+  : id === 'watch_time' ? v.toFixed(1) + 's'
+  : groupInt(v)
 
 export interface PostOptions {
   format?: string
@@ -133,7 +174,10 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
 
   return picked.map(({ cand, tag }, i) => {
     const metrics: Record<string, string> = {}
-    POST_METRICS.forEach(m => { metrics[m.id] = fmtValue(m.id, cand.values[m.id] ?? 0) })
+    POST_METRICS.forEach(m => {
+      // Teks menang untuk metrik tanggal; sisanya diformat dari angkanya.
+      metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0)
+    })
     return { id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics }
   })
 }
@@ -148,6 +192,9 @@ export const metricLabel = (id: string) => POST_METRICS.find(m => m.id === id)?.
 export function populatedMetricsFor(source: PostCandidate[] | undefined): string[] {
   if (!source || !source.length) return []
   return POST_METRICS.filter(m => source.some(p => (p.values[m.id] ?? 0) > 0)).map(m => m.id)
+    // Tanggal selalu ada isinya, tapi jangan pernah jadi default kartu — orang
+    // memilih Visual Content untuk melihat performa, bukan tanggal.
+    .filter(id => !isTextMetric(id))
 }
 
 const isKnownMetric = (id: string) => POST_METRICS.some(m => m.id === id)

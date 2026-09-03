@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
-import { POST_COUNTS, POST_FILTERS, POST_METRICS, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
-import { useReportPosts } from '@/lib/reports/data/metricsContext'
+import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, competitorVisualSupported, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
+import { useReportPosts, useReportCompetitorPosts } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -93,10 +93,22 @@ export default function VisualSlide({
 
   // Live pool for this slide's channel. No sample fallback: null ctx = still
   // loading; an empty pool = no posts for this channel/period.
-  const loading = ctx === null
-  const livePool = ctx?.[slide.channel] ?? null
+  // Mode competitive review memakai layout & pengaturan yang sama persis, hanya
+  // kumpulan post-nya yang ditukar. Kompetitor dipilih per slide; kalau belum
+  // dipilih, ambil yang pertama untuk channel ini supaya slide tidak kosong.
+  const compCtx = useReportCompetitorPosts()
+  const isComp = slide.postSource === 'competitor'
+  const compsForChannel = (compCtx?.competitors ?? []).filter(c => c.platform === slide.channel)
+  const compId = slide.postCompetitorId && compsForChannel.some(c => c.id === slide.postCompetitorId)
+    ? slide.postCompetitorId
+    : compsForChannel[0]?.id
+  const compPool = compId ? (compCtx?.posts?.[compId] ?? null) : null
+
+  const loading = isComp ? compCtx === null : ctx === null
+  const livePool = isComp ? compPool : (ctx?.[slide.channel] ?? null)
   const hasData = !!(livePool && livePool.length)
   const source = hasData ? livePool! : undefined
+  const metricOptions = isComp ? metricsForCompetitor(slide.channel) : metricsForChannel(slide.channel)
 
   // Every metric is selectable; the populated set only decides the defaults when
   // the slide has no explicit pick yet. Identical logic runs in the exporter so
@@ -199,10 +211,39 @@ export default function VisualSlide({
               ))}
             </div>
 
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Source')}</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {([['owned', t('Owned')], ['competitor', t('Competitor')]] as const).map(([id, label]) => {
+                const disabled = id === 'competitor' && !competitorVisualSupported(slide.channel)
+                return (
+                  <button key={id} disabled={disabled}
+                    title={disabled ? t('Competitor visuals are not available on this channel.') : undefined}
+                    onClick={() => onChange?.({ ...slide, postSource: id, postMetrics: [] })} style={PJ}
+                    className={`py-2.5 rounded-lg border text-[12px] font-semibold transition-all ${
+                      disabled ? 'border-[#f1f5f9] text-[#cbd5e1] cursor-not-allowed'
+                      : (slide.postSource ?? 'owned') === id ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079]'
+                      : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'
+                    }`}>{label}</button>
+                )
+              })}
+            </div>
+
+            {isComp && (
+              <>
+                <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Competitor')}</p>
+                <select value={compId ?? ''} onChange={e => onChange?.({ ...slide, postCompetitorId: e.target.value })} style={PJ}
+                  className="w-full mb-4 h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
+                  {compsForChannel.length === 0
+                    ? <option value="">{t('No competitor for this channel')}</option>
+                    : compsForChannel.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </>
+            )}
+
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Rank by (metric)')}</p>
             <select value={sortMetric} onChange={e => onChange?.({ ...slide, postSortMetric: e.target.value })} style={PJ}
               className="w-full mb-4 h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
-              {POST_METRICS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              {metricOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
 
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Format')}</p>
@@ -233,7 +274,7 @@ export default function VisualSlide({
 
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Metrics')} <span className="text-[#cbd5e1] normal-case font-medium">· {t('shown on each card')}</span></p>
             <div className="grid grid-cols-3 gap-2">
-              {POST_METRICS.map(m => {
+              {metricOptions.map(m => {
                 const on = slide.postMetrics.includes(m.id)
                 return (
                   <button key={m.id} onClick={() => toggleMetric(m.id)} style={PJ}

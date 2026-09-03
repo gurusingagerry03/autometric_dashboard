@@ -21,6 +21,7 @@ export const ID: Record<string, string> = {
   'Remove': 'Hapus',
   'Back': 'Kembali',
   'Next': 'Lanjut',
+  'Previous': 'Sebelumnya',
   'Finish': 'Selesai',
   'Add': 'Tambah',
   'Apply': 'Terapkan',
@@ -507,8 +508,8 @@ export const ID: Record<string, string> = {
 
   /* ── Content Pillars dashboard ────────────────────────────────────── */
   'Define Your Content Pillars': 'Tentukan Pilar Konten Kamu',
-  'Name each pillar, assign a color, and add relevant hashtags. Posts matching those hashtags are grouped under the pillar, and their performance is summed up in the comparison below.':
-    'Beri nama tiap pilar, pilih warnanya, dan tambahkan hashtag terkait. Konten yang memuat hashtag itu dikelompokkan ke pilar tersebut, dan performanya dirangkum pada perbandingan di bawah.',
+  'Name each pillar and assign a color. Hashtags are kept for reference only — they do not tag posts on their own. Assign posts in the tagging section below.':
+    'Beri nama tiap pilar dan pilih warnanya. Hashtag hanya disimpan sebagai catatan — tidak menandai konten dengan sendirinya. Penandaan konten dilakukan di bagian di bawah.',
   'Pillar name e.g. Drama': 'Nama pilar, misalnya Drama',
   'Pillar colour': 'Warna pilar',
   'Add hashtag — press Enter': 'Tambah hashtag — tekan Enter',
@@ -521,6 +522,40 @@ export const ID: Record<string, string> = {
   "No performance data for this brand's pillars yet.":
     'Belum ada data performa untuk pilar brand ini.',
   'No comparison yet': 'Belum ada perbandingan',
+
+  /* ── Content Pillars › penandaan post ─────────────────────────────── */
+  'Tagging': 'Penandaan',
+  'Tag Posts to Pillars': 'Tandai Konten ke Pilar',
+  'Define a pillar first': 'Tentukan pilarnya dulu',
+  'Tagging needs at least one pillar to assign posts to. Create one here, or use the card above.':
+    'Penandaan butuh minimal satu pilar sebagai tujuan. Buat di sini, atau lewat kartu di atas.',
+  'New pillar': 'Pilar baru',
+  'New pillar name': 'Nama pilar baru',
+  'Create pillar': 'Buat pilar',
+  'Open post': 'Buka post',
+  'Assign posts to pillars by hand. One post can belong to several pillars, and tagging here overrides whatever was imported earlier.':
+    'Tandai konten ke pilar secara manual. Satu konten boleh masuk beberapa pilar, dan penandaan di sini menimpa apa pun yang sebelumnya diimpor.',
+  'Imported': 'Hasil impor',
+  'Tagged here': 'Ditandai di sini',
+  'imported': 'hasil impor',
+  'tagged here': 'ditandai di sini',
+  'No caption': 'Tanpa caption',
+  'Could not save — the change was undone.': 'Gagal menyimpan — perubahan dikembalikan.',
+  'Search pillar': 'Cari pilar',
+  'No pillar found': 'Pilar tidak ditemukan',
+  'inactive': 'nonaktif',
+  'Choose pillars': 'Pilih pilar',
+  '{count} pillars chosen': '{count} pilar dipilih',
+  'Showing {from}–{to} of {matched}': 'Menampilkan {from}–{to} dari {matched}',
+  'Page {page} of {pages}': 'Halaman {page} dari {pages}',
+  '{done} of {total} tagged': '{done} dari {total} sudah ditandai',
+  'Search caption': 'Cari caption',
+  'Untagged': 'Belum ditandai',
+  'No posts match this filter': 'Tidak ada konten yang cocok dengan filter ini',
+  'Add pillar': 'Tambah pilar',
+  '{count} selected': '{count} dipilih',
+  'Add tag': 'Tambahkan',
+  'Remove tag': 'Lepas',
   'Add at least 2 pillars and click “Run Comparison” to see performance data':
     'Tambahkan minimal 2 pilar lalu klik “Jalankan Perbandingan” untuk melihat data performa',
 
@@ -958,7 +993,11 @@ export const ID: Record<string, string> = {
   '• Type a key insight per line…': '• Ketik satu insight utama per baris…',
   'Click ‘Generate AI’ or type the insight yourself…':
     'Klik ‘Generate AI’ atau ketik insight-nya sendiri…',
-  'Prepared by': 'Disiapkan oleh',
+  'Powered by': 'Didukung oleh',
+  'Owned': 'Milik Sendiri',
+  'Competitor': 'Kompetitor',
+  'No competitor for this channel': 'Belum ada kompetitor untuk channel ini',
+  'Competitor visuals are not available on this channel.': 'Visual kompetitor tidak tersedia untuk channel ini.',
   'Main chart area': 'Area grafik utama',
 
   /* ── Monitoring (admin-only screen) ───────────────────────────────── */

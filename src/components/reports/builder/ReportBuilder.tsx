@@ -1,4 +1,5 @@
 'use client'
+import type { ReportCompetitorPosts } from '@/lib/reports/data/competitorPostsQuery'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -13,7 +14,7 @@ import { ReportChartMetrics } from '@/lib/reports/data/chartTypes'
 import { ReportKpiMetrics } from '@/lib/reports/data/kpiMetrics'
 import { ReportPostMetrics } from '@/lib/reports/data/posts'
 import type { AvailablePeriod } from '@/lib/reports/data/periodsQuery'
-import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportPostContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportPostContext, ReportCompetitorPostContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import {
   ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig, makeSlide,
   type ReportTemplateConfig, type ReportTemplateRecord,
@@ -138,6 +139,7 @@ export default function ReportBuilder({
   // Live post pool (per channel) for this brand + report month, provided via context
   // so the Visual Analysis slide ranks real posts by Format / Pillar / metric.
   const [postMetrics, setPostMetrics] = useState<ReportPostMetrics | null>(null)
+  const [competitorPosts, setCompetitorPosts] = useState<ReportCompetitorPosts | null>(null)
   // Bumped when the org custom-metric library changes (create/edit/delete) so the table
   // metrics refetch and newly-defined custom columns get their defs + live values.
   const [cmVersion, setCmVersion] = useState(0)
@@ -180,10 +182,10 @@ export default function ReportBuilder({
     return () => { alive = false }
   }, [orgId, brandId, month, year, cmVersion])
   useEffect(() => {
-    if (!brandId) { setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); return }
+    if (!brandId) { setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); setCompetitorPosts(null); return }
     const monthNum = MONTHS.indexOf(month) + 1
     let alive = true
-    setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null)
+    setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); setCompetitorPosts(null)
     const base = `/api/organizations/${encodeURIComponent(orgId)}/reports`
     const qs = `brand=${encodeURIComponent(brandId)}&year=${year}&month=${monthNum}`
     fetch(`${base}/chart-metrics?${qs}`, { cache: 'no-store' })
@@ -198,6 +200,13 @@ export default function ReportBuilder({
       .then(r => (r.ok ? r.json() : null))
       .then((d: ReportPostMetrics | null) => { if (alive) setPostMetrics(d) })
       .catch(e => { if (alive) { console.error('[report] post metrics fetch failed:', e); setPostMetrics(null) } })
+    // Post kompetitor: dipakai slide Visual Content mode competitive review.
+    // Diambil terpisah dari post-metrics karena sumbernya beda (l0_raw, bukan gold)
+    // dan kegagalannya tidak boleh ikut menjatuhkan kumpulan post milik sendiri.
+    fetch(`${base}/competitor-posts?${qs}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: ReportCompetitorPosts | null) => { if (alive) setCompetitorPosts(d) })
+      .catch(e => { if (alive) { console.error('[report] competitor posts fetch failed:', e); setCompetitorPosts(null) } })
     return () => { alive = false }
     // cmVersion: refetch chart (custom line series) + kpi when the custom-metric library changes.
   }, [orgId, brandId, month, year, cmVersion])
@@ -279,7 +288,7 @@ export default function ReportBuilder({
   const chromeFor = (index: number): SlideChrome => ({
     brandName,
     period,
-    preparedBy: 'Sekata',
+    preparedBy: 'kepiai',
     logoDataUrl,
     pageNumber: index + 2,
     totalPages: slides.length + 1,
@@ -385,6 +394,7 @@ export default function ReportBuilder({
     <ReportMetricsContext.Provider value={tableMetrics}>
     <ReportChartContext.Provider value={chartMetrics}>
     <ReportKpiContext.Provider value={kpiMetrics}>
+    <ReportCompetitorPostContext.Provider value={competitorPosts}>
     <ReportPostContext.Provider value={postMetrics}>
     <div className="min-h-screen bg-[#f7f8f9]">
       <ToastHost toast={toast} onClose={clearToast} />
@@ -667,6 +677,7 @@ export default function ReportBuilder({
       />
     </div>
     </ReportPostContext.Provider>
+    </ReportCompetitorPostContext.Provider>
     </ReportKpiContext.Provider>
     </ReportChartContext.Provider>
     </ReportMetricsContext.Provider>

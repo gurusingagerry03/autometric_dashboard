@@ -309,7 +309,7 @@ async function footer(slide: Slide, chrome: SlideChrome, colors: CoverColors, x:
   if (chrome.preparedBy) {
     slide.addText(
       [
-        { text: 'Prepared by\n', options: { fontSize: FS(1.05), color: '94A3B8' } },
+        { text: 'Powered by\n', options: { fontSize: FS(1.05), color: '94A3B8' } },
         { text: chrome.preparedBy, options: { fontSize: FS(1.3), bold: true, color: '475569' } },
       ],
       { x: x + w / 2 - W(20), y: fy, w: W(40), h: fh, align: 'center', valign: 'middle', fontFace: PJ, lineSpacingMultiple: 1.05 },

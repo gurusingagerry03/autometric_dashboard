@@ -11,6 +11,14 @@ const monthEndExcl = (y: number, m: number) => (m === 12 ? `${y + 1}-01-01` : `$
 
 const num = (v: any) => (v == null || !Number.isFinite(Number(v)) ? 0 : Number(v))
 
+// completion_rate disimpan sebagai TEKS di silver (mis. '79%'), bukan numeric —
+// sama seperti di dashboard Content. Dibersihkan dulu sebelum dipakai sebagai angka.
+const pctText = (v: any) => {
+  if (v == null) return 0
+  const n = Number(String(v).replace(/[^0-9.]/g, ''))
+  return Number.isFinite(n) ? n : 0
+}
+
 // Broad recent pool so top/low ranking by any metric is meaningful client-side.
 const LIMIT = 600
 
@@ -23,6 +31,11 @@ export async function getReportPostMetrics(
   const { rows } = await pool.query<Record<string, any>>(
     `SELECT p.id, p.platform, p.cover_image, p.format, p.content_pillar,
             p.post_type, p.link, COALESCE(p.duration_s,0)::float duration_s,
+            EXTRACT(EPOCH FROM p.post_date)::float           post_epoch,
+            to_char(p.post_date, 'DD Mon YYYY')              post_date_txt,
+            to_char(p.post_date, 'DD Mon YYYY, HH24:MI')     post_datetime_txt,
+            COALESCE(p.avg_watch_time,0)::float              avg_watch_time,
+            p.completion_rate,
             COALESCE(p.follows,0)::float      follows,
             COALESCE(p.reach,0)::float        reach,
             COALESCE(p.impressions,0)::float  impressions,
@@ -69,6 +82,15 @@ export async function getReportPostMetrics(
         er_reach: num(r.er_reach) * 100,
         er_views: num(r.er_views) * 100,
         er_followers: num(r.er_followers) * 100,
+        watch_time: num(r.avg_watch_time),
+        completion_rate: pctText(r.completion_rate),
+        // Epoch dipakai HANYA untuk mengurutkan; yang ditampilkan ada di `text`.
+        post_date: num(r.post_epoch),
+        post_datetime: num(r.post_epoch),
+      },
+      text: {
+        post_date: r.post_date_txt ?? '—',
+        post_datetime: r.post_datetime_txt ?? '—',
       },
     }
     ;(out[r.platform] ??= []).push(cand)

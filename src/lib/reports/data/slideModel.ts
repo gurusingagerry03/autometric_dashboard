@@ -35,6 +35,11 @@ export interface ContentSlide {
   postPillar: string         // visual — content-pillar filter: 'all' | '<pillar id>'
   postSortMetric: string     // visual — metric the top/low ranking is based on
   postMetrics: string[]      // visual — which post metrics to show
+  /** visual — 'owned' (default) atau 'competitor'. Layout & pengaturannya sama;
+   *  yang berbeda hanya kumpulan post dan metrik yang tersedia. */
+  postSource?: 'owned' | 'competitor'
+  /** visual — id akun kompetitor yang ditampilkan saat postSource = 'competitor'. */
+  postCompetitorId?: string
   visualMode: VisualMode     // overview — chart | table | null
   aiInsight: AiInsight | null // AI analyst insight (analysis + typed recommendations)
 }
@@ -106,6 +111,7 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): 
     kpiMetrics: [null, null, null, null, null, null],
     postCount: 4,
     postFilter: 'top',
+    postSource: 'owned',
     postFormat: 'all',
     postPillar: 'all',
     postSortMetric: 'engagement',

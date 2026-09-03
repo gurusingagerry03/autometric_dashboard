@@ -184,6 +184,29 @@ export function normalizeColumnIds(ids: string[]): string[] {
   return out
 }
 
+// ── Cross-level: satu tabel yang boleh mencampur metrik Content & Channel ─────
+// Kedua kumpulan metrik hidup di butiran berbeda — Content per-post, Channel
+// per-hari — dan sebagian namanya bertabrakan (mis. profile_visit ada di
+// dua-duanya dengan arti berbeda). Karena itu id-nya diberi awalan, bukan
+// digabung begitu saja: 'ct:' untuk content, 'ch:' untuk channel. Awalan yang
+// sama dipakai saat merakit nilainya di metricsContext, jadi tidak ada
+// kemungkinan satu kolom diam-diam mengambil angka dari level yang salah.
+//
+// Label ikut menyebut levelnya ("Followers · Channel") — persis cara permintaan
+// aslinya ditulis, dan tanpa itu dua kolom bernama "Profile Visit" akan tampak
+// duplikat di pemilih.
+const CROSS_ALL_COLUMNS: TableColumn[] = [
+  ...CONTENT_ALL_COLUMNS.map(c => ({ ...c, id: 'ct:' + c.id, label: c.label + ' · Content' })),
+  ...CHANNEL_ALL_COLUMNS.map(c => ({ ...c, id: 'ch:' + c.id, label: c.label + ' · Channel' })),
+]
+// Default mengikuti contoh di brief: campuran follower (channel) dengan
+// engagement & ER (content), supaya begitu dipasang tabelnya langsung
+// memperlihatkan gunanya — bukan tabel kosong yang harus dikonfigurasi dulu.
+const CROSS_ALL_DEFAULTS = [
+  'ch:total_followers', 'ch:followers_net_growth',
+  'ct:eng_owned', 'ct:er_reach_pooled', 'ct:reach',
+]
+
 export const TABLE_TYPES: Record<string, TableType> = {
   content_level: {
     id: 'content_level', label: 'Content Level Metric', icon: 'dynamic_feed',
@@ -274,6 +297,13 @@ export const TABLE_TYPES: Record<string, TableType> = {
     description: 'Compare profile metrics across Instagram, Facebook & TikTok.', rowType: 'platforms',
     columns: CHANNEL_ALL_COLUMNS,
     defaultColumns: CHANNEL_ALL_DEFAULTS,
+  },
+  cross_by_platform: {
+    id: 'cross_by_platform', label: 'Cross-Level by Platform', icon: 'dataset',
+    description: 'Mix content & channel metrics in one cumulative table, one row per platform.',
+    rowType: 'platforms',
+    columns: CROSS_ALL_COLUMNS,
+    defaultColumns: CROSS_ALL_DEFAULTS,
   },
   brand_vs_competitor: {
     id: 'brand_vs_competitor', label: 'Brand vs Competitor', icon: 'group',
@@ -426,7 +456,7 @@ export function isTypeEnabledForChannel(typeId: string, channel: string): boolea
   if (!(typeId in TABLE_TYPES) || channel === '') return false
   // The per-platform comparison tables ARE the cross-channel breakdown, so they only
   // make sense on the "All Channels" view (rows = each platform).
-  if (typeId === 'content_by_platform' || typeId === 'channel_by_platform') {
+  if (typeId === 'content_by_platform' || typeId === 'channel_by_platform' || typeId === 'cross_by_platform') {
     return channel === 'all'
   }
   return true
@@ -434,7 +464,7 @@ export function isTypeEnabledForChannel(typeId: string, channel: string): boolea
 
 /** Reason a table type is greyed out for the current channel (shown in the picker). */
 export function typeChannelHint(typeId: string): string {
-  if (typeId === 'content_by_platform' || typeId === 'channel_by_platform') {
+  if (typeId === 'content_by_platform' || typeId === 'channel_by_platform' || typeId === 'cross_by_platform') {
     return 'Only available on “All Channels”.'
   }
   return 'Pick a specific channel to use this table.'

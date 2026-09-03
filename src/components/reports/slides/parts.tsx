@@ -302,7 +302,7 @@ export function Footer({ chrome, colors }: { chrome: SlideChrome; colors: CoverC
       <div className="flex-1 flex flex-col items-center" style={{ gap: '0.2cqh' }}>
         {chrome.preparedBy && (
           <>
-            <span style={{ fontSize: '1.05cqw', color: '#94a3b8', ...PJ }}>{t('Prepared by')}</span>
+            <span style={{ fontSize: '1.05cqw', color: '#94a3b8', ...PJ }}>{t('Powered by')}</span>
             <span style={{ fontSize: '1.3cqw', fontWeight: 700, color: '#475569', ...PJ }}>{chrome.preparedBy}</span>
           </>
         )}
