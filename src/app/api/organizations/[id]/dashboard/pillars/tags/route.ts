@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgMemberById } from '@/lib/reports/access'
-import { getTaggablePosts, setPostTags } from '@/lib/dashboard/pillarTags'
+import { getTaggablePosts, savePostAttributes } from '@/lib/dashboard/pillarTags'
+import type { PostAttributePatch } from '@/lib/dashboard/pillarTags'
 import type { TagFilter } from '@/lib/dashboard/pillarTags'
 
-const FILTERS: TagFilter[] = ['all', 'untagged', 'imported', 'manual']
+const FILTERS: TagFilter[] = ['all', 'untagged', 'tagged']
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -33,6 +34,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       offset: Number.isFinite(offset) ? offset : 0,
       q:      sp.get('q') ?? '',
       filter,
+      // Penyaring topbar (platform + rentang tanggal) diproses di SQL bersama
+      // pencarian, supaya jumlah halaman dan progres ikut menyempit.
+      platform: sp.get('platform') ?? 'all',
+      start: sp.get('start'),
+      end: sp.get('end'),
     }))
   } catch (err) {
     console.error('[GET /api/organizations/[id]/dashboard/pillars/tags]', err)
@@ -59,19 +65,30 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Too many updates in one request.' }, { status: 400 })
     }
 
-    const updates = raw.map(u => u as { postId?: unknown; platform?: unknown; pillars?: unknown })
+    const strArr = (v: unknown) =>
+      Array.isArray(v) ? (v as unknown[]).filter(x => typeof x === 'string') as string[] : undefined
+    const tri = (v: unknown) => (v === true || v === false || v === null ? v as boolean | null : undefined)
+
+    // Hanya field yang benar-benar dikirim yang diteruskan — savePostAttributes
+    // membiarkan sisanya apa adanya, jadi mengubah satu atribut tidak menghapus
+    // atribut lain yang sudah diisi.
+    const updates = raw.map(u => u as Record<string, unknown>)
       .filter(u => typeof u.postId === 'string' && typeof u.platform === 'string')
-      .map(u => ({
-        postId:   u.postId as string,
-        platform: u.platform as string,
-        pillars:  Array.isArray(u.pillars) ? (u.pillars as unknown[]).filter(x => typeof x === 'string') as string[] : [],
-      }))
+      .map(u => {
+        const p: PostAttributePatch = {}
+        if ('pillar'   in u) p.pillar   = typeof u.pillar === 'string' ? u.pillar : null
+        if ('tags'     in u) p.tags     = strArr(u.tags) ?? []
+        if ('boosted'  in u) p.boosted  = tri(u.boosted)
+        if ('campaign' in u) p.campaign = tri(u.campaign)
+        if ('activity' in u) p.activity = tri(u.activity)
+        return { postId: u.postId as string, platform: u.platform as string, patch: p }
+      })
 
     // Berurutan, bukan paralel: semuanya menulis ke tabel yang sama dan jumlahnya
     // terbatas, jadi menahan giliran lebih murah daripada memperebutkan koneksi pool.
     let applied = 0
     for (const u of updates) {
-      if (await setPostTags(orgId, brandId, u.platform, u.postId, u.pillars)) applied++
+      if (await savePostAttributes(orgId, brandId, u.platform, u.postId, u.patch)) applied++
     }
 
     return NextResponse.json({ applied, requested: updates.length })

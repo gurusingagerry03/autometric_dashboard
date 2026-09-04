@@ -1,5 +1,5 @@
 import pool from '@/lib/db'
-import { getLivePillarComparison } from './pillarTags'
+import { getLivePillarComparison, type PillarScope } from './pillarTags'
 
 /**
  * Content Pillars dashboard data access, per docs §5 Content Pillars:
@@ -23,7 +23,7 @@ async function brandInOrg(orgId: string, brandId: string): Promise<boolean> {
   return rows.length > 0
 }
 
-export async function getPillarsData(orgId: string, brandId: string | null): Promise<PillarsPayload> {
+export async function getPillarsData(orgId: string, brandId: string | null, scope: PillarScope = {}): Promise<PillarsPayload> {
   const [dim, perf] = await Promise.all([
     pool.query<{ id: string; content_pillar: string; color: string | null; hashtags: string[]; is_active: boolean }>(
       `SELECT d.id::text id, d.content_pillar, d.color, d.hashtags, d.is_active
@@ -37,7 +37,7 @@ export async function getPillarsData(orgId: string, brandId: string | null): Pro
     // Dihitung langsung dari silver + tag l0_extra, BUKAN dari
     // l2_gold.pillar_performance_daily — gold dibangun semalam sekali dan hanya
     // mengenal satu pilar per post, jadi tag baru tidak akan pernah muncul di sini.
-    getLivePillarComparison(orgId, brandId),
+    getLivePillarComparison(orgId, brandId, scope),
   ])
 
   // Kartu "Tentukan Pilar" hanya menampilkan yang aktif; chart perbandingan perlu

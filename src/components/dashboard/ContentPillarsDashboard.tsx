@@ -4,23 +4,32 @@ import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader } from './ui'
 import { HBars } from './charts'
 import DashboardChrome from './DashboardChrome'
-import { PILLAR_COLORS } from './data'
+import { PILLAR_COLORS, type PlatformFilter } from './data'
 import PillarTagging from './PillarTagging'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import type { PillarsPayload } from '@/lib/dashboard/pillars'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
+// Sama seperti dashboard lain: 'All' di topbar dikirim sebagai 'all' ke API.
+const platformParam = (p: PlatformFilter) => (p === 'All' ? 'all' : p)
+
 export default function ContentPillarsDashboard({ orgId }: { orgId: string }) {
   const t = useT()
   return (
     <DashboardChrome title={t('Content Pillars')} subtitle={t('Define & compare your content pillars')}>
-      {(state) => <PillarsBody orgId={orgId} brandId={state.brand.id} />}
+      {(state) => (
+        <PillarsBody orgId={orgId} brandId={state.brand.id}
+          platform={state.platform} start={state.start} end={state.end} />
+      )}
     </DashboardChrome>
   )
 }
 
-function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
+function PillarsBody({ orgId, brandId, platform, start, end }: {
+  orgId: string; brandId: string
+  platform: PlatformFilter; start: string | null; end: string | null
+}) {
   const t = useT()
   const { lang } = useLanguage()
   const [data, setData] = useState<PillarsPayload | null>(null)
@@ -35,12 +44,13 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
   useEffect(() => {
     let cancelled = false
     setData(null); setError(null); setComparisonRun(false)
-    fetch(`/api/organizations/${orgId}/dashboard/pillars?brand=${encodeURIComponent(brandId)}&lang=${lang}`)
+    const range = start && end ? `&start=${start}&end=${end}` : ''
+    fetch(`/api/organizations/${orgId}/dashboard/pillars?brand=${encodeURIComponent(brandId)}&platform=${platformParam(platform)}${range}&lang=${lang}`)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: PillarsPayload) => { if (!cancelled) setData(d) })
       .catch(e => { if (!cancelled) setError(String(e.message ?? e)) })
     return () => { cancelled = true }
-  }, [orgId, brandId, lang])
+  }, [orgId, brandId, platform, start, end, lang])
 
   const pillars = data?.pillars ?? []
   const comparison = data?.comparison ?? []
@@ -198,6 +208,7 @@ function PillarsBody({ orgId, brandId }: { orgId: string; brandId: string }) {
 
       <SectionHeader icon="sell">{t('Tagging')}</SectionHeader>
       <PillarTagging orgId={orgId} brandId={brandId}
+        platform={platformParam(platform)} start={start} end={end}
         onCreatePillar={(name, color) => createPillar(name, color, [])} />
     </>
   )

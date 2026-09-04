@@ -11,8 +11,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     const access = await requireOrgMemberById(orgId)
     if (!access) return NextResponse.json({ error: 'Not authorized for this organization.' }, { status: 401 })
 
-    const brandId = req.nextUrl.searchParams.get('brand') || null
-    return NextResponse.json(await getPillarsData(orgId, brandId))
+    const sp = req.nextUrl.searchParams
+    const brandId = sp.get('brand') || null
+    // Penyaring topbar ikut dihormati: sebelumnya perbandingan pilar selalu
+    // menghitung seluruh platform dan seluruh waktu, apa pun yang dipilih user.
+    return NextResponse.json(await getPillarsData(orgId, brandId, {
+      platform: sp.get('platform') ?? 'all',
+      start: sp.get('start'),
+      end: sp.get('end'),
+    }))
   } catch (err) {
     console.error('[GET /api/organizations/[id]/dashboard/pillars]', err)
     return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 })
@@ -35,7 +42,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     const ok = await upsertPillar(orgId, brandId, name, color, hashtags)
     if (!ok) return NextResponse.json({ error: 'Brand not in this organization.' }, { status: 403 })
-    return NextResponse.json(await getPillarsData(orgId, brandId))
+    return NextResponse.json(await getPillarsData(orgId, brandId))   // scope tidak relevan untuk daftar pilar
   } catch (err) {
     console.error('[POST /api/organizations/[id]/dashboard/pillars]', err)
     return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 })
