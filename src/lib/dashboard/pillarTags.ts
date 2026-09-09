@@ -38,6 +38,11 @@ import pool from '@/lib/db'
  *   menempel di 203 post, dan Fitbar punya 3 pilar dengan 0 aktif sehingga layar
  *   ini tampak kosong padahal brand-nya punya pilar.
  *
+ *   `isActive` tetap dikirim dan tetap menentukan urutan (yang aktif di atas),
+ *   tapi TIDAK lagi ditulis sebagai label "(nonaktif)" di dropdown — permukaan
+ *   ini memang memakai keduanya tanpa beda perlakuan, jadi labelnya hanya
+ *   menimbulkan pertanyaan yang tidak ada jawabannya di layar ini.
+ *
  * PENYARING, PENCARIAN, DAN HALAMAN DIPROSES DI SERVER
  *   Termasuk penyaring platform dan rentang tanggal dari topbar. Menyaring di
  *   klien setelah pagination berarti orang mencari di dalam satu halaman saja
@@ -102,13 +107,24 @@ export interface TaggablePostsPayload {
   untagged: number
   /** Jumlah yang cocok dengan penyaring saat ini — penyebut untuk pagination. */
   matched:  number
+  /**
+   * Seluruh tag bebas yang pernah dipakai brand ini, urut abjad — kosakata untuk
+   * pemilih tag di modal.
+   *
+   * SENGAJA TIDAK IKUT PENYARING. Platform, rentang tanggal, pencarian, dan
+   * halaman semuanya diabaikan: ini daftar istilah milik brand, bukan ringkasan
+   * dari apa yang kebetulan sedang tampil. Menyaringnya akan membuat tag yang
+   * sudah ada menghilang dari pemilih hanya karena topbar sedang di TikTok, dan
+   * orang akan mengetik ulang varian barunya — persis kebalikan dari tujuannya.
+   */
+  knownTags: string[]
 }
 
 const DEFAULT_COLORS = ['#6c4cd6', '#d23f6f', '#3d7eea', '#5fa783', '#e0a458', '#8b5cf6', '#1B8A80', '#d97a7a']
 const colorFor = (name: string, given: string | null): string =>
   given || DEFAULT_COLORS[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % DEFAULT_COLORS.length]
 
-const EXTRA_UNION = `
+export const EXTRA_UNION = `
   SELECT brand_id, post_id, 'instagram' AS platform, tagging, content_pillar,
          is_boosted, is_campaign, is_activity FROM l0_extra.instagram_post_extra_attribute
   UNION ALL
@@ -120,7 +136,7 @@ const EXTRA_UNION = `
 `
 
 /** Pilar efektif: yang ditulis di l0_extra menang atas warisan di silver. */
-const PILLAR = `NULLIF(COALESCE(e.content_pillar, p.content_pillar), '')`
+export const PILLAR = `NULLIF(COALESCE(e.content_pillar, p.content_pillar), '')`
 /** `tagging` sekarang array polos. Bentuk lama (objek) diabaikan, bukan dibaca
  *  paksa — sisa data lama tampil sebagai tanpa tag, bukan error. */
 const TAGS = `
@@ -175,7 +191,7 @@ export async function getTaggablePosts(
         OR ($4 = 'tagged'   AND pillar IS NOT NULL))
   `
 
-  const [list, counts, dim] = await Promise.all([
+  const [list, counts, dim, tagVocab] = await Promise.all([
     pool.query<{
       post_id: string; platform: string; caption: string | null; post_date: Date | null
       reach: string | null; engagement_rate: string | null
@@ -203,6 +219,24 @@ export async function getTaggablePosts(
         ORDER BY d.is_active DESC, d.display_order NULLS LAST, d.content_pillar`,
       [orgId, brandId],
     ),
+    // Kosakata tag brand. `tagging` warisan lama kadang objek, bukan array, dan
+    // jsonb_array_elements_text ERROR di baris seperti itu — bukan melewatinya.
+    // CASE di subquery memaksa bentuknya jadi array lebih dulu, jadi hasilnya
+    // tidak bergantung pada urutan eksekusi yang dipilih planner.
+    pool.query<{ tag: string }>(
+      `SELECT DISTINCT btrim(t.tag) AS tag
+         FROM (
+           SELECT CASE WHEN jsonb_typeof(e.tagging) = 'array' THEN e.tagging ELSE '[]'::jsonb END AS tagging
+             FROM public.brand_social_accounts bsa
+             JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
+             JOIN (${EXTRA_UNION}) e ON e.brand_id = bsa.social_account_id
+            WHERE b.organization_id = $1::uuid AND b.id = $2::uuid
+         ) src
+         CROSS JOIN LATERAL jsonb_array_elements_text(src.tagging) AS t(tag)
+        WHERE btrim(t.tag) <> ''
+        ORDER BY 1`,
+      [orgId, brandId],
+    ),
   ])
 
   return {
@@ -227,6 +261,7 @@ export async function getTaggablePosts(
     total:    Number(counts.rows[0]?.total ?? 0),
     untagged: Number(counts.rows[0]?.untagged ?? 0),
     matched:  Number(counts.rows[0]?.matched ?? 0),
+    knownTags: tagVocab.rows.map(r => r.tag),
   }
 }
 

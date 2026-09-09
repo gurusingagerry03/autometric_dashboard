@@ -28,10 +28,11 @@ const PAGE_SIZE = 25
  *   daftar tidak cukup. Modal memberi ruang untuk preview gambar besar plus
  *   seluruh kontrol dalam satu tampilan, tanpa kehilangan posisi gulir daftar.
  *
- * TIGA KEADAAN, BUKAN DUA
- *   Boosted/Campaign/Activity punya pilihan "—" (belum diisi) yang sengaja
- *   dibedakan dari "tidak". Post yang belum pernah ditinjau tidak boleh tampak
- *   sudah dinyatakan bukan-campaign.
+ * TIGA KEADAAN, DUA TOMBOL
+ *   Boosted/Campaign/Activity tetap membedakan "belum diisi" dari "tidak" — post
+ *   yang belum pernah ditinjau tidak boleh tampak sudah dinyatakan bukan-campaign.
+ *   Tapi "belum diisi" adalah keadaan AWAL, bukan pilihan ketiga: tidak ada tombol
+ *   yang menyala, dan cara kembali ke sana adalah menekan pilihan yang aktif.
  *
  * PENYIMPANAN OPTIMISTIS
  *   Tampilan berubah lebih dulu, request menyusul. Kalau gagal, keadaan
@@ -51,6 +52,8 @@ const keyOf = (p: { platform: string; postId: string }) => `${p.platform}:${p.po
 type Payload = {
   posts: TaggedPost[]; pillars: TagPillar[]
   total: number; untagged: number; matched: number
+  /** Tag yang pernah dipakai brand ini, urut abjad. */
+  knownTags: string[]
 }
 type Update = { postId: string; platform: string } & PostAttributePatch
 
@@ -80,6 +83,11 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
   const [editKey, setEditKey]   = useState<string | null>(null)
   const [broken, setBroken]     = useState<Set<string>>(new Set())
   const [busy, setBusy]         = useState(false)
+
+  // Pembuatan pilar pertama, langsung dari layar kosong.
+  const [firstName, setFirstName]   = useState('')
+  const [firstBusy, setFirstBusy]   = useState(false)
+  const [firstError, setFirstError] = useState(false)
 
   // Aksi massal
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -115,6 +123,16 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
   }, [orgId, brandId, platform, start, end, page, filter, query])
 
   const pillars = data?.pillars ?? []
+  /**
+   * Kosakata tag untuk pemilih di modal: daftar milik brand dari server, ditambah
+   * tag yang baru dipasang di halaman ini. Tambahan lokal itu yang membuat tag
+   * baru langsung ikut ditawarkan — memuat ulang daftar akan menutup modalnya.
+   */
+  const knownTags = useMemo(() => {
+    const all = new Set(data?.knownTags ?? [])
+    for (const r of rows ?? []) for (const tg of r.tags) all.add(tg)
+    return [...all].sort((a, b) => a.localeCompare(b))
+  }, [data, rows])
   const byName  = useMemo(() => new Map(pillars.map(p => [p.name, p])), [pillars])
   const total   = data?.total ?? 0
   const matched = data?.matched ?? 0
@@ -183,19 +201,71 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
     persist(next, updates)
   }
 
-  /** Tiga keadaan: dua nilai + "belum diisi". */
-  function TriPick({ value, onPick, labels }: {
+  /**
+   * Pilar pertama dibuat dari layar kosong, bukan hanya dari kartu di atas.
+   *
+   * KENAPA TIDAK PERLU MUAT ULANG
+   *   `rows` sudah terisi sejak permintaan pertama — post-nya memang ada, yang
+   *   menyembunyikannya cuma cabang kosong di bawah. Jadi begitu daftar pilar
+   *   terisi, seluruh post langsung tampil. Memuat ulang di sini hanya akan
+   *   mengosongkan daftar sesaat lalu menampilkan isi yang sama persis.
+   */
+  const createFirstPillar = async () => {
+    const name = firstName.trim()
+    if (!name || firstBusy || !onCreatePillar) return
+    setFirstBusy(true); setFirstError(false)
+    try {
+      const color = PILLAR_COLORS[0]
+      if (await onCreatePillar(name, color)) {
+        setData(d => (d ? { ...d, pillars: [...d.pillars, { id: `local-${name}`, name, color, isActive: true }] } : d))
+        setFirstName('')
+      } else {
+        setFirstError(true)
+      }
+    } catch {
+      setFirstError(true)
+    } finally {
+      setFirstBusy(false)
+    }
+  }
+
+  /**
+   * Dua nilai + keadaan "belum diisi".
+   *
+   * KENAPA TOMBOL "—" DIHAPUS
+   *   Label "—" tidak mengatakan apa-apa: orang harus menebak apakah artinya
+   *   "tidak", "tidak tahu", atau "kosongkan". Sekarang belum-diisi adalah
+   *   keadaan awal — tidak ada tombol yang menyala — dan menekan pilihan yang
+   *   sedang aktif mengembalikannya ke sana.
+   *
+   * KECUALI DI AKSI MASSAL
+   *   Di panel massal belum-diisi tidak bisa jadi keadaan awal: awalnya di sana
+   *   berarti "jangan diubah", dan mengosongkan puluhan post sekaligus adalah
+   *   perintah tersendiri yang harus bisa disebut. Panel itu mengirim
+   *   `clearLabel`, dan tombol ketiganya diberi NAMA — bukan "—". Di sana klik
+   *   ulang tidak mengosongkan, supaya tiap keadaan hanya punya satu jalan.
+   */
+  function TriPick({ value, onPick, labels, clearLabel }: {
     value: boolean | null | undefined
     onPick: (v: boolean | null) => void
     labels: [string, string]
+    clearLabel?: string
   }) {
-    const opt = (v: boolean | null, label: string) => (
-      <button key={label} onClick={() => onPick(v)} style={PJ}
+    const opt = (v: boolean | null, label: string, hint?: string) => (
+      <button key={label} title={hint}
+        onClick={() => onPick(!clearLabel && value === v ? null : v)} style={PJ}
         className={`flex-1 text-[12px] font-semibold rounded-md px-2.5 py-1.5 border ${
           value === v ? 'bg-[#f3f0fd] border-[#6c4cd6]/50 text-[#6c4cd6]' : 'bg-white border-[#e5e7eb] text-[#6b7280] hover:border-[#d1d5db]'
         }`}>{label}</button>
     )
-    return <div className="flex items-center gap-1.5">{opt(false, labels[0])}{opt(true, labels[1])}{opt(null, '—')}</div>
+    const hint = clearLabel ? undefined : t('Click the active choice again to leave it unset')
+    return (
+      <div className="flex items-center gap-1.5">
+        {opt(false, labels[0], hint)}
+        {opt(true, labels[1], hint)}
+        {clearLabel ? opt(null, clearLabel) : null}
+      </div>
+    )
   }
 
   if (data && pillars.length === 0) {
@@ -207,6 +277,25 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
           <p className="text-[12.5px] text-[#9ca3af] mt-1 max-w-[340px]">
             {t('Tagging needs at least one pillar to assign posts to. Create one here, or use the card above.')}
           </p>
+          {onCreatePillar && (
+            <>
+              <div className="flex items-center gap-1.5 mt-4 w-full max-w-[340px]">
+                <input value={firstName} onChange={e => setFirstName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); createFirstPillar() } }}
+                  placeholder={t('New pillar name')} style={PJ} autoComplete="off"
+                  className="flex-1 text-[12.5px] text-[#374151] bg-white border border-[#e5e7eb] rounded-lg px-2.5 py-2 outline-none focus:border-[#6c4cd6]" />
+                <button onClick={createFirstPillar} disabled={!firstName.trim() || firstBusy} style={PJ}
+                  className={`text-[12px] font-bold rounded-lg px-3.5 py-2 flex-shrink-0 ${
+                    !firstName.trim() || firstBusy
+                      ? 'bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed'
+                      : 'bg-[#6c4cd6] text-white hover:bg-[#5a3fc0]'
+                  }`}>{firstBusy ? t('Saving…') : t('Create pillar')}</button>
+              </div>
+              {firstError && (
+                <p className="mt-2 text-[11.5px] font-semibold text-[#c2553f]">{t('Could not create the pillar.')}</p>
+              )}
+            </>
+          )}
         </div>
       </Card>
     )
@@ -408,6 +497,7 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
         onPatch={patch => patchRow(editing.key, patch)}
         onCreatePillar={onCreatePillar}
         onAddPillar={pl => setData(d => (d ? { ...d, pillars: [...d.pillars, pl] } : d))}
+        knownTags={knownTags}
         TriPick={TriPick} />
     )}
 
@@ -445,7 +535,7 @@ function BulkModal({ posts, pillars, busy, t, pillar, setPillar, attr, setAttr, 
   setAttr: React.Dispatch<React.SetStateAction<{ boosted?: boolean | null; campaign?: boolean | null; activity?: boolean | null }>>
   onClose: () => void
   onApply: () => void
-  TriPick: (p: { value: boolean | null | undefined; onPick: (v: boolean | null) => void; labels: [string, string] }) => React.JSX.Element
+  TriPick: (p: { value: boolean | null | undefined; onPick: (v: boolean | null) => void; labels: [string, string]; clearLabel?: string }) => React.JSX.Element
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -491,31 +581,31 @@ function BulkModal({ posts, pillars, busy, t, pillar, setPillar, attr, setAttr, 
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">{t('Pillar')}</p>
             <select value={pillar} onChange={e => setPillar(e.target.value)} style={PJ}
               className="w-full h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer outline-none focus:border-[#6c4cd6]">
-              <option value="">{t('— no change —')}</option>
-              {pillars.map(p => <option key={p.id} value={p.name}>{p.name}{p.isActive ? '' : ` (${t('inactive')})`}</option>)}
+              <option value="">{t('No change')}</option>
+              {pillars.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
               <option value="__clear__">{t('Clear pillar')}</option>
             </select>
           </div>
 
           <div>
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">{t('Boosted')}</p>
-            <TriPick value={attr.boosted} labels={[t('Organic'), t('Paid')]} onPick={v => setAttr(a => ({ ...a, boosted: v }))} />
+            <TriPick value={attr.boosted} labels={[t('Organic'), t('Paid')]} clearLabel={t('Clear')} onPick={v => setAttr(a => ({ ...a, boosted: v }))} />
           </div>
 
           <div>
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">
               {t('Campaign')}<span className="normal-case font-medium text-[#cbd5e1]"> · {t('AON is the opposite')}</span>
             </p>
-            <TriPick value={attr.campaign} labels={[t('No'), t('Yes')]} onPick={v => setAttr(a => ({ ...a, campaign: v }))} />
+            <TriPick value={attr.campaign} labels={[t('No'), t('Yes')]} clearLabel={t('Clear')} onPick={v => setAttr(a => ({ ...a, campaign: v }))} />
           </div>
 
           <div>
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">{t('Activity')}</p>
-            <TriPick value={attr.activity} labels={[t('No'), t('Yes')]} onPick={v => setAttr(a => ({ ...a, activity: v }))} />
+            <TriPick value={attr.activity} labels={[t('No'), t('Yes')]} clearLabel={t('Clear')} onPick={v => setAttr(a => ({ ...a, activity: v }))} />
           </div>
 
           <p className="text-[11.5px] text-[#9ca3af] leading-relaxed">
-            {t('Only what you set here is changed. Anything left at “—” keeps its current value on every selected post.')}
+            {t('Only what you set here is changed. Anything you do not touch keeps its current value on every selected post; “Clear” empties the field instead.')}
           </p>
         </div>
 
@@ -536,7 +626,7 @@ function BulkModal({ posts, pillars, busy, t, pillar, setPillar, attr, setAttr, 
  * Preview gambar sengaja besar dan di sisi kiri: keputusan pilar hampir selalu
  * diambil dari melihat kontennya, bukan dari membaca caption yang terpotong.
  */
-function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, onAddPillar, TriPick }: {
+function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, onAddPillar, knownTags, TriPick }: {
   post: TaggedPost & { key: string }
   pillars: TagPillar[]
   busy: boolean
@@ -545,9 +635,13 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
   onPatch: (patch: PostAttributePatch) => void
   onCreatePillar?: (name: string, color: string) => Promise<boolean>
   onAddPillar: (p: TagPillar) => void
-  TriPick: (p: { value: boolean | null | undefined; onPick: (v: boolean | null) => void; labels: [string, string] }) => React.JSX.Element
+  /** Tag yang pernah dipakai brand ini — kosakata untuk pemilih tag. */
+  knownTags: string[]
+  TriPick: (p: { value: boolean | null | undefined; onPick: (v: boolean | null) => void; labels: [string, string]; clearLabel?: string }) => React.JSX.Element
 }) {
   const [tagInput, setTagInput] = useState('')
+  const [tagOpen, setTagOpen] = useState(false)
+  const tagBox = useRef<HTMLDivElement>(null)
   const [newPillar, setNewPillar] = useState('')
   const [creating, setCreating] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
@@ -558,12 +652,35 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const addTag = () => {
-    const v = tagInput.trim()
+  // Daftar saran tag ditutup dengan klik di luar kotaknya. Dipasang hanya selama
+  // daftarnya terbuka supaya tidak ada listener menganggur di setiap modal.
+  useEffect(() => {
+    if (!tagOpen) return
+    const away = (e: MouseEvent) => {
+      if (tagBox.current && !tagBox.current.contains(e.target as Node)) setTagOpen(false)
+    }
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [tagOpen])
+
+  const addTag = (raw?: string) => {
+    const v = (raw ?? tagInput).trim()
     if (!v || post.tags.includes(v)) return
     onPatch({ tags: [...post.tags, v] })
-    setTagInput('')
+    setTagInput(''); setTagOpen(false)
   }
+
+  // Saran diambil dari kosakata brand, dikurangi yang sudah terpasang di post ini,
+  // lalu disaring dengan apa yang sedang diketik. `isNew` hanya menyala kalau yang
+  // diketik memang belum ada di mana pun — supaya "Create" tidak pernah muncul
+  // berdampingan dengan tag yang sama persis di daftar atas.
+  const tagQuery = tagInput.trim().toLowerCase()
+  const tagOptions = knownTags.filter(
+    k => !post.tags.includes(k) && (!tagQuery || k.toLowerCase().includes(tagQuery)),
+  )
+  const tagIsNew = !!tagQuery
+    && !knownTags.some(k => k.toLowerCase() === tagQuery)
+    && !post.tags.some(k => k.toLowerCase() === tagQuery)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -608,7 +725,7 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
                 className="w-full h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer outline-none focus:border-[#6c4cd6] disabled:opacity-50">
                 <option value="">{t('No pillar')}</option>
                 {pillars.map(p => (
-                  <option key={p.id} value={p.name}>{p.name}{p.isActive ? '' : ` (${t('inactive')})`}</option>
+                  <option key={p.id} value={p.name}>{p.name}</option>
                 ))}
               </select>
               {onCreatePillar && (
@@ -674,15 +791,41 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
                   ))}
                 </div>
               )}
-              <div className="flex items-center gap-1.5">
-                <input value={tagInput} onChange={e => setTagInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
-                  placeholder={t('Add tag — press Enter')} style={PJ}
-                  className="flex-1 text-[12.5px] text-[#374151] bg-white border border-[#e5e7eb] rounded-lg px-2.5 py-2 outline-none focus:border-[#6c4cd6]" />
-                <button onClick={addTag} disabled={!tagInput.trim()} style={PJ}
-                  className={`text-[12px] font-semibold rounded-lg px-3 py-2 border ${
-                    tagInput.trim() ? 'border-[#e5e7eb] text-[#374151] hover:border-[#d1d5db]' : 'border-[#f1f5f9] text-[#cbd5e1] cursor-not-allowed'
-                  }`}>{t('Add')}</button>
+              {/* Pemilih tag: kosakata brand lebih dulu, ketik bebas tetap boleh.
+                  Mengetik ulang tag yang sudah ada dengan ejaan sedikit berbeda
+                  adalah cara kosakata tag beranak-pinak — menawarkan yang sudah
+                  ada lebih dulu memotong itu di tempat, tanpa mengunci orang
+                  yang memang butuh istilah baru. */}
+              <div ref={tagBox} className="relative">
+                <div className="flex items-center gap-1.5">
+                  <input value={tagInput}
+                    onChange={e => { setTagInput(e.target.value); setTagOpen(true) }}
+                    onFocus={() => setTagOpen(true)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+                    placeholder={knownTags.length ? t('Pick a tag or type a new one') : t('Add tag — press Enter')} style={PJ}
+                    className="flex-1 text-[12.5px] text-[#374151] bg-white border border-[#e5e7eb] rounded-lg px-2.5 py-2 outline-none focus:border-[#6c4cd6]" />
+                  <button onClick={() => addTag()} disabled={!tagInput.trim()} style={PJ}
+                    className={`text-[12px] font-semibold rounded-lg px-3 py-2 border ${
+                      tagInput.trim() ? 'border-[#e5e7eb] text-[#374151] hover:border-[#d1d5db]' : 'border-[#f1f5f9] text-[#cbd5e1] cursor-not-allowed'
+                    }`}>{t('Add')}</button>
+                </div>
+
+                {tagOpen && (tagOptions.length > 0 || tagIsNew) && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-[#e5e7eb] rounded-lg shadow-lg py-1">
+                    {tagOptions.map(tg => (
+                      <button key={tg} onClick={() => addTag(tg)} style={PJ}
+                        className="w-full text-left text-[12.5px] text-[#374151] px-3 py-1.5 hover:bg-[#f5f3ff]">{tg}</button>
+                    ))}
+                    {tagIsNew && (
+                      <button onClick={() => addTag()} style={PJ}
+                        className={`w-full text-left text-[12.5px] font-semibold text-[#6c4cd6] px-3 py-1.5 hover:bg-[#f5f3ff] ${
+                          tagOptions.length ? 'border-t border-[#f1f3f5] mt-1 pt-2' : ''
+                        }`}>
+                        {t('Create “{tag}”', { tag: tagInput.trim() })}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

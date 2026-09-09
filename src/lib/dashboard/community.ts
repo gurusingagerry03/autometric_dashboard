@@ -131,9 +131,9 @@ function buildKpis(cur: KpiTotals, prev: KpiTotals, s: Awaited<ReturnType<typeof
   const fbCur = ratio(cur.fbLik, cur.fbCom), fbPrev = ratio(prev.fbLik, prev.fbCom)
   return [
     { key: 'c-total', label: t('Total Comments Tracked'), icon: 'forum', ...compact(cur.total), ...deltaStr(cur.total, prev.total), spark: s.total.length ? s.total : [0] },
-    { key: 'c-igr', label: t('IG Avg. Replies/Comment'), icon: 'reply', value: igCur.toFixed(1), ...deltaStr(igCur, igPrev), spark: s.igRep.length ? s.igRep : [0], unavailable: cur.igRows === 0 },
-    { key: 'c-tkr', label: t('TT Avg. Likes/Comment'), icon: 'thumb_up', ...compact(tkCur), ...deltaStr(tkCur, tkPrev), spark: s.tkLikes.length ? s.tkLikes : [0], unavailable: cur.tkRows === 0 },
-    { key: 'c-fbl', label: t('FB Avg. Likes/Comment'), icon: 'favorite', value: fbCur.toFixed(1), ...deltaStr(fbCur, fbPrev), spark: s.fbLik.length ? s.fbLik : [0], unavailable: cur.fbRows === 0 },
+    { key: 'c-igr', label: t('IG Avg. Replies/Comment'), icon: 'reply', only: ['instagram'], value: igCur.toFixed(1), ...deltaStr(igCur, igPrev), spark: s.igRep.length ? s.igRep : [0], unavailable: cur.igRows === 0 },
+    { key: 'c-tkr', label: t('TT Avg. Likes/Comment'), icon: 'thumb_up', only: ['tiktok'], ...compact(tkCur), ...deltaStr(tkCur, tkPrev), spark: s.tkLikes.length ? s.tkLikes : [0], unavailable: cur.tkRows === 0 },
+    { key: 'c-fbl', label: t('FB Avg. Likes/Comment'), icon: 'favorite', only: ['facebook'], value: fbCur.toFixed(1), ...deltaStr(fbCur, fbPrev), spark: s.fbLik.length ? s.fbLik : [0], unavailable: cur.fbRows === 0 },
   ]
 }
 

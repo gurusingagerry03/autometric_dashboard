@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow } from './ui'
@@ -7,7 +7,7 @@ import MetricInfo from '@/components/ui/MetricInfo'
 import { ChartTooltip, useChartTooltip } from '@/components/ui/ChartTooltip'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import ExactValue, { NumCell } from '@/components/ui/ExactValue'
-import { PLATFORM_META, fmtInt, type PlatformFilter, type Period } from './data'
+import { PLATFORM_META, fmtInt, type PlatformFilter, type Period, shownFor, shownExcept } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { AudiencePayload } from '@/lib/dashboard/audience'
@@ -146,15 +146,45 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
 
   const relevanceTotal = data.relevanceTiers.reduce((sum, tier) => sum + tier.count, 0)
 
+  // Dua keadaan berbeda, dua fungsi berbeda.
+  //   Age & gender LINTAS platform — angkanya menjumlahkan Instagram dan TikTok
+  //   — dan yang hilang cuma sisi Facebook. Kartunya harus tetap ada di 'All',
+  //   jadi yang didaftarkan adalah platform yang TIDAK punya.
+  //   UGC sebaliknya: isinya murni Instagram, jadi ia ikut aturan kartu
+  //   satu-platform dan tidak tampil di 'All'.
+  const showDemographics = shownExcept(['facebook'], platform)
+  const showUgc          = shownFor(['instagram'], platform)
+
   return (
     <>
       {/* Reach KPIs */}
       <SectionHeader icon="groups" first>{t('Audience')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
-      {/* Demographics */}
+      {/* Demographics
+          UMUR & GENDER FACEBOOK SUDAH TIDAK ADA SUMBERNYA
+            Keduanya datang dari satu metrik yang sama, `page_fans_gender_age`,
+            yang dihapus Meta 15 Nov 2025 — diuji v19–v26 semuanya menolak
+            dengan `#100 invalid metric`, termasuk di Page yang izinnya lengkap,
+            dan tidak ada penggantinya di API mana pun (lihat docs/metrik/README.md).
+            Karena itu saat topbar dipatok ke Facebook, pesannya menyebut alasan,
+            bukan "belum ada data" yang membuat orang menunggu sia-sia.
+
+            Karena jawabannya sudah pasti begitu topbar dipatok ke Facebook,
+            kedua kartunya tidak dirender sama sekali di sana — bukan dirender
+            dengan keterangan. Di 'All' keduanya TETAP tampil, berbeda dari kartu
+            satu-platform yang sekarang hilang di sana: umur & gender bukan angka
+            milik satu channel, dan di 'All' isinya masih berisi kontribusi
+            Instagram dan TikTok. Menyembunyikannya di situ membuang data yang sah.
+
+            City/Country SENGAJA tidak ikut: nama metrik lamanya juga dihapus,
+            tapi sejak 3 Sep 2026 kolomnya diisi `page_follows_city` /
+            `page_follows_country`. Kosongnya sekarang karena izin read_insights
+            belum turun — itu "belum", bukan "tidak akan pernah", jadi kartunya
+            tetap dirender di Facebook. */}
+      {showDemographics && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <Card area="audience_demographics_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Audience Age Distribution')} metricKey="audience_demographics_daily.age" sub={t('Share of followers by age group')} />
@@ -218,6 +248,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
           </div>
         </Card>
       </div>
+      )}
 
       {/* Geography + growth — kept next to the age/gender demographics above, so
           everything describing WHO the audience is reads as one block before the
@@ -388,7 +419,12 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </div>
       </Card>
 
-      {/* UGC */}
+      {/* UGC — hanya Instagram. l2_gold.ugc_tagged_posts tidak punya baris
+          platform lain sama sekali (diverifikasi 9 Sep 2026), jadi tabel ini
+          tidak akan pernah terisi di topbar Facebook/TikTok — dan di 'All' isinya
+          tetap post Instagram saja, bukan gabungan. Karena itu ia ikut aturan
+          kartu satu-platform: hanya muncul di topbar Instagram. */}
+      {showUgc && (<>
       <SectionHeader icon="loyalty">{t('User-Generated Content — Tagged Posts')}</SectionHeader>
       <Card area="ugc_tagged_posts" skeleton="table" className="overflow-hidden">
         <CardHead title={t('Tagged Posts')} metricKey="ugc_tagged_posts.total_engagement" sub={t('Instagram posts that tagged you, with their likes and comments')} />
@@ -421,6 +457,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
           <Callout tone="info" emoji="💡" title={t('UGC Opportunity')}>{data.ugcInsight}</Callout>
         </div>
       </Card>
+      </>)}
     </>
   )
 }

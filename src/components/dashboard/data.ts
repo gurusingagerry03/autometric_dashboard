@@ -53,6 +53,43 @@ export type Period = typeof PERIODS[number]
 export const PLATFORM_FILTERS = ['All', 'instagram', 'facebook', 'tiktok'] as const
 export type PlatformFilter = typeof PLATFORM_FILTERS[number]
 
+/**
+ * Kartu/scorecard yang angkanya MILIK satu platform — tampil hanya saat topbar
+ * dipatok ke platform itu.
+ *
+ * KENAPA DISEMBUNYIKAN, BUKAN DIBERI KETERANGAN
+ *   Sebelumnya kartu semacam ini tetap dirender dengan pesan "For TikTok only".
+ *   Kotak kosong berisi penjelasan tetap memakan tempat dan tetap harus dibaca
+ *   satu per satu untuk disingkirkan dari perhatian — padahal jawabannya sudah
+ *   pasti begitu topbar dipatok. Menghapusnya membuat halaman hanya berisi hal
+ *   yang benar-benar berlaku untuk platform yang sedang dilihat.
+ *
+ * KENAPA 'All' IKUT MENYEMBUNYIKANNYA
+ *   'All' dibaca sebagai gabungan seluruh channel: tiap kartu di sana dianggap
+ *   berbicara tentang semuanya. "TT Video Views" berdiri di antara "Total Reach"
+ *   dan "Net Follower Growth" membuat orang menjumlahkan hal yang tidak
+ *   sebanding — penanda (TT) di label ternyata tidak cukup menahannya. Angka
+ *   satu platform sekarang hanya muncul di tempat yang memang sedang
+ *   membicarakan platform itu.
+ *
+ * KOSONG ≠ TIDAK BERLAKU. Fungsi ini hanya menjawab "berlaku untuk platform ini
+ * atau tidak". Kartu yang berlaku tapi datanya belum masuk tetap dirender dengan
+ * pesan kosongnya sendiri — dua hal itu tidak boleh dijadikan satu.
+ */
+export const shownFor = (only: DashPlatform[] | undefined, current: PlatformFilter) =>
+  !only || (current !== 'All' && only.includes(current))
+
+/**
+ * Kebalikan `shownFor`: kartu yang isinya LINTAS platform, tapi ada platform
+ * yang sumbernya memang tidak ada (umur & gender Facebook, misalnya).
+ *
+ * Bedanya ada di 'All'. Kartu seperti ini tetap tampil di sana — angkanya masih
+ * berisi platform yang lain, jadi menyembunyikannya justru membuang data yang
+ * sah. Yang hilang hanya saat topbar dipatok ke platform yang tidak punya.
+ */
+export const shownExcept = (missing: DashPlatform[], current: PlatformFilter) =>
+  current === 'All' || !missing.includes(current)
+
 // Number formatting lives in the shared module the payload builders also use, so
 // a figure is rounded the same way on both sides of the wire. Re-exported here
 // because every dashboard view already imports from this file.
@@ -84,6 +121,12 @@ export interface OverviewKpi {
    * zero the reader believes is a measurement is worse than an honest blank.
    */
   unavailable?: boolean
+  /**
+   * Platform yang metrik ini memang miliknya — diisi hanya untuk scorecard yang
+   * angkanya mustahil ada di platform lain (mis. "Link Clicks (FB)"). Kosong
+   * berarti berlaku lintas platform. Dibaca `shownFor`.
+   */
+  only?: DashPlatform[]
 }
 
 // Multi-brand trend, one series per brand, switchable by metric.

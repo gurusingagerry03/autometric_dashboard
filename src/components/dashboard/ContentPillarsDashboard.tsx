@@ -7,7 +7,7 @@ import DashboardChrome from './DashboardChrome'
 import { PILLAR_COLORS, type PlatformFilter } from './data'
 import PillarTagging from './PillarTagging'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
-import type { PillarsPayload } from '@/lib/dashboard/pillars'
+import type { PillarsPayload, PillarRow } from '@/lib/dashboard/pillars'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -40,10 +40,12 @@ function PillarsBody({ orgId, brandId, platform, start, end }: {
   const [tagInput, setTagInput] = useState('')
   const [comparisonRun, setComparisonRun] = useState(false)
   const [busy, setBusy] = useState(false)
+  /** Pilar yang sedang menunggu konfirmasi hapus — hanya yang masih dipakai post. */
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    setData(null); setError(null); setComparisonRun(false)
+    setData(null); setError(null); setComparisonRun(false); setConfirmId(null)
     const range = start && end ? `&start=${start}&end=${end}` : ''
     fetch(`/api/organizations/${orgId}/dashboard/pillars?brand=${encodeURIComponent(brandId)}&platform=${platformParam(platform)}${range}&lang=${lang}`)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -89,13 +91,21 @@ function PillarsBody({ orgId, brandId, platform, start, end }: {
     } finally { setBusy(false) }
   }
 
-  async function removePillar(id: string) {
+  /**
+   * Menghapus pilar. Yang belum dipakai post mana pun langsung hilang; yang
+   * masih dipakai lewat konfirmasi dulu — lihat `confirmId`.
+   *
+   * Konfirmasinya di dalam barisnya sendiri, bukan window.confirm(): angka yang
+   * perlu dibaca ada di baris itu, dan dialog bawaan browser memaksa orang
+   * mengingat pilar mana yang tadi diklik.
+   */
+  async function removePillar(p: PillarRow) {
     if (busy) return
     setBusy(true)
     try {
-      const r = await fetch(`/api/organizations/${orgId}/dashboard/pillars?brand=${encodeURIComponent(brandId)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const r = await fetch(`/api/organizations/${orgId}/dashboard/pillars?brand=${encodeURIComponent(brandId)}&id=${encodeURIComponent(p.id)}`, { method: 'DELETE' })
       if (r.ok) { setData(await r.json()); setComparisonRun(false) }
-    } finally { setBusy(false) }
+    } finally { setBusy(false); setConfirmId(null) }
   }
 
   if (error) {
@@ -162,13 +172,35 @@ function PillarsBody({ orgId, brandId, platform, start, end }: {
               : (
                 <div className="flex flex-col gap-2">
                   {pillars.map(p => (
-                    <div key={p.id} className="flex items-center gap-2.5 rounded-lg border border-[#eef0f2] px-3 py-2.5">
+                    <div key={p.id} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${
+                      confirmId === p.id ? 'border-[#c2553f]/40 bg-[#fdf6f4]' : 'border-[#eef0f2]'
+                    }`}>
                       <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: p.color }} />
                       <span style={PJ} className="text-[13px] font-bold text-[#374151]">{p.name}</span>
-                      <div className="flex flex-wrap gap-1 flex-1">
-                        {p.hashtags.map(tag => <span key={tag} className="text-[11px] text-[#9ca3af]">{tag}</span>)}
-                      </div>
-                      <button onClick={() => removePillar(p.id)} disabled={busy} className="material-symbols-outlined text-[16px] text-[#cbd1d8] hover:text-[#c2553f] disabled:opacity-40">delete</button>
+                      {confirmId === p.id ? (
+                        <>
+                          <span className="flex-1 text-[11.5px] text-[#c2553f] leading-snug">
+                            {t('{count} posts will lose this pillar', { count: p.posts })}
+                          </span>
+                          <button onClick={() => removePillar(p)} disabled={busy} style={PJ}
+                            className="text-[12px] font-bold text-white bg-[#c2553f] rounded-lg px-2.5 py-1 hover:bg-[#a8452f] disabled:opacity-40 flex-shrink-0">
+                            {t('Delete')}
+                          </button>
+                          <button onClick={() => setConfirmId(null)} disabled={busy} style={PJ}
+                            className="text-[12px] font-semibold text-[#9ca3af] hover:text-[#6b7280] px-1 flex-shrink-0">
+                            {t('Cancel')}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap gap-1 flex-1">
+                            {p.hashtags.map(tag => <span key={tag} className="text-[11px] text-[#9ca3af]">{tag}</span>)}
+                          </div>
+                          <button onClick={() => (p.posts > 0 ? setConfirmId(p.id) : removePillar(p))} disabled={busy}
+                            title={t('Delete pillar')}
+                            className="material-symbols-outlined text-[16px] text-[#cbd1d8] hover:text-[#c2553f] disabled:opacity-40">delete</button>
+                        </>
+                      )}
                     </div>
                   ))}
                   <button onClick={() => setComparisonRun(true)} disabled={comparison.length < 2} style={PJ}

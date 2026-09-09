@@ -131,7 +131,7 @@ function buildKpis(cur: Totals, prev: Totals, s: Awaited<ReturnType<typeof daily
     { key: 'reach', label: t('Total Reach'), icon: 'ads_click', ...compact(cur.reach), ...deltaStr(cur.reach, prev.reach), spark: s.reach.length ? s.reach : [0] },
     { key: 'eng', label: t('Total Engagement'), icon: 'favorite', ...compact(cur.eng), ...deltaStr(cur.eng, prev.eng), spark: s.eng.length ? s.eng : [0] },
     { key: 'er', label: t('Blended Eng. Rate'), icon: 'bolt', value: `${erCur.toFixed(2)}%`, delta: `${erDelta >= 0 ? '+' : ''}${erDelta.toFixed(2)}pts`, good: erDelta >= 0, spark: s.er.length ? s.er : [0] },
-    { key: 'views', label: t('TT Video Views'), icon: 'smart_display', ...compact(cur.tkviews), ...deltaStr(cur.tkviews, prev.tkviews), spark: s.tkviews.length ? s.tkviews : [0] },
+    { key: 'views', label: t('TT Video Views'), icon: 'smart_display', only: ['tiktok'], ...compact(cur.tkviews), ...deltaStr(cur.tkviews, prev.tkviews), spark: s.tkviews.length ? s.tkviews : [0] },
     { key: 'growth', label: t('Net Follower Growth'), icon: 'group_add', ...compactSigned(cur.net), ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
   ]
 }

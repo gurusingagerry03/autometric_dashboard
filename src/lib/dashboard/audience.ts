@@ -125,9 +125,9 @@ function buildKpis(cur: ProfDay[], prev: ProfDay[], t: Translator): OverviewKpi[
   const fbCur = sum(cur, 'fbVisit'), fbPrev = sum(prev, 'fbVisit')
   return [
     { key: 'foll', label: t('Total Tracked Followers'), icon: 'group', ...compact(follCur), ...deltaStr(follCur, follStart), spark: cur.length ? cur.map(r => Math.round(r.foll)) : [0] },
-    { key: 'igr', label: t('IG Profile Reach'), icon: 'ads_click', ...compact(igCur), ...deltaStr(igCur, igPrev), spark: cur.length ? cur.map(r => Math.round(r.igReach)) : [0] },
-    { key: 'tkv', label: t('TT Profile Views'), icon: 'visibility', ...compact(tkCur), ...deltaStr(tkCur, tkPrev), spark: cur.length ? cur.map(r => Math.round(r.tkVisit)) : [0] },
-    { key: 'fbv', label: t('FB Profile Visits'), icon: 'person', ...compact(fbCur), ...deltaStr(fbCur, fbPrev), spark: cur.length ? cur.map(r => Math.round(r.fbVisit)) : [0] },
+    { key: 'igr', label: t('IG Profile Reach'), icon: 'ads_click', only: ['instagram'], ...compact(igCur), ...deltaStr(igCur, igPrev), spark: cur.length ? cur.map(r => Math.round(r.igReach)) : [0] },
+    { key: 'tkv', label: t('TT Profile Views'), icon: 'visibility', only: ['tiktok'], ...compact(tkCur), ...deltaStr(tkCur, tkPrev), spark: cur.length ? cur.map(r => Math.round(r.tkVisit)) : [0] },
+    { key: 'fbv', label: t('FB Profile Visits'), icon: 'person', only: ['facebook'], ...compact(fbCur), ...deltaStr(fbCur, fbPrev), spark: cur.length ? cur.map(r => Math.round(r.fbVisit)) : [0] },
   ]
 }
 

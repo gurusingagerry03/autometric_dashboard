@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, TableHeadRow } from './ui'
@@ -6,7 +6,7 @@ import { MultiLineChart, Donut, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import MetricInfo from '@/components/ui/MetricInfo'
 import ExactValue, { NumCell } from '@/components/ui/ExactValue'
-import { TREND_METRICS, HEATMAP_DAYS, HEATMAP_TIME_LABELS, PLATFORM_META, fmtNum, fmtInt, type TrendMetric, type PlatformFilter, type Period } from './data'
+import { TREND_METRICS, HEATMAP_DAYS, HEATMAP_TIME_LABELS, PLATFORM_META, fmtNum, fmtInt, type TrendMetric, type PlatformFilter, type Period, shownFor } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { OverviewPayload } from '@/lib/dashboard/overview'
@@ -100,7 +100,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {/* Performance KPIs */}
       <SectionHeader icon="monitoring" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       {/* Engagement over time + platform share */}

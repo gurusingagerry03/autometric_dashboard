@@ -1,11 +1,11 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, TableHeadRow } from './ui'
 import { MultiLineChart, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { NumCell } from '@/components/ui/ExactValue'
-import { PLATFORM_META, type PlatformFilter, type Period } from './data'
+import { PLATFORM_META, type PlatformFilter, type Period, shownFor } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { CommunityPayload } from '@/lib/dashboard/community'
@@ -131,7 +131,7 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
     <>
       <SectionHeader icon="diversity_3" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard area="comment_activity_daily" key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="comment_activity_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">

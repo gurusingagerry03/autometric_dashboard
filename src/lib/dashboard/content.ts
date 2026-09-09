@@ -228,9 +228,9 @@ function buildKpis(
   const savesCur = pct(curG.igSaves, curG.igErden), savesPrev = pct(prevG.igSaves, prevG.igErden)
   return [
     { key: 'posts', label: t('Total Posts (Period)'), icon: 'grid_view', ...compact(curG.posts), ...deltaStr(curG.posts, prevG.posts), spark: sg.posts.length ? sg.posts : [0] },
-    { key: 'saves', label: t('Avg. Saves Rate (IG)'), icon: 'bookmark', value: `${savesCur.toFixed(2)}%`, ...ptsStr(savesCur, savesPrev), spark: sg.savesRate.length ? sg.savesRate : [0] },
-    { key: 'compl', label: t('Avg. Completion Rate (TT)'), icon: 'smart_display', value: `${Math.round(curS.tkCompl)}%`, ...ptsStr(curS.tkCompl, prevS.tkCompl), spark: ss.completion.length ? ss.completion : [0] },
-    { key: 'clicks', label: t('Link Clicks (FB)'), icon: 'ads_click', ...compact(curS.fbClicks), ...deltaStr(curS.fbClicks, prevS.fbClicks), spark: ss.clicks.length ? ss.clicks : [0] },
+    { key: 'saves', label: t('Avg. Saves Rate (IG)'), icon: 'bookmark', only: ['instagram'], value: `${savesCur.toFixed(2)}%`, ...ptsStr(savesCur, savesPrev), spark: sg.savesRate.length ? sg.savesRate : [0] },
+    { key: 'compl', label: t('Avg. Completion Rate (TT)'), icon: 'smart_display', only: ['tiktok'], value: `${Math.round(curS.tkCompl)}%`, ...ptsStr(curS.tkCompl, prevS.tkCompl), spark: ss.completion.length ? ss.completion : [0] },
+    { key: 'clicks', label: t('Link Clicks (FB)'), icon: 'ads_click', only: ['facebook'], ...compact(curS.fbClicks), ...deltaStr(curS.fbClicks, prevS.fbClicks), spark: ss.clicks.length ? ss.clicks : [0] },
   ]
 }
 

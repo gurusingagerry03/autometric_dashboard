@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow } from './ui'
@@ -6,7 +6,7 @@ import { BarChart, HBars, SERIES } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { NumCell } from '@/components/ui/ExactValue'
-import { PLATFORM_META, fmtNum, fmtInt, type PlatformFilter, type Period } from './data'
+import { PLATFORM_META, fmtNum, fmtInt, type PlatformFilter, type Period, shownFor } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { ContentOverviewPayload } from '@/lib/dashboard/content'
@@ -104,16 +104,30 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     )
   }
 
+  // Kartu yang isinya hanya milik satu platform — tidak dirender di 'All'
+  // maupun di topbar platform lain. Dihitung sekali di sini supaya penyusunan
+  // grid dan keputusan render memakai jawaban yang sama.
+  const showPostType   = shownFor(['instagram'], platform)
+  const showCompletion = shownFor(['tiktok'], platform)
+  const showReelWatch  = shownFor(['instagram'], platform)
+
   return (
     <>
       {/* Performance KPIs */}
       <SectionHeader icon="monitoring" first>{t('Performance')}</SectionHeader>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-        {data.kpis.map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
+        {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
       </div>
 
-      {/* Post type performance + content volume */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+      {/* Post type performance + content volume.
+          Post Type Performance menyaring `p.platform = 'instagram'` di SQL-nya
+          (lib/dashboard/content.ts) dan tidak menghormati topbar sama sekali —
+          di topbar TikTok/Facebook kartunya menampilkan angka Instagram. Karena
+          itu kartunya hanya dirender di topbar Instagram — di 'All' pun tidak,
+          sebab angkanya bukan gabungan channel — dan Content Volume yang memang
+          lintas platform melebar sendiri mengisi barisnya. */}
+      <div className={`grid grid-cols-1 gap-3 mb-3 ${showPostType ? 'lg:grid-cols-2' : ''}`}>
+        {showPostType && (
         <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Post Type Performance')} metricKey="post_metric.post_type" sub={t('Instagram · avg reach by format')} />
           <div className="px-4 pb-4 pt-3">
@@ -128,6 +142,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
             <Callout tone="success" title={t('Reels Dominate')}>{data.postTypeInsight}</Callout>
           </div>
         </Card>
+        )}
 
         <Card area="brand_metric_daily" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Content Volume by Week')} metricKey="derived.content_volume_weekly" sub={t('Posts published per week')}
@@ -203,9 +218,14 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
         </div>
       </Card>
 
-      {/* TikTok video analytics */}
+      {/* Video analytics — completion rate murni TikTok, watch time reel murni
+          Instagram. Di topbar Facebook maupun di 'All' keduanya tidak berlaku,
+          jadi judul sectionnya ikut hilang: judul tanpa isi lebih membingungkan
+          daripada tidak ada sama sekali. */}
+      {(showCompletion || showReelWatch) && (<>
       <SectionHeader icon="smart_display">{t('Video Analytics')}</SectionHeader>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className={`grid grid-cols-1 gap-3 ${showCompletion && showReelWatch ? 'lg:grid-cols-2' : ''}`}>
+        {showCompletion && (
         <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('TikTok Completion Rate Distribution')} metricKey="derived.completion_rate_distribution" sub={t('Share of videos by how much of them gets watched')} />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
@@ -219,7 +239,9 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
             <Callout tone="success" title={t('Strong Retention')}>{data.completionInsight}</Callout>
           </div>
         </Card>
+        )}
 
+        {showReelWatch && (
         <Card area="post_metric" skeleton="chart" className="flex flex-col">
           <CardHead title={t('Reel Watch Time by Duration')} metricKey="derived.reel_watch_by_duration" sub={t('Average watch time and completion by reel length')} />
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
@@ -233,7 +255,9 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
             <Callout tone="info" emoji="💡" title={t('Sweet Spot')}>{data.reelWatchInsight}</Callout>
           </div>
         </Card>
+        )}
       </div>
+      </>)}
     </>
   )
 }
