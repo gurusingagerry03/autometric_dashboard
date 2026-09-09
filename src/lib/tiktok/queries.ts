@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { mirrorImages } from '@/lib/cloudinary/mirror'
 import { PoolClient } from 'pg'
 
 export interface TtProfileSnapshotPayload {
@@ -68,10 +69,18 @@ const VIDEO_UPSERT_SQL = `
     comment_count   = EXCLUDED.comment_count,
     share_count     = EXCLUDED.share_count,
     view_count      = EXCLUDED.view_count,
-    engagement_rate = EXCLUDED.engagement_rate`
+    engagement_rate = EXCLUDED.engagement_rate,
+    cover_image_url = CASE WHEN tt_video_snapshots.cover_image_url LIKE '%res.cloudinary.com%'
+              AND EXCLUDED.cover_image_url NOT LIKE '%res.cloudinary.com%'
+         THEN tt_video_snapshots.cover_image_url ELSE EXCLUDED.cover_image_url END`
 
 export async function saveTtVideoSnapshots(items: TtVideoSnapshotItem[]): Promise<void> {
   if (!items.length) return
+  // URL cover TikTok membawa x-expires — sering hanya berlaku hitungan hari.
+  const mirrored = await mirrorImages(
+    items.map(i => ({ id: i.videoId, url: i.coverImageUrl })),
+    { table: 'tt_video_snapshots', idColumn: 'video_id', urlColumn: 'cover_image_url', folder: 'tt-videos' },
+  )
   const client: PoolClient = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -87,7 +96,7 @@ export async function saveTtVideoSnapshots(items: TtVideoSnapshotItem[]): Promis
         v.title,           // $4
         v.description,     // $5
         v.duration,        // $6
-        v.coverImageUrl,   // $7
+        mirrored.get(v.videoId) ?? v.coverImageUrl,   // $7
         v.shareUrl,        // $8
         v.likeCount,       // $9
         v.commentCount,    // $10

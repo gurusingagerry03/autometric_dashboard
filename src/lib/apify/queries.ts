@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { mirrorImages } from '@/lib/cloudinary/mirror'
 import type {
   ApifyFbProfile, ApifyFbPost, ApifyFbPostMedia,
   ApifyTiktokAuthorMeta, ApifyTiktokPost,
@@ -204,6 +205,13 @@ export async function saveTiktokCompetitorMedias(
 ): Promise<void> {
   if (posts.length === 0) return
 
+  // Cover kompetitor ikut disalin: section Visual Content sisi competitive review
+  // membacanya dari sini, dan URL TikTok membawa x-expires.
+  const mirrored = await mirrorImages(
+    posts.map(x => ({ id: String(x.id ?? ''), url: x.videoMeta?.coverUrl ?? null })).filter(x => x.id),
+    { table: 'tiktok_competitor_media', idColumn: 'post_id', urlColumn: 'cover_image', folder: 'tt-competitor' },
+  )
+
   for (const post of posts) {
     const postId = post.id
     if (!postId) continue
@@ -247,7 +255,9 @@ export async function saveTiktokCompetitorMedias(
          hashtags_count   = EXCLUDED.hashtags_count,
          mentions         = EXCLUDED.mentions,
          url              = EXCLUDED.url,
-         cover_image      = EXCLUDED.cover_image,
+         cover_image      = CASE WHEN tiktok_competitor_media.cover_image LIKE '%res.cloudinary.com%'
+                   AND EXCLUDED.cover_image NOT LIKE '%res.cloudinary.com%'
+              THEN tiktok_competitor_media.cover_image ELSE EXCLUDED.cover_image END,
          is_pinned        = EXCLUDED.is_pinned,
          is_sponsored     = EXCLUDED.is_sponsored,
          is_ad            = EXCLUDED.is_ad,
@@ -258,7 +268,8 @@ export async function saveTiktokCompetitorMedias(
         socialAccountId, postId, postDate, post.text ?? null, post.textLanguage ?? null,
         mediaType, slideCount, post.diggCount ?? null, post.commentCount ?? null, post.playCount ?? null,
         post.collectCount ?? null, post.shareCount ?? null, post.videoMeta?.duration ?? null, hashtags, hashtags.length,
-        mentions, post.webVideoUrl ?? null, post.videoMeta?.coverUrl ?? null,
+        mentions, post.webVideoUrl ?? null,
+        mirrored.get(postId) ?? post.videoMeta?.coverUrl ?? null,
         post.isPinned ?? null, post.isSponsored ?? null, post.isAd ?? null,
         post.musicMeta?.musicName ?? null, post.musicMeta?.musicAuthor ?? null,
       ],
@@ -346,6 +357,11 @@ export async function saveIgCompetitorMedias(
 ): Promise<void> {
   if (posts.length === 0) return
 
+  const mirrored = await mirrorImages(
+    posts.map(x => ({ id: String(x.id ?? ''), url: x.displayUrl ?? null })).filter(x => x.id),
+    { table: 'ig_competitor_media', idColumn: 'media_id', urlColumn: 'cover_image', folder: 'ig-competitor' },
+  )
+
   for (const post of posts) {
     const mediaId = post.id
     if (!mediaId) continue
@@ -384,7 +400,9 @@ export async function saveIgCompetitorMedias(
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (social_account_id, media_id) DO UPDATE SET
          caption             = COALESCE(ig_competitor_media.caption, EXCLUDED.caption),
-         cover_image         = COALESCE(ig_competitor_media.cover_image, EXCLUDED.cover_image),
+         cover_image         = CASE WHEN ig_competitor_media.cover_image LIKE '%res.cloudinary.com%'
+                   AND EXCLUDED.cover_image NOT LIKE '%res.cloudinary.com%'
+              THEN ig_competitor_media.cover_image ELSE EXCLUDED.cover_image END,
          hashtags_list       = COALESCE(ig_competitor_media.hashtags_list, EXCLUDED.hashtags_list),
          hashtags_count      = COALESCE(ig_competitor_media.hashtags_count, EXCLUDED.hashtags_count),
          mentions            = COALESCE(ig_competitor_media.mentions, EXCLUDED.mentions),
@@ -400,7 +418,7 @@ export async function saveIgCompetitorMedias(
          fetched_at          = NOW()`,
       [
         socialAccountId, mediaId, postedAt, caption, mediaType,
-        shortcode, permalink, coverImage,
+        shortcode, permalink, mirrored.get(mediaId) ?? coverImage,
         slideCount, videoDuration,
         hashtags, hashtags.length, mentions,
         isCollaborator, isSponsored, isCommentDisabled, isPinned,

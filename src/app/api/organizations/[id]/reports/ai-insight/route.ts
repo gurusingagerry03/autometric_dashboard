@@ -7,7 +7,7 @@ import type { SlideType } from '@/lib/reports/data/slideModel'
 export const runtime = 'nodejs'
 
 type Params = { params: Promise<{ id: string }> }
-const TYPES: SlideType[] = ['section', 'dashboard', 'comparison', 'kpi', 'visual', 'overview']
+const TYPES: SlideType[] = ['section', 'dashboard', 'comparison', 'kpi', 'visual', 'overview', 'sentiment', 'demographic']
 
 // POST /api/organizations/[id]/reports/ai-insight
 // { slideType, channel, brandName, period, title, data } -> { analysis, recommendations }

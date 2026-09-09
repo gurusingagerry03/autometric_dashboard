@@ -184,6 +184,65 @@ export function normalizeColumnIds(ids: string[]): string[] {
   return out
 }
 
+// Kolom per-channel untuk kedua tabel perbandingan. Diangkat jadi konstanta
+// karena tabel Cross-Level memakai keduanya — kalau tetap inline, daftar
+// kolomnya harus disalin dan dua salinan itu pasti menyimpang cepat atau lambat.
+const CONTENT_LEVEL_COLUMNS: TableColumn[] = [
+  { id: 'likes', label: 'Likes', format: 'number' },
+  { id: 'comments', label: 'Comments', format: 'number' },
+  { id: 'shares', label: 'Shares', format: 'number' },
+  { id: 'saved', label: 'Saved', format: 'number', channels: ['instagram', 'tiktok'] },
+  { id: 'reposts', label: 'Reposts', format: 'number', channels: ['instagram'] },
+  { id: 'eng_owned', label: 'Engagement Owned', format: 'compact' },
+  { id: 'eng_public', label: 'Engagement Public', format: 'compact' },
+  { id: 'er_reach', label: 'ER Reach', format: 'percent' },
+  { id: 'er_views', label: 'ER Views', format: 'percent', channels: ['instagram', 'tiktok'] },
+  { id: 'er_impressions', label: 'ER Impressions', format: 'percent', channels: ['facebook'] },
+  { id: 'er_followers', label: 'ER Followers', format: 'percent' },
+  { id: 'reach', label: 'Reach', format: 'compact' },
+  { id: 'views', label: 'Views', format: 'compact', channels: ['instagram'] },
+  { id: 'impressions', label: 'Impressions', format: 'compact', channels: ['tiktok', 'facebook'] },
+  { id: 'video_views', label: 'Video Views', format: 'compact', channels: ['facebook'] },
+  { id: 'reels_skip_rate', label: 'Reels Skip Rate', format: 'percent', channels: ['instagram'] },
+  { id: 'video_watch_time', label: 'Video Avg. Watch Time', format: 'time' },
+  { id: 'post_view_time', label: 'Post Avg. View Time', format: 'time', channels: ['tiktok'] },
+  { id: 'post_completion', label: 'Post Completion Rate', format: 'percent', channels: ['tiktok'] },
+  { id: 'new_follow_content', label: 'New Follow from Content', format: 'number', channels: ['instagram', 'tiktok'] },
+  // Profile visits driven by content = SUM(unified_post.profile_visits) over the
+  // period. Left unrestricted like video_watch_time: the API only fills it for
+  // Instagram, but an FPK/CSV source can supply it for any channel (else "—").
+  { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
+]
+
+const CHANNEL_LEVEL_COLUMNS: TableColumn[] = [
+  { id: 'total_followers', label: 'Total Followers', format: 'compact' },
+  { id: 'followers_net_growth', label: 'Followers Net Growth', format: 'number' },
+  { id: 'new_follows', label: 'New Follows', format: 'number' },
+  { id: 'unfollows', label: 'Unfollows', format: 'number' },
+  // Same metric the picker used to call "Profile Views" (gold profile_visit_sum),
+  // renamed for consistency with the All-Channels layout; legacy id is aliased.
+  { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
+  { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
+  { id: 'avg_er_reach', label: 'Avg. ER Reach', format: 'percent' },
+  { id: 'avg_er_views', label: 'Avg. ER Views', format: 'percent', channels: ['instagram', 'tiktok'] },
+  { id: 'avg_er_impressions', label: 'Avg. ER Impressions', format: 'percent', channels: ['facebook'] },
+  { id: 'avg_er_followers', label: 'Avg. ER Followers', format: 'percent' },
+  { id: 'total_posts', label: 'Total Posts', format: 'number' },
+  { id: 'avg_likes', label: 'Avg. Likes', format: 'number' },
+  { id: 'avg_comments', label: 'Avg. Comments', format: 'number' },
+  { id: 'avg_shares', label: 'Avg. Shares', format: 'number' },
+  { id: 'avg_saved', label: 'Avg. Saved', format: 'number', channels: ['instagram', 'tiktok'] },
+  { id: 'avg_reposts', label: 'Avg. Reposts', format: 'number', channels: ['instagram'] },
+  { id: 'eng_owned', label: 'Engagement Owned', format: 'compact' },
+  { id: 'eng_public', label: 'Engagement Public', format: 'compact' },
+  { id: 'avg_eng_owned', label: 'Avg. Engagement Owned', format: 'compact' },
+  { id: 'avg_eng_public', label: 'Avg. Engagement Public', format: 'compact' },
+  { id: 'avg_reach', label: 'Avg. Reach', format: 'compact' },
+  { id: 'avg_views', label: 'Avg. Views', format: 'compact', channels: ['instagram'] },
+  { id: 'avg_impressions', label: 'Avg. Impressions', format: 'compact', channels: ['tiktok', 'facebook'] },
+  { id: 'avg_video_views', label: 'Avg. Video Views', format: 'compact', channels: ['facebook'] },
+]
+
 // ── Cross-level: satu tabel yang boleh mencampur metrik Content & Channel ─────
 // Kedua kumpulan metrik hidup di butiran berbeda — Content per-post, Channel
 // per-hari — dan sebagian namanya bertabrakan (mis. profile_visit ada di
@@ -207,6 +266,20 @@ const CROSS_ALL_DEFAULTS = [
   'ct:eng_owned', 'ct:er_reach_pooled', 'ct:reach',
 ]
 
+// Versi per-channel dari campuran yang sama. Awalan dan aturan labelnya identik
+// dengan CROSS_ALL_COLUMNS; yang berbeda hanya kumpulan metrik sumbernya —
+// kolom per-channel, bukan layout SUM/Avg. milik spesifikasi All-Channels.
+// `channels` ikut terbawa dari kolom aslinya, jadi metrik yang cuma ada di satu
+// platform tetap hilang sendiri lewat columnsForChannel.
+const CROSS_COLUMNS: TableColumn[] = [
+  ...CONTENT_LEVEL_COLUMNS.map(c => ({ ...c, id: 'ct:' + c.id, label: c.label + ' · Content' })),
+  ...CHANNEL_LEVEL_COLUMNS.map(c => ({ ...c, id: 'ch:' + c.id, label: c.label + ' · Channel' })),
+]
+const CROSS_DEFAULTS = [
+  'ch:total_followers', 'ch:followers_net_growth',
+  'ct:eng_owned', 'ct:er_reach', 'ct:reach',
+]
+
 export const TABLE_TYPES: Record<string, TableType> = {
   content_level: {
     id: 'content_level', label: 'Content Level Metric', icon: 'dynamic_feed',
@@ -217,32 +290,7 @@ export const TABLE_TYPES: Record<string, TableType> = {
     // columns stay available in the picker (off by default to keep the table readable).
     allColumns: CONTENT_ALL_COLUMNS,
     allDefaultColumns: CONTENT_ALL_DEFAULTS,
-    columns: [
-      { id: 'likes', label: 'Likes', format: 'number' },
-      { id: 'comments', label: 'Comments', format: 'number' },
-      { id: 'shares', label: 'Shares', format: 'number' },
-      { id: 'saved', label: 'Saved', format: 'number', channels: ['instagram', 'tiktok'] },
-      { id: 'reposts', label: 'Reposts', format: 'number', channels: ['instagram'] },
-      { id: 'eng_owned', label: 'Engagement Owned', format: 'compact' },
-      { id: 'eng_public', label: 'Engagement Public', format: 'compact' },
-      { id: 'er_reach', label: 'ER Reach', format: 'percent' },
-      { id: 'er_views', label: 'ER Views', format: 'percent', channels: ['instagram', 'tiktok'] },
-      { id: 'er_impressions', label: 'ER Impressions', format: 'percent', channels: ['facebook'] },
-      { id: 'er_followers', label: 'ER Followers', format: 'percent' },
-      { id: 'reach', label: 'Reach', format: 'compact' },
-      { id: 'views', label: 'Views', format: 'compact', channels: ['instagram'] },
-      { id: 'impressions', label: 'Impressions', format: 'compact', channels: ['tiktok', 'facebook'] },
-      { id: 'video_views', label: 'Video Views', format: 'compact', channels: ['facebook'] },
-      { id: 'reels_skip_rate', label: 'Reels Skip Rate', format: 'percent', channels: ['instagram'] },
-      { id: 'video_watch_time', label: 'Video Avg. Watch Time', format: 'time' },
-      { id: 'post_view_time', label: 'Post Avg. View Time', format: 'time', channels: ['tiktok'] },
-      { id: 'post_completion', label: 'Post Completion Rate', format: 'percent', channels: ['tiktok'] },
-      { id: 'new_follow_content', label: 'New Follow from Content', format: 'number', channels: ['instagram', 'tiktok'] },
-      // Profile visits driven by content = SUM(unified_post.profile_visits) over the
-      // period. Left unrestricted like video_watch_time: the API only fills it for
-      // Instagram, but an FPK/CSV source can supply it for any channel (else "—").
-      { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
-    ],
+    columns: CONTENT_LEVEL_COLUMNS,
   },
   channel_level: {
     id: 'channel_level', label: 'Channel Level Metric', icon: 'insights',
@@ -253,34 +301,36 @@ export const TABLE_TYPES: Record<string, TableType> = {
     // Followers & Total Post are SUM only.
     allColumns: CHANNEL_ALL_COLUMNS,
     allDefaultColumns: CHANNEL_ALL_DEFAULTS,
-    columns: [
-      { id: 'total_followers', label: 'Total Followers', format: 'compact' },
-      { id: 'followers_net_growth', label: 'Followers Net Growth', format: 'number' },
-      { id: 'new_follows', label: 'New Follows', format: 'number' },
-      { id: 'unfollows', label: 'Unfollows', format: 'number' },
-      // Same metric the picker used to call "Profile Views" (gold profile_visit_sum),
-      // renamed for consistency with the All-Channels layout; legacy id is aliased.
-      { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
-      { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
-      { id: 'avg_er_reach', label: 'Avg. ER Reach', format: 'percent' },
-      { id: 'avg_er_views', label: 'Avg. ER Views', format: 'percent', channels: ['instagram', 'tiktok'] },
-      { id: 'avg_er_impressions', label: 'Avg. ER Impressions', format: 'percent', channels: ['facebook'] },
-      { id: 'avg_er_followers', label: 'Avg. ER Followers', format: 'percent' },
-      { id: 'total_posts', label: 'Total Posts', format: 'number' },
-      { id: 'avg_likes', label: 'Avg. Likes', format: 'number' },
-      { id: 'avg_comments', label: 'Avg. Comments', format: 'number' },
-      { id: 'avg_shares', label: 'Avg. Shares', format: 'number' },
-      { id: 'avg_saved', label: 'Avg. Saved', format: 'number', channels: ['instagram', 'tiktok'] },
-      { id: 'avg_reposts', label: 'Avg. Reposts', format: 'number', channels: ['instagram'] },
-      { id: 'eng_owned', label: 'Engagement Owned', format: 'compact' },
-      { id: 'eng_public', label: 'Engagement Public', format: 'compact' },
-      { id: 'avg_eng_owned', label: 'Avg. Engagement Owned', format: 'compact' },
-      { id: 'avg_eng_public', label: 'Avg. Engagement Public', format: 'compact' },
-      { id: 'avg_reach', label: 'Avg. Reach', format: 'compact' },
-      { id: 'avg_views', label: 'Avg. Views', format: 'compact', channels: ['instagram'] },
-      { id: 'avg_impressions', label: 'Avg. Impressions', format: 'compact', channels: ['tiktok', 'facebook'] },
-      { id: 'avg_video_views', label: 'Avg. Video Views', format: 'compact', channels: ['facebook'] },
-    ],
+    columns: CHANNEL_LEVEL_COLUMNS,
+  },
+  /**
+   * Cross-Level Metric — campuran Content & Channel dengan baris perbandingan
+   * (periode ini vs periode lalu + Gap %), bukan baris per platform.
+   *
+   * BEDANYA DENGAN cross_by_platform
+   *   Keduanya mencampur metrik yang sama dan memakai awalan id yang sama, tapi
+   *   menjawab pertanyaan yang berbeda: yang ini "naik atau turun dibanding
+   *   periode lalu", yang itu "platform mana yang menyumbang apa". Karena itu
+   *   keduanya hidup berdampingan, bukan saling menggantikan.
+   *
+   *   Konsekuensi lain yang menguntungkan: tabel ber-rowType 'comparison' ikut
+   *   terisi di jalur ekspor/AI (parts.tsx memanggil buildTable tanpa
+   *   platformMetrics), jadi campuran ini bisa keluar di PPTX — sesuatu yang
+   *   tidak berlaku untuk versi per-platform.
+   *
+   * TERSEDIA DI SEMUA CHANNEL
+   *   Di channel tertentu memakai CROSS_COLUMNS, di "All Channels" memakai
+   *   CROSS_ALL_COLUMNS — persis pola yang sudah dipakai content_level dan
+   *   channel_level, jadi angkanya sebaris dengan tabel di sebelahnya.
+   */
+  cross_level: {
+    id: 'cross_level', label: 'Cross-Level Metric', icon: 'stacked_bar_chart',
+    description: 'Mix content & channel metrics — this period vs last.',
+    rowType: 'comparison', channelScoped: true,
+    columns: CROSS_COLUMNS,
+    defaultColumns: CROSS_DEFAULTS,
+    allColumns: CROSS_ALL_COLUMNS,
+    allDefaultColumns: CROSS_ALL_DEFAULTS,
   },
   // Per-platform comparison tables — only on the "All Channels" view. Rows are the
   // platforms (Instagram / Facebook / TikTok); each cell is the CURRENT-period value.

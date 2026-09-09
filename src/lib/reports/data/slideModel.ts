@@ -4,12 +4,15 @@ import { CoverMode } from '../cover/colors'
 import { CoverTemplate } from '../cover/templates'
 import { ChartConfig } from './chartData'
 import { TableConfig } from './tableTypes'
+import type { SourceFilter } from './audienceTypes'
 
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'visual' | 'overview'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'visual' | 'overview' | 'sentiment' | 'demographic'
 export type VisualMode = 'chart' | 'table' | null
+/** Which half of the demographic slide is drawn — or both, side by side. */
+export type DemographicView = 'both' | 'age' | 'gender'
 
 // ── AI analyst insight (Gemini) ──────────────────────────────────────────────
 export type RecommendationType = 'SCALE' | 'REFINE' | 'EXPLORE' | 'STOP'
@@ -41,6 +44,18 @@ export interface ContentSlide {
   /** visual — id akun kompetitor yang ditampilkan saat postSource = 'competitor'. */
   postCompetitorId?: string
   visualMode: VisualMode     // overview — chart | table | null
+  /**
+   * sentiment — mana suara audiens yang dihitung: 'all' (komentar + tagged post),
+   * atau salah satunya sendirian. Bukan pilihan kosmetik: tagged post jauh lebih
+   * sedikit daripada komentar, jadi menggabungkan keduanya membuat angkanya
+   * hampir seluruhnya komentar. Yang mau melihat suara tagged post apa adanya
+   * harus bisa memisahkannya.
+   */
+  sentimentSource: SourceFilter
+  /** sentiment — penyaring word cloud: 'all' | 'positive' | 'neutral' | 'negative'. */
+  cloudSentiment: string
+  /** demographic — 'age' | 'gender' | 'both'. */
+  demographicView: DemographicView
   aiInsight: AiInsight | null // AI analyst insight (analysis + typed recommendations)
 }
 
@@ -92,6 +107,8 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   kpi: { title: 'KPI Overview' },
   visual: { title: 'Visual Analysis' },
   overview: { title: 'Overview Slide' },
+  sentiment: { title: 'Audience Sentiment' },
+  demographic: { title: 'Audience Demographics' },
 }
 
 export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): ContentSlide {
@@ -117,6 +134,9 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): 
     postSortMetric: 'engagement',
     postMetrics: ['reach', 'engagement', 'er'],
     visualMode: null,
+    sentimentSource: 'all',
+    cloudSentiment: 'all',
+    demographicView: 'both',
     aiInsight: null,
   }
 }

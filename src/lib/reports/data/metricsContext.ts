@@ -7,6 +7,7 @@ import type { ReportChartMetrics } from './chartTypes'
 import type { ReportKpiMetrics } from './kpiMetrics'
 import type { ReportPostMetrics } from './posts'
 import type { ReportCompetitorPosts } from './competitorPostsQuery'
+import type { ReportAudienceMetrics } from './audienceTypes'
 
 /**
  * Real table-metric values for the current report (brand + period), provided by
@@ -73,11 +74,41 @@ export function sectionMetricsFor(
   channel: string,
 ): SectionMetrics | null {
   if (!metrics) return null
+  if (tableType === 'cross_level') return crossSectionMetrics(metrics, channel)
   const section = tableType === 'content_level' ? 'content'
     : tableType === 'channel_level' ? 'channel'
     : null
   if (!section) return null
   return metrics[section][channel as keyof typeof metrics.content] ?? null
+}
+
+/**
+ * Cross-Level: kedua level dirakit jadi satu peta dengan awalan id yang sama
+ * dengan kolomnya di tableTypes ('ct:' / 'ch:'). Tanpa awalan, metrik yang
+ * namanya sama di dua level — `profile_visit`, `eng_owned` — akan saling
+ * menimpa dan tabelnya menampilkan angka dari level yang salah tanpa ada
+ * tanda apa pun.
+ *
+ * Custom metric org disalin APA ADANYA tanpa awalan: pemilih kolomnya memakai
+ * id telanjang, dan metricsQuery menuliskan nilai yang sama ke kedua level
+ * (lihat injectCustomMetrics), jadi tidak ada level yang "benar" untuk dipilih.
+ */
+function crossSectionMetrics(
+  metrics: ReportTableMetrics, channel: string,
+): SectionMetrics | null {
+  const key = channel as keyof typeof metrics.content
+  const ct = metrics.content[key] ?? null
+  const ch = metrics.channel[key] ?? null
+  if (!ct && !ch) return null
+
+  const merged: SectionMetrics = {}
+  for (const [k, v] of Object.entries(ct ?? {})) merged['ct:' + k] = v
+  for (const [k, v] of Object.entries(ch ?? {})) merged['ch:' + k] = v
+  for (const c of metrics.customMetrics ?? []) {
+    const v = ct?.[c.id] ?? ch?.[c.id]
+    if (v) merged[c.id] = v
+  }
+  return merged
 }
 
 /** The Brand-vs-Competitor section for a channel (a specific platform), or null. */
@@ -115,4 +146,17 @@ export function platformMetricsFor(
     return merged
   }
   return null
+}
+
+/**
+ * Audience sentiment + demographics for the current report (brand + month),
+ * provided by ReportBuilder and consumed by the Audience Sentiment / Audience
+ * Demographic slides. Null while loading — the slides then say so rather than
+ * drawing zeros, which on a sentiment slide would read as "nobody said anything
+ * positive" instead of "not loaded yet".
+ */
+export const ReportAudienceContext = createContext<ReportAudienceMetrics | null>(null)
+
+export function useReportAudience(): ReportAudienceMetrics | null {
+  return useContext(ReportAudienceContext)
 }

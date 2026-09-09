@@ -37,9 +37,18 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 const fmtDate = (iso: string) => { const [, m, d] = iso.split('-'); return `${+d} ${MONTH_ABBR[+m - 1]}` }
 const hashtagsOf = (caption: string | null): string[] => (caption?.match(/#[\p{L}\p{N}_]+/gu) ?? []).slice(0, 4)
 
-/** Campaign posts pool for the selection grid (recent posts, per brand + platform). */
+/**
+ * Campaign posts pool for the selection grid (recent posts, per brand + platform).
+ *
+ * RENTANG TANGGAL DIPROSES DI SQL
+ *   Kolamnya dipotong `LIMIT 48` sebelum sampai ke klien, jadi menyaring tanggal
+ *   di klien berarti menyaring 48 post terbaru saja — rentang yang lebih lama
+ *   akan tampak kosong padahal postnya ada. Batas atas memakai `< end + 1 hari`
+ *   supaya post di hari terakhir ikut, apa pun jamnya.
+ */
 export async function getCampaignPosts(
   orgId: string, platform: PlatformParam, brandId: string | null,
+  range: { start?: string | null; end?: string | null } = {},
   t: Translator = (k: string) => k,
 ): Promise<CampaignPostRow[]> {
   const { rows } = await pool.query<{
@@ -55,9 +64,11 @@ export async function getCampaignPosts(
        JOIN public.brands b ON b.id = v.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND ($2 = 'all' OR v.platform = $2)
         AND ($3::uuid IS NULL OR v.brand_id = $3)
+        AND ($4::date IS NULL OR v.post_date >= $4::date)
+        AND ($5::date IS NULL OR v.post_date < ($5::date + INTERVAL '1 day'))
       ORDER BY v.post_date DESC NULLS LAST
       LIMIT 48`,
-    [orgId, platform, brandId],
+    [orgId, platform, brandId, range.start || null, range.end || null],
   )
   return rows.map(r => ({
     id: r.post_id,

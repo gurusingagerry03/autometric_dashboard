@@ -2,7 +2,7 @@
 
 Menindaklanjuti *Report Maker Revision Guideline* (Google Slides, 9 halaman). Dokumen ini mencatat **apa yang sudah dikerjakan**, keputusan yang diambil di dalamnya, dan apa yang belum.
 
-Status per **3 September 2026**. Seluruh temuan di bawah diverifikasi langsung ke kode dan warehouse, bukan dari asumsi.
+Status per **8 September 2026**. Seluruh temuan di bawah diverifikasi langsung ke kode dan warehouse, bukan dari asumsi.
 
 ## Ringkasan
 
@@ -12,7 +12,7 @@ Status per **3 September 2026**. Seluruh temuan di bawah diverifikasi langsung k
 | 2 | Tambahan metrics Visual Content (3) | ✅ Selesai | |
 | 3 | "Powered by kepiai" (4b) | ✅ Selesai | |
 | 4 | Cross metrics selection (5) | ✅ Selesai | bentuk tabel diputuskan sendiri — lihat di bawah |
-| 5 | Competitors Visual Content (6) | ✅ Selesai | Facebook tidak didukung — lihat di bawah |
+| 5 | Competitors Visual Content (6) | ✅ Selesai | ekspor PPTX diperbaiki 8 Sep — lihat di bawah |
 | 6 | Comparison mode (4a) | ⏸️ Tertahan | butuh screenshot slide 4 |
 | 7 | Setup KPI: Achievement & Run Rate (2) | ⏸️ Tertahan | butuh definisi Run Rate |
 | 8 | YTD custom metrics (7a) | ⏸️ Tertahan | perlu model periode pada custom metric |
@@ -106,6 +106,34 @@ Post kompetitor juga tidak punya format editorial maupun content pillar (keduany
 
 Terverifikasi: MineralQUA Juli 2026 → 4 kompetitor, 23 post, seluruhnya bergambar.
 
+### Ekspor PPTX sempat mengabaikan mode ini (diperbaiki 8 September 2026)
+
+Modenya hanya hidup di pratinjau. `addVisualSlide` di exporter tetap membaca
+`postMetrics[slide.channel]` — post milik sendiri — dan `ReportBuilder` tidak pernah
+meneruskan `competitorPosts` ke `exportReportPptx`. Akibatnya di layar tampil post
+kompetitor, tapi PPTX yang diunduh berisi post brand sendiri. **Tanpa error apa pun**,
+dan dengan judul slide yang sama, hasilnya tidak terlihat salah bagi siapa pun yang
+tidak membandingkan kartu satu per satu.
+
+Aturan pemilihan kompetitornya diangkat jadi `competitorPoolFor()` di `posts.ts` dan
+dipakai kedua sisi. Sebelumnya aturan itu hanya ada di dalam VisualSlide; menyalinnya
+ke exporter berarti membiarkan dua salinan yang bisa memilih akun berbeda — persis
+bentuk kesalahan yang sama dengan yang baru saja diperbaiki.
+
+Bentuknya ditulis struktural (`CompetitorPostPool`), bukan mengimpor tipe dari
+`competitorPostsQuery.ts`: berkas itu membuka koneksi database dan tidak boleh terbawa
+ke bundel klien.
+
+### Handle kompetitor di header slide
+
+Slide mode ini tidak punya penanda apa pun soal siapa yang ditampilkan — isinya
+sama-sama kartu post, badge channel-nya sama, judulnya bebas diketik. Untuk laporan
+yang diserahkan ke klien, tertukarnya post kompetitor dengan post sendiri mahal
+harganya, jadi `@username` kompetitor sekarang muncul rata kanan di kiri logo channel,
+di pratinjau (`CompetitorHeaderTag`) maupun di PPTX.
+
+Diletakkan di header, bukan di tiap kartu: satu keterangan berlaku untuk seluruh grid.
+
 ---
 
 ## Yang belum dikerjakan
@@ -133,6 +161,7 @@ src/lib/reports/data/tableTypes.ts             CROSS_ALL_COLUMNS + cross_by_plat
 src/lib/reports/data/metricsContext.ts         merge cross-level, context kompetitor
 src/lib/reports/data/slideModel.ts             postSource, postCompetitorId
 src/lib/reports/data/competitorPostsQuery.ts   BARU — post kompetitor dari l0_raw
+src/components/reports/slides/SlidePreview.tsx    handle kompetitor di header
 src/lib/reports/export/exportReport.ts         label footer
 src/components/reports/builder/ReportBuilder.tsx  fetch + provider kompetitor
 src/components/reports/slides/VisualSlide.tsx     toggle sumber + pemilih kompetitor

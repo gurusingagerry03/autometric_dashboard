@@ -24,11 +24,18 @@ const TEMPLATES: Item[] = [
   { id: 'comparison', name: 'Comparison View', desc: 'Side-by-side Metric Analysis', icon: 'compare_arrows', enabled: true },
   { id: 'visual', name: 'Visual Analysis', desc: 'Media / Screenshot & Analysis', icon: 'image', enabled: true },
   { id: 'overview', name: 'Overview Slide', desc: 'Full Visualization & Notes', icon: 'view_quilt', enabled: true },
+  { id: 'sentiment', name: 'Audience Sentiment', desc: 'Comments & tagged posts + word cloud', icon: 'sentiment_satisfied', enabled: true },
+  { id: 'demographic', name: 'Audience Demographics', desc: 'Age & gender, month over month', icon: 'groups', enabled: true },
   { id: 'custom', name: 'Custom Template', desc: 'Configurable Grid (2×2, 3×3)', icon: 'grid_view', enabled: false },
 ]
 
 // When "All Channels" is picked, only these layouts make sense.
-const ALL_CHANNEL_TYPES = new Set<string>(['overview', 'comparison'])
+//
+// Sentiment and Demographics belong here as well, and for opposite reasons:
+// sentiment counts ADD UP across platforms (they are comment counts), while
+// demographics are per-platform shares that must never be blended — so the
+// demographic slide answers 'all' by drawing one panel per platform instead.
+const ALL_CHANNEL_TYPES = new Set<string>(['overview', 'comparison', 'sentiment', 'demographic'])
 
 interface Channel {
   id: string

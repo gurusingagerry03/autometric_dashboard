@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { mirrorImages } from '@/lib/cloudinary/mirror'
 import { PoolClient } from 'pg'
 
 // ─── Demographics ─────────────────────────────────────────────────────────────
@@ -221,7 +222,11 @@ const MEDIA_UPSERT_SQL = `
     reel_video_view_total_time = EXCLUDED.reel_video_view_total_time,
     video_duration             = EXCLUDED.video_duration,
     carousel_media_count       = EXCLUDED.carousel_media_count,
-    cover_image                = EXCLUDED.cover_image`
+    -- Jangan biarkan URL Cloudinary yang sudah tersimpan tertimpa URL CDN yang
+    -- akan kedaluwarsa; selain itu nilai baru menang.
+    cover_image                = CASE WHEN ig_media_snapshots.cover_image LIKE '%res.cloudinary.com%'
+              AND EXCLUDED.cover_image NOT LIKE '%res.cloudinary.com%'
+         THEN ig_media_snapshots.cover_image ELSE EXCLUDED.cover_image END`
 
 // ─── Comments ─────────────────────────────────────────────────────────────────
 
@@ -286,6 +291,11 @@ export async function saveIgComments(items: IgCommentItem[]): Promise<void> {
 }
 
 export async function saveIgMediaSnapshots(items: IgMediaSnapshotItem[]): Promise<void> {
+  // Cover disalin ke Cloudinary dulu — URL asli Instagram kedaluwarsa.
+  const mirrored = await mirrorImages(
+    items.map(i => ({ id: i.mediaId, url: i.coverImage })),
+    { table: 'ig_media_snapshots', idColumn: 'media_id', urlColumn: 'cover_image', folder: 'ig-media' },
+  )
   const client: PoolClient = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -311,7 +321,7 @@ export async function saveIgMediaSnapshots(items: IgMediaSnapshotItem[]): Promis
         item.reelVideoViewTotalTime, // $18
         item.videoDuration,          // $19
         item.carouselMediaCount,     // $20
-        item.coverImage,             // $21
+        mirrored.get(item.mediaId) ?? item.coverImage,  // $21
       ])
     }
     await client.query('COMMIT')
@@ -350,6 +360,12 @@ export interface IgStoryItem {
 
 export async function saveIgStories(items: IgStoryItem[]): Promise<void> {
   if (items.length === 0) return
+  // Story paling mendesak disalin: barisnya tidak bisa ditarik ulang setelah 24
+  // jam, jadi kalau URL-nya kedaluwarsa gambarnya hilang untuk selamanya.
+  const mirrored = await mirrorImages(
+    items.map(i => ({ id: i.mediaId, url: i.thumbnailUrl })),
+    { table: 'ig_stories', idColumn: 'media_id', urlColumn: 'thumbnail_url', folder: 'ig-stories' },
+  )
   const client: PoolClient = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -381,7 +397,12 @@ export async function saveIgStories(items: IgStoryItem[]): Promise<void> {
           total_interactions = EXCLUDED.total_interactions,
           total_views        = EXCLUDED.total_views,
           facebook_views     = EXCLUDED.facebook_views,
-          navigation         = EXCLUDED.navigation`,
+          navigation         = EXCLUDED.navigation,
+          -- Tanpa baris ini, story yang sudah ada tidak pernah menerima URL
+          -- Cloudinary-nya — dan story tidak bisa ditarik ulang setelah 24 jam.
+          thumbnail_url      = CASE WHEN ig_stories.thumbnail_url LIKE '%res.cloudinary.com%'
+              AND EXCLUDED.thumbnail_url NOT LIKE '%res.cloudinary.com%'
+         THEN ig_stories.thumbnail_url ELSE EXCLUDED.thumbnail_url END`,
         [
           item.socialAccountId,                                          // $1
           item.mediaId,                                                  // $2
@@ -390,7 +411,7 @@ export async function saveIgStories(items: IgStoryItem[]): Promise<void> {
           item.mediaType,                                                // $5
           item.permalink,                                                // $6
           item.mediaUrl,                                                 // $7
-          item.thumbnailUrl,                                             // $8
+          mirrored.get(item.mediaId) ?? item.thumbnailUrl,               // $8
           item.videoDuration,                                            // $9
           item.reach,                                                    // $10
           item.replies,                                                  // $11
@@ -432,6 +453,10 @@ export interface IgTaggedPostItem {
 
 export async function saveIgTaggedPosts(items: IgTaggedPostItem[]): Promise<void> {
   if (items.length === 0) return
+  const mirrored = await mirrorImages(
+    items.map(i => ({ id: i.mediaId, url: i.coverImage })),
+    { table: 'ig_tagged_posts', idColumn: 'media_id', urlColumn: 'cover_image', folder: 'ig-tagged' },
+  )
   const client: PoolClient = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -450,7 +475,9 @@ export async function saveIgTaggedPosts(items: IgTaggedPostItem[]): Promise<void
           tagged_by     = EXCLUDED.tagged_by,
           like_count    = EXCLUDED.like_count,
           comment_count = EXCLUDED.comment_count,
-          cover_image   = EXCLUDED.cover_image,
+          cover_image   = CASE WHEN ig_tagged_posts.cover_image LIKE '%res.cloudinary.com%'
+              AND EXCLUDED.cover_image NOT LIKE '%res.cloudinary.com%'
+         THEN ig_tagged_posts.cover_image ELSE EXCLUDED.cover_image END,
           fetched_at    = NOW()`,
         [
           item.socialAccountId, // $1
@@ -462,7 +489,7 @@ export async function saveIgTaggedPosts(items: IgTaggedPostItem[]): Promise<void
           item.taggedBy,        // $7
           item.likeCount,       // $8
           item.commentCount,    // $9
-          item.coverImage,      // $10
+          mirrored.get(item.mediaId) ?? item.coverImage,   // $10
         ]
       )
     }

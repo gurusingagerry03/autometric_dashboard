@@ -8,7 +8,8 @@ type Params = { params: Promise<{ id: string }> }
 
 const PLATFORMS: PlatformParam[] = ['all', 'instagram', 'facebook', 'tiktok']
 
-// GET /api/organizations/[id]/dashboard/campaign?platform=&brand=  → post selection grid
+// GET /api/organizations/[id]/dashboard/campaign?platform=&brand=&start=&end=
+//   → post selection grid
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const { id: orgId } = await params
@@ -20,7 +21,11 @@ export async function GET(req: NextRequest, { params }: Params) {
     const platform: PlatformParam = PLATFORMS.includes(platformRaw as PlatformParam) ? (platformRaw as PlatformParam) : 'all'
     const brandId = sp.get('brand') || null
 
-    const posts = await getCampaignPosts(orgId, platform, brandId, translatorFor(await langFromRequest(req.nextUrl)))
+    const posts = await getCampaignPosts(
+      orgId, platform, brandId,
+      { start: sp.get('start'), end: sp.get('end') },
+      translatorFor(await langFromRequest(req.nextUrl)),
+    )
     return NextResponse.json({ posts })
   } catch (err) {
     console.error('[GET /api/organizations/[id]/dashboard/campaign]', err)

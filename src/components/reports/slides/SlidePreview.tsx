@@ -8,8 +8,10 @@ import SectionSlide from './SectionSlide'
 import DashboardSlide from './DashboardSlide'
 import ComparisonSlide from './ComparisonSlide'
 import KpiSlide from './KpiSlide'
-import VisualSlide from './VisualSlide'
+import VisualSlide, { CompetitorHeaderTag } from './VisualSlide'
 import OverviewSlide from './OverviewSlide'
+import SentimentSlide from './SentimentSlide'
+import DemographicSlide from './DemographicSlide'
 
 // Re-exported for convenience so existing imports `from '.../SlidePreview'` keep working.
 export type { ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig } from '@/lib/reports/data/slideModel'
@@ -57,6 +59,7 @@ export default function SlidePreview({
           <div style={{ flex: 1, paddingLeft: '1.4cqw' }}>
             <Title value={slide.title} editable={editable} onChange={v => setField('title', v)} />
           </div>
+          <CompetitorHeaderTag slide={slide} />
           <ChannelBadge channel={slide.channel} />
         </Card>
 
@@ -68,6 +71,10 @@ export default function SlidePreview({
           <VisualSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
         ) : slide.type === 'overview' ? (
           <OverviewSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
+        ) : slide.type === 'sentiment' ? (
+          <SentimentSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
+        ) : slide.type === 'demographic' ? (
+          <DemographicSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
         ) : (
           <ComparisonSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
         )}

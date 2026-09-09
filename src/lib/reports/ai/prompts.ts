@@ -46,6 +46,8 @@ const SLIDE_FOCUS: Record<SlideType, string> = {
   comparison: 'Focus on the two compared series/periods: what diverged, what converged, and which side drives the difference.',
   overview: 'Focus on the headline metrics as a whole: the dominant story across reach, engagement and growth.',
   visual: 'Focus on the top/low performing posts shown: what the best performers share and what the weak ones lack, by the metrics provided.',
+  sentiment: 'Focus on how the audience sounded: which sentiment moved most against the previous month and by how many percentage POINTS (never call a point move a percent change), whether the volume behind those shares rose or fell, and what the most frequent words suggest is driving it.',
+  demographic: 'Focus on how the follower base shifted between the two months: which age buckets and which gender gained or lost share, on which platform, and in percentage POINTS. Shares only — say nothing about follower headcount, which this slide does not carry.',
   section: '',
 }
 

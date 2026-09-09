@@ -8,10 +8,16 @@ import { CoverConfig, SLIDE_IN, addCoverSlide, addContainImage, addCoverImage, s
 import { ChartConfig, resolveBarData, resolveLineData, chartSummary, groupBarSeries, SENTIMENT_PALETTES } from '../data/chartData'
 import { TableColumn, TableConfig, TABLE_TYPES, SectionMetrics, SentimentTable, CompetitorSection, PlatformMetrics, ReportTableMetrics, buildTable, columnsForChannel, sentimentTableFor, customColumnsFrom } from '../data/tableTypes'
 import { cloudWordsFrom, type ReportChartMetrics, type CloudWordData } from '../data/chartTypes'
+import {
+  AGE_BUCKETS, SENTIMENT_COLOR, SENTIMENT_KEYS, SENTIMENT_LABEL, SOURCE_LABEL,
+  audienceWordsFor, biggestShift, demographicChannels, demographicsFor, sentimentFor,
+  type ReportAudienceMetrics, type SentimentBlock, type SourceFilter,
+} from '../data/audienceTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
 import { KpiMetric, ReportKpiMetrics, deltaIsGood, resolveKpiMetric } from '../data/kpiMetrics'
-import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, type ReportPostMetrics } from '../data/posts'
+import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool } from '../data/posts'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
+import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
 import type { ContentSlide, SlideChrome, AiInsight } from '../data/slideModel'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -206,12 +212,16 @@ function insightsCard(slide: Slide, content: { text: string; ai: AiInsight | nul
   }
 }
 
-// Resolve the real metric sub-map for a table (content/channel level) on a channel.
+// Resolve the real metric sub-map for a table on a channel.
+//
+// Meneruskan ke resolver yang sama dengan yang dipakai pratinjau, bukan menyalin
+// aturannya. Salinan sebelumnya sudah membuktikan kenapa: `cross_by_platform`
+// tidak pernah ditambahkan ke platformFor() di bawah, jadi tabel itu benar di
+// layar tapi keluar sebagai "—" di PPTX tanpa ada yang menyadarinya. Satu
+// sumber aturan berarti tabel baru cukup didaftarkan sekali.
 function sectionFor(metrics: ReportTableMetrics | undefined, config: TableConfig | null, channel: string): SectionMetrics | null {
   if (!metrics || !config) return null
-  const section = config.type === 'content_level' ? 'content' : config.type === 'channel_level' ? 'channel' : null
-  if (!section) return null
-  return metrics[section][channel as DashPlatform] ?? null
+  return sectionMetricsFor(metrics, config.type, channel)
 }
 
 // The Brand-vs-Competitor section for a table on a channel (export side).
@@ -220,12 +230,11 @@ function competitorFor(metrics: ReportTableMetrics | undefined, config: TableCon
   return metrics.competitors[channel as DashPlatform] ?? null
 }
 
-// Per-platform values for the Content/Channel by Platform tables (export side).
+// Per-platform values for the by-Platform tables (export side) — resolver yang sama
+// dengan pratinjau, termasuk perakitan 'ct:'/'ch:' milik Cross-Level by Platform.
 function platformFor(metrics: ReportTableMetrics | undefined, config: TableConfig | null): PlatformMetrics | null {
   if (!metrics || !config) return null
-  if (config.type === 'content_by_platform') return metrics.contentByPlatform ?? null
-  if (config.type === 'channel_by_platform') return metrics.channelByPlatform ?? null
-  return null
+  return platformMetricsFor(metrics, config.type)
 }
 
 function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors, channel: string, x: number, y: number, w: number, h: number, sm: SectionMetrics | null = null, sent: SentimentTable | null = null, comp: CompetitorSection | null = null, customCols: TableColumn[] = [], platform: PlatformMetrics | null = null) {
@@ -472,15 +481,37 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad + (w - 2 * pad) * 0.55, y: colY, w: (w - 2 * pad) * 0.45, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacingMultiple: METRIC_LINE, fontFace: MONO })
 }
 
-async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null) {
+async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
   s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  // Mode competitive review hanya menukar kumpulan post-nya; pemilihan kompetitornya
+  // lewat helper yang sama dengan preview supaya keduanya tidak mungkin memilih akun
+  // yang berbeda.
+  const comp = slide.postSource === 'competitor'
+    ? competitorPoolFor(competitorPosts, slide.channel, slide.postCompetitorId)
+    : null
+
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
+  // Handle kompetitor, rata kanan tepat di kiri logo channel — penanda satu-satunya
+  // yang membedakan slide ini dari slide post milik sendiri. Lihat CompetitorHeaderTag
+  // di VisualSlide.tsx: bentuknya dijaga sama supaya pratinjau dan PPTX seragam.
+  if (comp?.label) {
+    // Lebarnya dipatok W(13.5) supaya tepi kirinya berhenti di kanan kotak judul
+    // (dashboardHeader menyisakan W(22) di kanan). Lebih lebar dari itu dan judul
+    // yang panjang akan menabrak handle-nya. Handle yang tidak muat turun ke baris
+    // kedua — masih cukup di dalam H(5) — sama seperti di pratinjau.
+    const badgeW = H(7), gap = W(1), lw = W(13.5)
+    s.addText(comp.label, {
+      x: hx + hw - W(1.5) - badgeW - gap - lw, y: hy + (H(12) - H(5)) / 2, w: lw, h: H(5),
+      align: 'right', valign: 'middle', fontSize: FS(1.4), bold: true, color: '475569',
+      lineSpacingMultiple: 1.15, fontFace: PJ,
+    })
+  }
 
   const n = slide.postCount
-  const source = postMetrics?.[slide.channel]
+  const source = comp ? (comp.pool ?? undefined) : postMetrics?.[slide.channel]
   // Metric defaults + brand-aware filters — must match VisualSlide exactly so export == preview.
   const populated = populatedMetricsFor(source)
   const sortMetric = effectiveSortMetric(slide.postSortMetric, populated)
@@ -513,6 +544,232 @@ async function addOverviewSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 
+/* ── Audience Sentiment ───────────────────────────────────────────────────
+ * Native shapes + text, plus the word cloud as a rasterised PNG — the same
+ * exception the chart card already makes, because a d3-cloud packing has no
+ * PowerPoint equivalent. Everything else stays editable.
+ *
+ * Deltas print with an explicit `pp` for the same reason they do on screen: a
+ * share that moved from 12% to 15% is +3 POINTS, and a slide that calls it
+ * "+25%" is the version that gets argued about in the meeting.
+ */
+const ppText = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}pp`
+const intText = (n: number) => n.toLocaleString('id-ID')
+
+function sentimentTile(
+  s: Slide, k: (typeof SENTIMENT_KEYS)[number], block: SentimentBlock,
+  accent: string, x: number, y: number, w: number, h: number,
+) {
+  const color = noHash(SENTIMENT_COLOR[k])
+  const count = block.current.counts[k]
+  const sharePct = block.current.share[k]
+  const move = block.shareChange[k]
+  const flat = Math.abs(move) < 0.05
+  // Direction and desirability are different questions: negative sentiment
+  // rising is an up arrow in red.
+  const good = k === 'negative' ? move < 0 : move > 0
+  const moveColor = flat ? '94A3B8' : good ? '15803D' : 'B91C1C'
+
+  s.addShape('roundRect', { x, y, w, h, rectRadius: 0.05, fill: { color: 'FBFCFD' }, line: { color: 'E8EBEE', width: 0.75 } })
+  s.addShape('rect', { x, y, w, h: H(0.5), fill: { color }, line: { width: 0 } })
+  s.addText(SENTIMENT_LABEL[k].toUpperCase(), {
+    x: x + W(0.6), y: y + H(1.2), w: w - W(1.2), h: H(3),
+    fontSize: FS(1.15), bold: true, color: '64748B', charSpacing: 0.6, fontFace: PJ,
+  })
+  s.addText(intText(count), {
+    x: x + W(0.6), y: y + H(4), w: w - W(1.2), h: H(7),
+    fontSize: FS(3.1), bold: true, color: '0F172A', fontFace: PJ,
+  })
+  s.addText(`${sharePct.toFixed(1)}%`, {
+    x: x + W(0.6), y: y + H(11), w: w - W(1.2), h: H(3.4),
+    fontSize: FS(1.5), bold: true, color: noHash(accent), fontFace: PJ,
+  })
+  s.addText(`${flat ? '' : move > 0 ? '▲ ' : '▼ '}${ppText(move)} vs prev`, {
+    x: x + W(0.6), y: y + h - H(4), w: w - W(1.2), h: H(3),
+    fontSize: FS(1.1), bold: true, color: moveColor, fontFace: PJ,
+  })
+}
+
+async function addSentimentSlide(
+  pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors,
+  audience?: ReportAudienceMetrics | null,
+) {
+  const s = pptx.addSlide()
+  s.background = { color: noHash(tint(colors.primary, 0.965)) }
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
+  await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
+
+  const source = (slide.sentimentSource ?? 'all') as SourceFilter
+  const block = sentimentFor(audience, slide.channel, source)
+  const words = audienceWordsFor(audience, slide.channel, slide.cloudSentiment)
+
+  const bodyY = H(18), bodyH = H(47)
+  const leftW = W(46), gap = W(1.6)
+  const rightX = hx + leftW + gap, rightW = hw - leftW - gap
+
+  // ── breakdown card
+  const breakH = bodyH - H(13)
+  card(s, hx, bodyY, leftW, breakH)
+  const label = source === 'all' ? 'SENTIMENT BREAKDOWN' : `SENTIMENT · ${SOURCE_LABEL[source].toUpperCase()}`
+  s.addText(label, { x: hx + W(1.2), y: bodyY + H(1.2), w: leftW - W(2.4), h: H(3), fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ })
+
+  if (!block) {
+    noDataText(s, hx, bodyY + H(5), leftW, breakH - H(6), 'No scored audience voice for this period')
+  } else {
+    const tileY = bodyY + H(5)
+    const tileH = breakH - H(11)
+    const tgap = W(0.8)
+    const tileW = (leftW - W(2.4) - tgap * 2) / 3
+    SENTIMENT_KEYS.forEach((k, i) => {
+      sentimentTile(s, k, block, colors.primary, hx + W(1.2) + i * (tileW + tgap), tileY, tileW, tileH)
+    })
+    // The denominator behind every share above.
+    s.addText(
+      `${intText(block.current.total)} scored this month  ·  ${intText(block.previous.total)} previous`,
+      { x: hx + W(1.2), y: bodyY + breakH - H(4.6), w: leftW - W(2.4), h: H(3.4), fontSize: FS(1.05), bold: true, color: '475569', fontFace: PJ },
+    )
+  }
+
+  // ── biggest shift card
+  const shiftY = bodyY + breakH + H(1.4)
+  const shiftH = bodyH - breakH - H(1.4)
+  card(s, hx, shiftY, leftW, shiftH)
+  s.addText('BIGGEST SHIFT VS PREVIOUS MONTH', { x: hx + W(1.2), y: shiftY + H(1), w: leftW - W(2.4), h: H(3), fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ })
+  const shift = biggestShift(block)
+  if (!shift) {
+    s.addText(block ? 'Sentiment held steady — no share moved by more than 0.1pp.' : '—', {
+      x: hx + W(1.2), y: shiftY + H(4.4), w: leftW - W(2.4), h: H(4), fontSize: FS(1.2), color: '94A3B8', fontFace: PJ,
+    })
+  } else {
+    s.addText([
+      { text: `${SENTIMENT_LABEL[shift.sentiment]} ${ppText(shift.change)}`, options: { fontSize: FS(1.9), bold: true, color: noHash(SENTIMENT_COLOR[shift.sentiment]), fontFace: PJ } },
+      { text: `   ${block!.previous.share[shift.sentiment].toFixed(1)}% → ${block!.current.share[shift.sentiment].toFixed(1)}%`, options: { fontSize: FS(1.15), color: '64748B', fontFace: PJ } },
+    ], { x: hx + W(1.2), y: shiftY + H(4.2), w: leftW - W(2.4), h: H(4.5), fontFace: PJ })
+  }
+
+  // ── word cloud card
+  card(s, rightX, bodyY, rightW, bodyH)
+  const cloudLabel = slide.cloudSentiment && slide.cloudSentiment !== 'all'
+    ? `CONVERSATION WORD CLOUD · ${slide.cloudSentiment.toUpperCase()}`
+    : 'CONVERSATION WORD CLOUD'
+  s.addText(cloudLabel, { x: rightX + W(1.2), y: bodyY + H(1.2), w: rightW - W(2.4), h: H(3), fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ })
+  const cy = bodyY + H(5), ch = bodyH - H(6.2)
+  const bw = rightW - W(2.4)
+  if (!words.length) {
+    noDataText(s, rightX + W(1.2), cy, bw, ch, 'No comment words for this period')
+  } else {
+    const pxW = 900, pxH = Math.max(1, Math.round(pxW * (ch / bw)))
+    const png = await svgToPng(wordCloudSvg(words as CloudWordData[], pxW, pxH), pxW, pxH)
+    s.addImage({ data: png, x: rightX + W(1.2), y: cy, w: bw, h: ch })
+  }
+
+  insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(67), hw, H(20), 'SENTIMENT ANALYSIS & NOTES')
+  await footer(s, chrome, colors, hx, H(89), hw)
+}
+
+/* ── Audience Demographics ────────────────────────────────────────────────
+ * One panel per platform — never a blended figure. The warehouse stores shares,
+ * so a combined number would average three percentages and weigh a small TikTok
+ * exactly like a large Instagram. See DemographicSlide.tsx.
+ */
+function demographicPanel(
+  s: Slide, platform: DashPlatform,
+  cur: NonNullable<ReturnType<typeof demographicsFor>>['current'],
+  prev: NonNullable<ReturnType<typeof demographicsFor>>['previous'],
+  view: string, accent: string, x: number, y: number, w: number, h: number,
+) {
+  if (!cur) return
+  card(s, x, y, w, h)
+  const meta = PLATFORM_META[platform]
+  s.addText(meta.label, { x: x + W(1), y: y + H(1), w: w - W(2), h: H(3.4), fontSize: FS(1.25), bold: true, color: '0F172A', fontFace: PJ })
+
+  const showAge = view !== 'gender'
+  const showGender = view !== 'age'
+  let cursor = y + H(5)
+
+  if (showAge) {
+    s.addText('AGE GROUP', { x: x + W(1), y: cursor, w: w - W(2), h: H(2.6), fontSize: FS(0.95), bold: true, color: '94A3B8', charSpacing: 0.5, fontFace: PJ })
+    cursor += H(3)
+    const max = Math.max(...AGE_BUCKETS.map(b => Math.max(cur.age[b] ?? 0, prev?.age[b] ?? 0)), 1)
+    const rowH = H(2.6)
+    const labelW = W(4.4), valW = W(3.2), deltaW = W(2.8)
+    const barW = w - W(2) - labelW - valW - deltaW - W(1.5)
+    for (const b of AGE_BUCKETS) {
+      const now = cur.age[b] ?? 0
+      const before = prev ? (prev.age[b] ?? 0) : null
+      s.addText(b, { x: x + W(1), y: cursor, w: labelW, h: rowH, align: 'right', valign: 'middle', fontSize: FS(1), color: '64748B', fontFace: PJ })
+      const bx = x + W(1) + labelW + W(0.5)
+      s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: barW, h: H(1.5), rectRadius: 0.02, fill: { color: 'F1F5F9' }, line: { width: 0 } })
+      if (now > 0) s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: Math.max(barW * (now / max), 0.02), h: H(1.5), rectRadius: 0.02, fill: { color: noHash(accent) }, line: { width: 0 } })
+      // Last month as a hairline, so the shift is visible without doubling the bars.
+      if (before !== null) {
+        s.addShape('rect', { x: bx + barW * (before / max), y: cursor + H(0.3), w: W(0.16), h: H(2), fill: { color: '0F172A', transparency: 62 }, line: { width: 0 } })
+      }
+      s.addText(`${now.toFixed(1)}%`, { x: bx + barW + W(0.5), y: cursor, w: valW, h: rowH, align: 'right', valign: 'middle', fontSize: FS(1), bold: true, color: '0F172A', fontFace: PJ })
+      const d = before === null ? null : +(now - before).toFixed(1)
+      s.addText(d === null ? '—' : Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''), {
+        x: bx + barW + W(0.5) + valW, y: cursor, w: deltaW, h: rowH, align: 'right', valign: 'middle',
+        fontSize: FS(0.95), bold: true, color: d === null ? 'CBD5E1' : Math.abs(d) < 0.05 ? 'A3ADBA' : d > 0 ? '15803D' : 'B91C1C', fontFace: PJ,
+      })
+      cursor += rowH
+    }
+    cursor += H(1.2)
+  }
+
+  if (showGender) {
+    s.addText('GENDER', { x: x + W(1), y: cursor, w: w - W(2), h: H(2.6), fontSize: FS(0.95), bold: true, color: '94A3B8', charSpacing: 0.5, fontFace: PJ })
+    cursor += H(3)
+    const gw = w - W(2)
+    const fw = gw * (cur.female / 100)
+    s.addShape('rect', { x: x + W(1), y: cursor, w: fw, h: H(2.4), fill: { color: 'D6447A' }, line: { width: 0 } })
+    s.addShape('rect', { x: x + W(1) + fw, y: cursor, w: gw - fw, h: H(2.4), fill: { color: '3D7EEA' }, line: { width: 0 } })
+    s.addText(`${cur.female.toFixed(0)}%`, { x: x + W(1), y: cursor, w: fw, h: H(2.4), align: 'center', valign: 'middle', fontSize: FS(1), bold: true, color: 'FFFFFF', fontFace: PJ })
+    s.addText(`${cur.male.toFixed(0)}%`, { x: x + W(1) + fw, y: cursor, w: gw - fw, h: H(2.4), align: 'center', valign: 'middle', fontSize: FS(1), bold: true, color: 'FFFFFF', fontFace: PJ })
+    cursor += H(3)
+    const fd = prev ? +(cur.female - prev.female).toFixed(1) : null
+    const md = prev ? +(cur.male - prev.male).toFixed(1) : null
+    const dTxt = (d: number | null) => (d === null ? '—' : Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''))
+    s.addText(`● Female  ${dTxt(fd)}`, { x: x + W(1), y: cursor, w: gw / 2, h: H(2.6), fontSize: FS(0.95), color: '64748B', fontFace: PJ })
+    s.addText(`● Male  ${dTxt(md)}`, { x: x + W(1) + gw / 2, y: cursor, w: gw / 2, h: H(2.6), align: 'right', fontSize: FS(0.95), color: '64748B', fontFace: PJ })
+  }
+}
+
+async function addDemographicSlide(
+  pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors,
+  audience?: ReportAudienceMetrics | null,
+) {
+  const s = pptx.addSlide()
+  s.background = { color: noHash(tint(colors.primary, 0.965)) }
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
+  await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
+
+  const channels = demographicChannels(audience, slide.channel)
+  const bodyY = H(18), bodyH = H(47)
+
+  s.addText(
+    `FOLLOWER DEMOGRAPHICS — ${(audience?.meta.monthLabel ?? '—').toUpperCase()} VS ${(audience?.meta.prevMonthLabel ?? '—').toUpperCase()}`,
+    { x: hx, y: bodyY - H(3.4), w: hw, h: H(3), fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ },
+  )
+
+  if (channels.length === 0) {
+    card(s, hx, bodyY, hw, bodyH)
+    noDataText(s, hx, bodyY, hw, bodyH, 'No follower demographics for this period')
+  } else {
+    const gap = W(1.2)
+    const pw = (hw - gap * (channels.length - 1)) / channels.length
+    channels.forEach((p, i) => {
+      const d = demographicsFor(audience, p)
+      if (!d) return
+      demographicPanel(s, p, d.current, d.previous, slide.demographicView ?? 'both', colors.primary, hx + i * (pw + gap), bodyY, pw, bodyH)
+    })
+  }
+
+  insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(67), hw, H(20), 'DEMOGRAPHIC SHIFT & NOTES')
+  await footer(s, chrome, colors, hx, H(89), hw)
+}
+
 export interface ReportExportOptions {
   cover: CoverConfig
   slides: ContentSlide[]
@@ -524,9 +781,13 @@ export interface ReportExportOptions {
   chartMetrics?: ReportChartMetrics | null
   kpiMetrics?: ReportKpiMetrics | null
   postMetrics?: ReportPostMetrics | null
+  /** Post kompetitor untuk slide Visual Content bermode competitive review. */
+  competitorPosts?: CompetitorPostPool | null
+  /** Sentimen + demografi audiens untuk slide Audience Sentiment / Demographics. */
+  audienceMetrics?: ReportAudienceMetrics | null
 }
 
-export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, postMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
+export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, postMetrics, competitorPosts, audienceMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
   PJ = font
   const { default: PptxGenJS } = await import('pptxgenjs')
   const pptx = new PptxGenJS()
@@ -541,8 +802,10 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     if (slide.type === 'section') await addSectionSlide(pptx, slide, chrome, colors)
     else if (slide.type === 'comparison') await addComparisonSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined)
     else if (slide.type === 'kpi') await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined)
-    else if (slide.type === 'visual') await addVisualSlide(pptx, slide, chrome, colors, postMetrics)
+    else if (slide.type === 'visual') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts)
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
+    else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)
+    else if (slide.type === 'demographic') await addDemographicSlide(pptx, slide, chrome, colors, audienceMetrics)
     else await addDashboardSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
   }
 

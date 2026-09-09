@@ -79,12 +79,18 @@ export default function CampaignDashboard({ orgId }: { orgId: string }) {
   const t = useT()
   return (
     <DashboardChrome title={t('Campaign Analysis')} subtitle={t('Select posts, run analysis & compare content pillars')}>
-      {(state) => <CampaignBody orgId={orgId} brandId={state.brand.id} platform={state.platform} />}
+      {(state) => <CampaignBody orgId={orgId} brandId={state.brand.id} platform={state.platform}
+        start={state.start} end={state.end} />}
     </DashboardChrome>
   )
 }
 
-function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: string; platform: ChromeState['platform'] }) {
+function CampaignBody({ orgId, brandId, platform, start, end }: {
+  orgId: string; brandId: string; platform: ChromeState['platform']
+  /** Rentang tanggal dari topbar. Diteruskan ke server — kolam post dipotong
+   *  LIMIT 48 di SQL, jadi menyaringnya di sini akan menyaring 48 terbaru saja. */
+  start: string | null; end: string | null
+}) {
   const t = useT()
   const { lang } = useLanguage()
   const [posts, setPosts] = useState<CampaignPostRow[] | null>(null)
@@ -97,13 +103,14 @@ function CampaignBody({ orgId, brandId, platform }: { orgId: string; brandId: st
   useEffect(() => {
     let cancelled = false
     setPosts(null); setError(null); setSelected(new Set()); setAnalysis(null)
-    const url = `/api/organizations/${orgId}/dashboard/campaign?platform=${platformParam(platform)}&brand=${encodeURIComponent(brandId)}&lang=${lang}`
+    const range = start && end ? `&start=${start}&end=${end}` : ''
+    const url = `/api/organizations/${orgId}/dashboard/campaign?platform=${platformParam(platform)}&brand=${encodeURIComponent(brandId)}${range}&lang=${lang}`
     fetch(url)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: { posts: CampaignPostRow[] }) => { if (!cancelled) setPosts(d.posts) })
       .catch(e => { if (!cancelled) setError(String(e.message ?? e)) })
     return () => { cancelled = true }
-  }, [orgId, brandId, platform, lang])
+  }, [orgId, brandId, platform, start, end, lang])
 
   const filtered = useMemo(
     () => (posts ?? []).filter(p => pillarFilter === 'all' || p.pillar === pillarFilter),

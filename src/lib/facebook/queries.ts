@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { mirrorImages } from '@/lib/cloudinary/mirror'
 import { PoolClient } from 'pg'
 
 // ─── Page Insights helpers ────────────────────────────────────────────────────
@@ -157,10 +158,17 @@ const POST_UPSERT_SQL = `
     reach             = EXCLUDED.reach,
     clicks            = EXCLUDED.clicks,
     reactions_by_type = EXCLUDED.reactions_by_type,
-    video_views       = EXCLUDED.video_views`
+    video_views       = EXCLUDED.video_views,
+    full_picture      = CASE WHEN fb_post_snapshots.full_picture LIKE '%res.cloudinary.com%'
+              AND EXCLUDED.full_picture NOT LIKE '%res.cloudinary.com%'
+         THEN fb_post_snapshots.full_picture ELSE EXCLUDED.full_picture END`
 
 export async function saveFbPostSnapshots(items: FbPostSnapshotItem[]): Promise<void> {
   if (items.length === 0) return
+  const mirrored = await mirrorImages(
+    items.map(i => ({ id: i.postId, url: i.fullPicture })),
+    { table: 'fb_post_snapshots', idColumn: 'post_id', urlColumn: 'full_picture', folder: 'fb-posts' },
+  )
   const client: PoolClient = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -171,7 +179,7 @@ export async function saveFbPostSnapshots(items: FbPostSnapshotItem[]): Promise<
         item.postedAt,                                                        // $3
         item.message,                                                         // $4
         item.story,                                                           // $5
-        item.fullPicture,                                                     // $6
+        mirrored.get(item.postId) ?? item.fullPicture,                        // $6
         item.permalinkUrl,                                                    // $7
         item.postType,                                                        // $8
         item.reactionsCount,                                                  // $9

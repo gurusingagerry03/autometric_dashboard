@@ -3,7 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { SlideChrome, ContentSlide } from '@/lib/reports/data/slideModel'
-import { useReportKpi, useReportAI, useReportMetrics, useReportChart, useReportPosts, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { useReportKpi, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import {
+  AGE_BUCKETS, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
+  demographicsFor, sentimentFor, type SourceFilter,
+} from '@/lib/reports/data/audienceTypes'
 import { kpiDefsForChannel, kpiMetricFor, resolveKpiMetric, type KpiMetric } from '@/lib/reports/data/kpiMetrics'
 import { TABLE_TYPES, buildTable, columnsForChannel, customColumnsFrom } from '@/lib/reports/data/tableTypes'
 import { resolveLineData, resolveBarData, type ChartConfig } from '@/lib/reports/data/chartData'
@@ -148,7 +152,7 @@ function chartToData(cfg: ChartConfig | null, chart: ReturnType<typeof useReport
 /** Build the AI payload from what THIS slide actually shows (its table/chart/kpi/posts). */
 function gatherSlideData(
   slide: ContentSlide,
-  ctx: { kpi: ReturnType<typeof useReportKpi>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts> },
+  ctx: { kpi: ReturnType<typeof useReportKpi>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience> },
 ) {
   const ch = slide.channel
   const out: Record<string, unknown> = { channel: ch }
@@ -178,11 +182,53 @@ function gatherSlideData(
   if (slide.type === 'kpi') {
     out.scorecards = slide.kpiMetrics.map(k => resolveKpiMetric(ctx.kpi, ctx.table, ch, k)).filter((m): m is KpiMetric => !!m).map(kpiRow)
   }
+  // Sentimen: kirim angka MUTLAK bersama sharenya. Tanpa jumlahnya, model tidak
+  // punya cara membedakan "100% positif" dari 8 tagged post dengan 60% dari 747
+  // komentar — dan itu justru perbedaan yang paling perlu disebut.
+  if (slide.type === 'sentiment') {
+    const block = sentimentFor(ctx.audience, ch, (slide.sentimentSource ?? 'all') as SourceFilter)
+    if (block) {
+      out.sentiment = {
+        source: slide.sentimentSource ?? 'all',
+        currentTotal: block.current.total,
+        previousTotal: block.previous.total,
+        breakdown: SENTIMENT_KEYS.map(k => ({
+          sentiment: k,
+          count: block.current.counts[k],
+          sharePct: block.current.share[k],
+          previousSharePct: block.previous.share[k],
+          changePoints: block.shareChange[k],
+        })),
+      }
+      const shift = biggestShift(block)
+      if (shift) out.biggestShift = { sentiment: shift.sentiment, changePoints: shift.change }
+    }
+    out.topWords = audienceWordsFor(ctx.audience, ch, slide.cloudSentiment)
+      .slice(0, 15).map(w => ({ word: w.word, mentions: w.frequency, sentiment: w.sentiment }))
+  }
+  if (slide.type === 'demographic') {
+    out.demographics = demographicChannels(ctx.audience, ch).map(p => {
+      const d = demographicsFor(ctx.audience, p)
+      return {
+        platform: p,
+        age: AGE_BUCKETS.map(b => ({
+          bucket: b,
+          sharePct: d?.current?.age[b] ?? null,
+          previousSharePct: d?.previous?.age[b] ?? null,
+        })),
+        gender: {
+          femalePct: d?.current?.female ?? null, previousFemalePct: d?.previous?.female ?? null,
+          malePct: d?.current?.male ?? null, previousMalePct: d?.previous?.male ?? null,
+        },
+      }
+    })
+  }
   if (slide.type === 'visual') {
     out.posts = buildPosts(slide.postCount, slide.postFilter, { source: ctx.posts?.[ch] ?? undefined, format: slide.postFormat, pillar: slide.postPillar, sortMetric: slide.postSortMetric })
       .map(p => ({ rank: p.id, format: p.format, pillar: p.pillar, ...p.metrics }))
   }
-  const has = out.table || out.chart || out.chartLeft || (out.scorecards as unknown[] | undefined)?.length || (out.posts as unknown[] | undefined)?.length
+  const has = out.table || out.chart || out.chartLeft || out.sentiment || out.demographics
+    || (out.scorecards as unknown[] | undefined)?.length || (out.posts as unknown[] | undefined)?.length
   if (!has) {
     out.metrics = kpiDefsForChannel(ch).map(d => kpiMetricFor(ctx.kpi, ch, d.key)).filter((m): m is KpiMetric => !!m && m.value !== '—').map(kpiRow)
   }
@@ -215,6 +261,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
   const table = useReportMetrics()
   const chart = useReportChart()
   const posts = useReportPosts()
+  const audience = useReportAudience()
   const ai = useReportAI()
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -225,7 +272,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
     if (!ai || loading) return
     setLoading(true); setErr(null)
     try {
-      const data = gatherSlideData(slide, { kpi, table, chart, posts })
+      const data = gatherSlideData(slide, { kpi, table, chart, posts, audience })
       const res = await fetch(`/api/organizations/${encodeURIComponent(ai.orgId)}/reports/ai-insight`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slideType: slide.type, channel: slide.channel, brandName: ai.brandName, period: ai.period, title: slide.title, data }),

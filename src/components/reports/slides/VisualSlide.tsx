@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
-import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, competitorVisualSupported, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
+import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, competitorVisualSupported, competitorPoolFor, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
 import { useReportPosts, useReportCompetitorPosts } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -75,6 +75,29 @@ function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count 
 }
 
 /**
+ * Handle kompetitor untuk header slide.
+ *
+ * Tanpa ini sebuah slide Visual Content mode competitive review tidak bisa dibedakan
+ * dari slide milik sendiri: isinya sama-sama kartu post, dengan badge channel yang
+ * sama, dan judulnya bebas diketik. Di laporan yang diserahkan ke klien, tertukarnya
+ * post kompetitor dengan post sendiri adalah kesalahan yang mahal. Ditaruh di header
+ * — bukan di tiap kartu — karena satu keterangan berlaku untuk seluruh grid.
+ *
+ * Bentuknya sengaja teks polos, sama persis dengan yang ditulis exporter ke PPTX.
+ */
+export function CompetitorHeaderTag({ slide }: { slide: ContentSlide }) {
+  const compCtx = useReportCompetitorPosts()
+  if (slide.type !== 'visual' || slide.postSource !== 'competitor') return null
+  const { label } = competitorPoolFor(compCtx, slide.channel, slide.postCompetitorId)
+  if (!label) return null
+  return (
+    <span style={{ ...PJ, fontSize: '1.4cqw', fontWeight: 700, color: '#475569', marginRight: '1cqw', maxWidth: '13.5cqw', textAlign: 'right', lineHeight: 1.15, flexShrink: 0 }}>
+      {label}
+    </span>
+  )
+}
+
+/**
  * Visual Analysis body — a grid of post cards (media + metrics) over a notes panel.
  * Header & footer come from the slide shell (SlidePreview).
  */
@@ -99,10 +122,7 @@ export default function VisualSlide({
   const compCtx = useReportCompetitorPosts()
   const isComp = slide.postSource === 'competitor'
   const compsForChannel = (compCtx?.competitors ?? []).filter(c => c.platform === slide.channel)
-  const compId = slide.postCompetitorId && compsForChannel.some(c => c.id === slide.postCompetitorId)
-    ? slide.postCompetitorId
-    : compsForChannel[0]?.id
-  const compPool = compId ? (compCtx?.posts?.[compId] ?? null) : null
+  const { competitorId: compId, pool: compPool } = competitorPoolFor(compCtx, slide.channel, slide.postCompetitorId)
 
   const loading = isComp ? compCtx === null : ctx === null
   const livePool = isComp ? compPool : (ctx?.[slide.channel] ?? null)

@@ -53,6 +53,34 @@ export const metricsForCompetitor = (channel: string) => {
  *  mentahnya tidak menyimpan cover image). */
 export const competitorVisualSupported = (channel: string) => channel in COMPETITOR_METRICS
 
+/** Bentuk minimal `ReportCompetitorPosts` yang dibutuhkan pemilih di bawah. Ditulis
+ *  struktural, bukan diimpor dari competitorPostsQuery: modul itu membuka koneksi
+ *  database dan tidak boleh ikut terbawa ke bundel klien maupun ke exporter. */
+export interface CompetitorPostPool {
+  competitors: { id: string; label: string; platform: string }[]
+  posts: Record<string, PostCandidate[]>
+}
+
+/**
+ * Kompetitor yang ditampilkan sebuah slide Visual Content, beserta kumpulan post-nya.
+ * Pilihan eksplisit dipakai selama kompetitornya memang ada di channel slide ini;
+ * kalau tidak, yang pertama — supaya slide tidak kosong sebelum sempat dipilih.
+ *
+ * Dipakai preview DAN exporter. Sebelumnya aturan ini hanya hidup di VisualSlide dan
+ * exporter sama sekali tidak tahu soal mode kompetitor, jadi PPTX diam-diam berisi
+ * post milik sendiri padahal di layar yang tampil post kompetitor.
+ */
+export function competitorPoolFor(
+  data: CompetitorPostPool | null | undefined,
+  channel: string,
+  selectedId: string | undefined,
+): { competitorId?: string; label?: string; pool: PostCandidate[] | null } {
+  const inChannel = (data?.competitors ?? []).filter(c => c.platform === channel)
+  const chosen = inChannel.find(c => c.id === selectedId) ?? inChannel[0]
+  if (!chosen) return { pool: null }
+  return { competitorId: chosen.id, label: chosen.label, pool: data?.posts?.[chosen.id] ?? null }
+}
+
 /** Metrik yang nilainya teks (tanggal), bukan angka yang bisa diformat. */
 const TEXT_METRIC_IDS = new Set(['post_date', 'post_datetime'])
 export const isTextMetric = (id: string) => TEXT_METRIC_IDS.has(id)
