@@ -104,9 +104,11 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     )
   }
 
-  // Kartu yang isinya hanya milik satu platform — tidak dirender di 'All'
-  // maupun di topbar platform lain. Dihitung sekali di sini supaya penyusunan
-  // grid dan keputusan render memakai jawaban yang sama.
+  // Kartu yang isinya hanya milik satu platform: dirender di topbar platform itu
+  // DAN di 'All' (klien meminta 'All' menampilkan semuanya), tapi tidak di topbar
+  // platform lain. Dihitung sekali di sini supaya penyusunan grid dan keputusan
+  // render memakai jawaban yang sama. Penanda platform di label kartu — (IG),
+  // (TT), (FB) — yang membedakannya dari angka gabungan saat berada di 'All'.
   const showPostType   = shownFor(['instagram'], platform)
   const showCompletion = shownFor(['tiktok'], platform)
   const showReelWatch  = shownFor(['instagram'], platform)
@@ -123,9 +125,9 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
           Post Type Performance menyaring `p.platform = 'instagram'` di SQL-nya
           (lib/dashboard/content.ts) dan tidak menghormati topbar sama sekali —
           di topbar TikTok/Facebook kartunya menampilkan angka Instagram. Karena
-          itu kartunya hanya dirender di topbar Instagram — di 'All' pun tidak,
-          sebab angkanya bukan gabungan channel — dan Content Volume yang memang
-          lintas platform melebar sendiri mengisi barisnya. */}
+          itu kartunya tidak dirender di kedua topbar itu; di 'All' ia tetap
+          tampil — subjudulnya sudah menyebut "Instagram" — dan saat disembunyikan
+          Content Volume yang memang lintas platform melebar mengisi barisnya. */}
       <div className={`grid grid-cols-1 gap-3 mb-3 ${showPostType ? 'lg:grid-cols-2' : ''}`}>
         {showPostType && (
         <Card area="post_metric" skeleton="chart" className="flex flex-col">

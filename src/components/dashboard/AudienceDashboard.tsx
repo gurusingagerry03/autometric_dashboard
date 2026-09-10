@@ -146,12 +146,13 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
 
   const relevanceTotal = data.relevanceTiers.reduce((sum, tier) => sum + tier.count, 0)
 
-  // Dua keadaan berbeda, dua fungsi berbeda.
+  // Dua keadaan berbeda, dua fungsi berbeda — keduanya tampil di 'All', yang
+  // berbeda adalah topbar platform mana yang menyembunyikannya.
   //   Age & gender LINTAS platform — angkanya menjumlahkan Instagram dan TikTok
-  //   — dan yang hilang cuma sisi Facebook. Kartunya harus tetap ada di 'All',
-  //   jadi yang didaftarkan adalah platform yang TIDAK punya.
-  //   UGC sebaliknya: isinya murni Instagram, jadi ia ikut aturan kartu
-  //   satu-platform dan tidak tampil di 'All'.
+  //   — dan yang hilang cuma sisi Facebook, jadi yang didaftarkan adalah
+  //   platform yang TIDAK punya.
+  //   UGC isinya murni Instagram, jadi yang didaftarkan adalah platform yang
+  //   memilikinya. Di 'All' ia ikut tampil; judulnya sendiri menyebut Instagram.
   const showDemographics = shownExcept(['facebook'], platform)
   const showUgc          = shownFor(['instagram'], platform)
 

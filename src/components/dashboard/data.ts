@@ -54,38 +54,46 @@ export const PLATFORM_FILTERS = ['All', 'instagram', 'facebook', 'tiktok'] as co
 export type PlatformFilter = typeof PLATFORM_FILTERS[number]
 
 /**
- * Kartu/scorecard yang angkanya MILIK satu platform — tampil hanya saat topbar
- * dipatok ke platform itu.
+ * Kartu/scorecard yang angkanya MILIK satu platform — tampil di topbar platform
+ * itu, DAN di 'All'.
  *
- * KENAPA DISEMBUNYIKAN, BUKAN DIBERI KETERANGAN
+ * KENAPA DISEMBUNYIKAN DI PLATFORM LAIN, BUKAN DIBERI KETERANGAN
  *   Sebelumnya kartu semacam ini tetap dirender dengan pesan "For TikTok only".
  *   Kotak kosong berisi penjelasan tetap memakan tempat dan tetap harus dibaca
  *   satu per satu untuk disingkirkan dari perhatian — padahal jawabannya sudah
  *   pasti begitu topbar dipatok. Menghapusnya membuat halaman hanya berisi hal
  *   yang benar-benar berlaku untuk platform yang sedang dilihat.
  *
- * KENAPA 'All' IKUT MENYEMBUNYIKANNYA
- *   'All' dibaca sebagai gabungan seluruh channel: tiap kartu di sana dianggap
- *   berbicara tentang semuanya. "TT Video Views" berdiri di antara "Total Reach"
- *   dan "Net Follower Growth" membuat orang menjumlahkan hal yang tidak
- *   sebanding — penanda (TT) di label ternyata tidak cukup menahannya. Angka
- *   satu platform sekarang hanya muncul di tempat yang memang sedang
- *   membicarakan platform itu.
+ * KENAPA 'All' SEKARANG IKUT MENAMPILKAN (diubah atas permintaan klien)
+ *   Sempat sebaliknya: angka satu platform disembunyikan di 'All' supaya tidak
+ *   dibaca sebagai angka seluruh channel. Yang tersisa ternyata baris-baris
+ *   kosong — di tab Content/Audience/Community tinggal satu kartu — dan halaman
+ *   yang tidak menunjukkan apa pun lebih merugikan daripada label yang harus
+ *   dibaca teliti. Sekarang aturannya dua arah dan hanya itu:
+ *
+ *     'All'            → tampilkan SEMUA kartu, termasuk yang satu platform.
+ *     topbar platform  → hanya kartu milik platform itu.
+ *
+ *   Angka dan labelnya sendiri tidak diubah sedikit pun: yang satu platform
+ *   tetap membawa penandanya — "TT Video Views", "IG Profile Reach", "Avg.
+ *   Saves Rate (IG)" — jadi di 'All' pun tidak ada yang menyamar sebagai
+ *   gabungan channel.
  *
  * KOSONG ≠ TIDAK BERLAKU. Fungsi ini hanya menjawab "berlaku untuk platform ini
  * atau tidak". Kartu yang berlaku tapi datanya belum masuk tetap dirender dengan
  * pesan kosongnya sendiri — dua hal itu tidak boleh dijadikan satu.
  */
 export const shownFor = (only: DashPlatform[] | undefined, current: PlatformFilter) =>
-  !only || (current !== 'All' && only.includes(current))
+  !only || current === 'All' || only.includes(current)
 
 /**
- * Kebalikan `shownFor`: kartu yang isinya LINTAS platform, tapi ada platform
- * yang sumbernya memang tidak ada (umur & gender Facebook, misalnya).
+ * Sepupu `shownFor` untuk keadaan sebaliknya: kartu yang isinya LINTAS platform,
+ * tapi ada platform yang sumbernya memang tidak ada (umur & gender Facebook).
  *
- * Bedanya ada di 'All'. Kartu seperti ini tetap tampil di sana — angkanya masih
- * berisi platform yang lain, jadi menyembunyikannya justru membuang data yang
- * sah. Yang hilang hanya saat topbar dipatok ke platform yang tidak punya.
+ * Sejak 'All' menampilkan semuanya, kedua fungsi ini berperilaku sama di 'All';
+ * yang berbeda adalah cara menyebut platformnya — di sini yang didaftarkan
+ * adalah platform yang TIDAK punya, karena itulah daftar yang pendek dan itulah
+ * yang benar-benar diketahui tentang metriknya.
  */
 export const shownExcept = (missing: DashPlatform[], current: PlatformFilter) =>
   current === 'All' || !missing.includes(current)
