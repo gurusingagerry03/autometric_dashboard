@@ -65,7 +65,7 @@ function SentimentTile({ k, block, accent }: { k: SentimentKey; block: Sentiment
     <div
       className="flex flex-col justify-between"
       style={{
-        flex: 1, minWidth: 0, background: '#fbfcfd', border: '1px solid #e8ebee',
+        flex: 1, minWidth: 0, minHeight: 0, overflow: 'hidden', background: '#fbfcfd', border: '1px solid #e8ebee',
         borderRadius: '1cqw', borderTop: `0.45cqh solid ${color}`, padding: '1.2cqh 1cqw',
       }}
     >
@@ -201,7 +201,9 @@ export default function SentimentSlide({
               </div>
             ) : (
               <>
-                <div className="flex" style={{ gap: '0.8cqw', marginTop: '1cqh', flex: 1, minHeight: 0 }}>
+                {/* overflow:hidden — same guard as the demographic slide's age list:
+                    a tile must never grow past its row and paint over the totals line. */}
+                <div className="flex" style={{ gap: '0.8cqw', marginTop: '1cqh', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                   {SENTIMENT_KEYS.map(k => (
                     <SentimentTile key={k} k={k} block={block} accent={colors.primary} />
                   ))}

@@ -29,11 +29,11 @@ function Empty({ label }: { label: string }) {
 
 /** The pp delta, or a muted dash when there is no previous month to compare to. */
 function Delta({ now, before, size = '0.95cqw' }: { now: number; before: number | null; size?: string }) {
-  if (before === null) return <span style={{ fontSize: size, color: '#cbd5e1', ...PJ }}>—</span>
+  if (before === null) return <span style={{ fontSize: size, lineHeight: 1, color: '#cbd5e1', ...PJ }}>—</span>
   const d = +(now - before).toFixed(1)
   const flat = Math.abs(d) < 0.05
   return (
-    <span style={{ fontSize: size, fontWeight: 700, color: flat ? '#a3adba' : d > 0 ? '#15803d' : '#b91c1c', ...PJ }}>
+    <span style={{ fontSize: size, lineHeight: 1, fontWeight: 700, color: flat ? '#a3adba' : d > 0 ? '#15803d' : '#b91c1c', ...PJ }}>
       {flat ? '0.0' : pp(d)}
     </span>
   )
@@ -49,6 +49,14 @@ function Delta({ now, before, size = '0.95cqw' }: { now: number; before: number 
  *   "did this shift?", not "what were both values?" — a marker for last month
  *   answers it in a quarter of the ink. The number for the previous month is
  *   still there, in the delta column.
+ *
+ * THE ROW OWNS NO HEIGHT OF ITS OWN
+ *   `flex: 1 1 0` + `minHeight: 0` makes the seven rows SHARE whatever the panel
+ *   has left, instead of each asking for the height its text happens to need.
+ *   That is what stops the list from growing past the card and drawing over the
+ *   gender block below it — the overlap reported on this slide. Every text node
+ *   also pins `lineHeight: 1`, so an inherited leading can never re-inflate a
+ *   row behind the layout's back.
  */
 function AgeRow({ bucket, now, before, max, accent }: {
   bucket: string; now: number; before: number | null; max: number; accent: string
@@ -56,11 +64,11 @@ function AgeRow({ bucket, now, before, max, accent }: {
   const w = max > 0 ? (now / max) * 100 : 0
   const prevW = before !== null && max > 0 ? (before / max) * 100 : null
   return (
-    <div className="flex items-center" style={{ gap: '0.5cqw' }}>
-      <span style={{ width: '4.6cqw', flexShrink: 0, fontSize: '1cqw', fontWeight: 600, color: '#64748b', textAlign: 'right', ...PJ }}>
+    <div className="flex items-center" style={{ gap: '0.5cqw', flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
+      <span style={{ width: '4.6cqw', flexShrink: 0, fontSize: '1cqw', lineHeight: 1, fontWeight: 600, color: '#64748b', textAlign: 'right', ...PJ }}>
         {bucket}
       </span>
-      <div style={{ flex: 1, minWidth: 0, height: '1.5cqh', background: '#f1f5f9', borderRadius: '0.3cqw', position: 'relative' }}>
+      <div style={{ flex: 1, minWidth: 0, height: '1.5cqh', maxHeight: '100%', background: '#f1f5f9', borderRadius: '0.3cqw', position: 'relative' }}>
         <div style={{ width: `${w}%`, height: '100%', background: accent, borderRadius: '0.3cqw' }} />
         {prevW !== null && (
           <div
@@ -72,7 +80,7 @@ function AgeRow({ bucket, now, before, max, accent }: {
           />
         )}
       </div>
-      <span style={{ width: '3.2cqw', flexShrink: 0, fontSize: '1cqw', fontWeight: 700, color: '#0f172a', textAlign: 'right', ...PJ }}>
+      <span style={{ width: '3.2cqw', flexShrink: 0, fontSize: '1cqw', lineHeight: 1, fontWeight: 700, color: '#0f172a', textAlign: 'right', ...PJ }}>
         {now.toFixed(1)}%
       </span>
       <span style={{ width: '2.8cqw', flexShrink: 0, textAlign: 'right' }}>
@@ -90,7 +98,7 @@ function GenderBlock({ cur, prev }: { cur: DemographicPeriod; prev: DemographicP
       style={{ width: `${share}%`, background: color, height: '100%', minWidth: 0 }}
       title={`${label} ${share.toFixed(1)}%`}
     >
-      <span style={{ fontSize: '1cqw', fontWeight: 800, color: '#ffffff', ...PJ }}>{share.toFixed(0)}%</span>
+      <span style={{ fontSize: '1cqw', lineHeight: 1, fontWeight: 800, color: '#ffffff', ...PJ }}>{share.toFixed(0)}%</span>
     </div>
   )
   return (
@@ -102,12 +110,12 @@ function GenderBlock({ cur, prev }: { cur: DemographicPeriod; prev: DemographicP
       <div className="flex items-center justify-between" style={{ marginTop: '0.5cqh' }}>
         <span className="flex items-center" style={{ gap: '0.35cqw' }}>
           <span style={{ width: '0.7cqw', height: '0.7cqw', borderRadius: '50%', background: FEMALE }} />
-          <span style={{ fontSize: '0.95cqw', color: '#64748b', ...PJ }}>{t('Female')}</span>
+          <span style={{ fontSize: '0.95cqw', lineHeight: 1, color: '#64748b', ...PJ }}>{t('Female')}</span>
           <Delta now={cur.female} before={prev ? prev.female : null} />
         </span>
         <span className="flex items-center" style={{ gap: '0.35cqw' }}>
           <span style={{ width: '0.7cqw', height: '0.7cqw', borderRadius: '50%', background: MALE }} />
-          <span style={{ fontSize: '0.95cqw', color: '#64748b', ...PJ }}>{t('Male')}</span>
+          <span style={{ fontSize: '0.95cqw', lineHeight: 1, color: '#64748b', ...PJ }}>{t('Male')}</span>
           <Delta now={cur.male} before={prev ? prev.male : null} />
         </span>
       </div>
@@ -137,7 +145,7 @@ function PlatformPanel({ platform, data, view, accent }: {
       <Card style={{ padding: '1.2cqh 1cqw', display: 'flex', flexDirection: 'column' }}>
         <div className="flex items-center" style={{ gap: '0.5cqw', flexShrink: 0 }}>
           <img src={meta.logo} alt={meta.label} style={{ width: '1.6cqw', height: '1.6cqw', objectFit: 'contain' }} />
-          <span style={{ fontSize: '1.25cqw', fontWeight: 800, color: '#0f172a', ...PJ }}>{meta.label}</span>
+          <span style={{ fontSize: '1.25cqw', lineHeight: 1, fontWeight: 800, color: '#0f172a', ...PJ }}>{meta.label}</span>
           {!prev && (
             <span style={{ fontSize: '0.85cqw', fontWeight: 700, color: '#b8915a', background: '#fbf4e8', padding: '0.1cqh 0.4cqw', borderRadius: '0.3cqw', ...PJ }}>
               {t('no prior month')}
@@ -146,11 +154,14 @@ function PlatformPanel({ platform, data, view, accent }: {
         </div>
 
         {showAge && (
-          <div style={{ marginTop: '1cqh', flex: 1, minHeight: 0 }}>
-            <div style={{ fontSize: '0.95cqw', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6cqh', ...PJ }}>
+          <div className="flex flex-col" style={{ marginTop: '1cqh', flex: 1, minHeight: 0 }}>
+            <div style={{ fontSize: '0.95cqw', lineHeight: 1, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6cqh', flexShrink: 0, ...PJ }}>
               {t('Age Group')}
             </div>
-            <div className="flex flex-col" style={{ gap: '0.55cqh' }}>
+            {/* The list takes the leftover height and hands it to the rows; it never
+                asks for more. `overflow: hidden` is the last line of defence, so a
+                row can never be painted on top of the gender block below. */}
+            <div className="flex flex-col" style={{ flex: 1, minHeight: 0, gap: '0.55cqh', overflow: 'hidden' }}>
               {AGE_BUCKETS.map(b => (
                 <AgeRow key={b} bucket={b} now={cur.age[b] ?? 0}
                   before={prev ? (prev.age[b] ?? 0) : null} max={max} accent={accent} />
@@ -161,7 +172,7 @@ function PlatformPanel({ platform, data, view, accent }: {
 
         {showGender && (
           <div style={{ marginTop: showAge ? '1.1cqh' : '1cqh', flexShrink: 0 }}>
-            <div style={{ fontSize: '0.95cqw', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6cqh', ...PJ }}>
+            <div style={{ fontSize: '0.95cqw', lineHeight: 1, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6cqh', ...PJ }}>
               {t('Gender')}
             </div>
             <GenderBlock cur={cur} prev={prev} />
