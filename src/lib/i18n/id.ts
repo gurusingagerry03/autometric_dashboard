@@ -655,6 +655,25 @@ export const ID: Record<string, string> = {
   'Delete this brand': 'Hapus brand ini',
   'Are you sure?': 'Yakin?',
 
+  /* ── Brands: tab KPI ──────────────────────────────────────────────── */
+  'YTD Periode': 'Periode YTD',
+  'Default period for new KPIs — each KPI can still use its own.':
+    'Periode awal untuk KPI baru — tiap KPI tetap bisa memakai rentangnya sendiri.',
+  'Set KPI': 'Atur KPI',
+  'Targets are measured daily against this brand’s metrics.':
+    'Target diukur harian terhadap metrik brand ini.',
+  'Add KPI': 'Tambah KPI',
+  'Connect a social account first — a KPI needs a channel to measure.':
+    'Hubungkan akun sosial dulu — KPI butuh channel untuk diukur.',
+  'Operation': 'Operator',
+  'Value': 'Nilai',
+  'Periode': 'Periode',
+  'Fill in metric and target value first.': 'Isi metrik dan nilai targetnya dulu.',
+  'Failed to save KPI.': 'Gagal menyimpan KPI.',
+  'No KPI set for this brand yet.': 'Belum ada KPI untuk brand ini.',
+  'Failed to remove KPI.': 'Gagal menghapus KPI.',
+  'Inactive': 'Nonaktif',
+
   /* ── Brands: connect & create ─────────────────────────────────────── */
   'Connect Account': 'Hubungkan Akun',
   'Link a social account to': 'Hubungkan akun sosial ke',

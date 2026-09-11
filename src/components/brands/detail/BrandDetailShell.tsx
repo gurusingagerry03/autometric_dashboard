@@ -14,6 +14,7 @@ const TABS = [
   { label: 'Accounts',     path: 'accounts',     icon: 'add_link'    },
   { label: 'Data Sources', path: 'data-sources', icon: 'upload_file' },
   { label: 'Competitors',  path: 'competitors',  icon: 'flag'        },
+  { label: 'KPI',          path: 'kpi',          icon: 'target'      },
   { label: 'Settings',     path: 'settings',     icon: 'settings'    },
 ]
 
