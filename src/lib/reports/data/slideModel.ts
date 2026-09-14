@@ -9,8 +9,44 @@ import type { SourceFilter } from './audienceTypes'
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'visual' | 'overview' | 'sentiment' | 'demographic'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'visual' | 'overview' | 'sentiment' | 'demographic'
+
+/**
+ * Slide yang memakai layout KPI (baris kartu + deep dive + ringkasan).
+ *
+ * KEDUANYA BERBAGI LAYOUT, BUKAN ISI
+ *   - 'dashboard_overview' → scorecard metrik dashboard, dibandingkan dengan
+ *     periode sebelumnya; metrik tiap kartu dipilih sendiri (metricCount +
+ *     kpiMetrics di bawah).
+ *   - 'kpi'                → target KPI brand dari tab KPI di halaman detail,
+ *     dibandingkan dengan targetnya sendiri (achievement rate / run rate).
+ *     Memakai `metricCount` + `kpiMetrics` yang SAMA, hanya isi slotnya yang
+ *     berbeda artinya: di sini tiap slot menyimpan `kpiId`, bukan key metrik
+ *     dashboard — lihat data/kpiTargets.ts. Comparison-nya dipilih lewat
+ *     `kpiCompare`.
+ *
+ * Dipakai preview, exporter, dan jalur AI untuk hal yang sama-sama benar bagi
+ * keduanya (bingkai slide, chart, ringkasan). Yang membedakan isinya adalah
+ * pemeriksaan `type === 'kpi'` di ketiga tempat itu, bukan helper ini.
+ */
+export const usesKpiLayout = (type: SlideType) => type === 'kpi' || type === 'dashboard_overview'
 export type VisualMode = 'chart' | 'table' | null
+
+/**
+ * Angka yang ditampilkan kartu KPI Overview di bawah nilai capaiannya.
+ *
+ * 'both' memperlihatkan keduanya bertumpuk — satu-satunya mode yang membuat
+ * achievement bisa dinilai sendiri, karena 40% itu bagus atau buruk tergantung
+ * berapa banyak periodenya sudah terpakai. Dua mode lainnya untuk slide yang
+ * ingin sepadat scorecard dashboard: satu baris angka saja.
+ */
+export type KpiCompare = 'both' | 'achievement' | 'run'
+export const KPI_COMPARES: readonly KpiCompare[] = ['both', 'achievement', 'run']
+export const KPI_COMPARE_LABEL: Record<KpiCompare, string> = {
+  both: 'Achievement & run rate',
+  achievement: 'Achievement rate only',
+  run: 'Run rate only',
+}
 /** Which half of the demographic slide is drawn — or both, side by side. */
 export type DemographicView = 'both' | 'age' | 'gender'
 
@@ -31,7 +67,10 @@ export interface ContentSlide {
   chartA: ChartConfig | null  // comparison left
   chartB: ChartConfig | null  // comparison right
   metricCount: number             // kpi — number of scorecards (3..6)
-  kpiMetrics: (string | null)[]   // kpi — selected metric key per scorecard slot
+  /** kpi — per scorecard slot: metric key ('dashboard_overview') atau kpiId ('kpi'). */
+  kpiMetrics: (string | null)[]
+  /** kpi — angka pembanding yang ditampilkan kartu KPI Overview. */
+  kpiCompare: KpiCompare
   postCount: number          // visual — number of post cards (4/6/8)
   postFilter: string         // visual — 'top' | 'low' | 'mixed'
   postFormat: string         // visual — format filter: 'all' | 'reel' | 'video' | 'carousel' | 'image'
@@ -105,6 +144,7 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   dashboard: { title: 'Performance Dashboard' },
   comparison: { title: 'Period Comparison' },
   kpi: { title: 'KPI Overview' },
+  dashboard_overview: { title: 'Dashboard Overview' },
   visual: { title: 'Visual Analysis' },
   overview: { title: 'Overview Slide' },
   sentiment: { title: 'Audience Sentiment' },
@@ -126,6 +166,7 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): 
     chartB: null,
     metricCount: 4,
     kpiMetrics: [null, null, null, null, null, null],
+    kpiCompare: 'both',
     postCount: 4,
     postFilter: 'top',
     postSource: 'owned',

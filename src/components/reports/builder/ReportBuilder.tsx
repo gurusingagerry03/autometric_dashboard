@@ -13,15 +13,17 @@ import { downloadBlob, saveExportToLibrary, saveTemplateToLibrary, updateTemplat
 import { ReportTableMetrics } from '@/lib/reports/data/tableTypes'
 import { ReportChartMetrics } from '@/lib/reports/data/chartTypes'
 import { ReportKpiMetrics } from '@/lib/reports/data/kpiMetrics'
+import { ReportKpiTargets, autofillKpiSlots } from '@/lib/reports/data/kpiTargets'
 import { ReportPostMetrics } from '@/lib/reports/data/posts'
 import type { AvailablePeriod } from '@/lib/reports/data/periodsQuery'
-import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import {
   ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig, makeSlide,
   type ReportTemplateConfig, type ReportTemplateRecord,
 } from '@/lib/reports/data/slideModel'
 import CoverPreview from '../cover/CoverPreview'
 import SlideTypePicker from '../modals/SlideTypePicker'
+import KpiTargetPickerModal from '../modals/KpiTargetPickerModal'
 import ChartSelectionModal from '../modals/ChartSelectionModal'
 import TableSelectionModal from '../modals/TableSelectionModal'
 import MetricPickerModal from '../modals/MetricPickerModal'
@@ -137,6 +139,8 @@ export default function ReportBuilder({
   const [chartMetrics, setChartMetrics] = useState<ReportChartMetrics | null>(null)
   // Real KPI scorecard values for this brand + period (current vs previous month).
   const [kpiMetrics, setKpiMetrics] = useState<ReportKpiMetrics | null>(null)
+  // Target KPI brand + capaiannya, untuk slide KPI Overview.
+  const [kpiTargets, setKpiTargets] = useState<ReportKpiTargets | null>(null)
   // Live post pool (per channel) for this brand + report month, provided via context
   // so the Visual Analysis slide ranks real posts by Format / Pillar / metric.
   const [postMetrics, setPostMetrics] = useState<ReportPostMetrics | null>(null)
@@ -171,6 +175,21 @@ export default function ReportBuilder({
     setMonth(MONTHS[latest.month - 1])
     setYear(latest.year)
   }, [availablePeriods]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Target KPI brand — TIDAK bergantung pada bulan report: periode sebuah KPI
+  // ditentukan oleh KPI itu sendiri. Karena itu efeknya berdiri sendiri, supaya
+  // mengganti bulan tidak mengosongkan slide KPI lalu mengisinya dengan isi yang
+  // sama persis.
+  useEffect(() => {
+    if (!brandId) { setKpiTargets(null); return }
+    let alive = true
+    setKpiTargets(null)
+    const url = `/api/organizations/${encodeURIComponent(orgId)}/reports/kpi-targets?brand=${encodeURIComponent(brandId)}`
+    fetch(url, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: ReportKpiTargets | null) => { if (alive) setKpiTargets(d) })
+      .catch(e => { if (alive) { console.error('[report] kpi targets fetch failed:', e); setKpiTargets(null) } })
+    return () => { alive = false }
+  }, [orgId, brandId])
   // Table metrics — also refetched on custom-metric changes (cmVersion).
   useEffect(() => {
     if (!brandId) { setTableMetrics(null); return }
@@ -240,9 +259,17 @@ export default function ReportBuilder({
 
   const template = getTemplate(templateId)
   const kpiSlot = typeof configBlock === 'string' && configBlock.startsWith('kpi-') ? Number(configBlock.slice(4)) : null
+  const slotOpen = typeof configBlock === 'string' && configBlock.startsWith('kpi-')
 
   function addSlide(type: SlideType, channel = 'instagram') {
-    const s = makeSlide(type, ++slideSeq, channel)
+    const base = makeSlide(type, ++slideSeq, channel)
+    // Slide KPI Overview lahir sudah terisi KPI aktif channel itu. Slide yang
+    // lahir kosong memaksa pemakai memilih ulang satu per satu apa yang sudah
+    // dia tentukan di tab KPI — dan kalau targetnya belum termuat, slotnya tetap
+    // kosong dan bisa diisi tangan seperti biasa.
+    const s = type === 'kpi'
+      ? { ...base, kpiMetrics: autofillKpiSlots(kpiTargets, channel, base.metricCount) }
+      : base
     setSlides(prev => [...prev, s])
     return s
   }
@@ -334,7 +361,7 @@ export default function ReportBuilder({
       const cover = { brandName, title, subtitle, period, logoDataUrl, colors, mode, template, font }
       const { blob, fileName } = slides.length === 0
         ? await exportCoverPptx(cover)
-        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics, kpiMetrics, postMetrics, competitorPosts, audienceMetrics })
+        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics, kpiMetrics, kpiTargets, postMetrics, competitorPosts, audienceMetrics })
 
       downloadBlob(blob, fileName)
 
@@ -404,6 +431,7 @@ export default function ReportBuilder({
     <ReportMetricsContext.Provider value={tableMetrics}>
     <ReportChartContext.Provider value={chartMetrics}>
     <ReportKpiContext.Provider value={kpiMetrics}>
+    <ReportKpiTargetContext.Provider value={kpiTargets}>
     <ReportCompetitorPostContext.Provider value={competitorPosts}>
     <ReportAudienceContext.Provider value={audienceMetrics}>
     <ReportPostContext.Provider value={postMetrics}>
@@ -669,10 +697,21 @@ export default function ReportBuilder({
         onConfirm={applyTable}
       />
 
+      {/* Satu slot, dua pemilih: KPI Overview memilih di antara target KPI brand,
+          Dashboard Overview di antara katalog metrik. Keduanya menulis ke slot
+          yang sama lewat applyMetric — yang disimpan hanya berbeda artinya. */}
       <MetricPickerModal
-        open={typeof configBlock === 'string' && configBlock.startsWith('kpi-')}
+        open={slotOpen && activeSlide?.type !== 'kpi'}
         orgId={orgId}
         onCustomMetricsChanged={() => setCmVersion(v => v + 1)}
+        current={kpiSlot !== null && activeSlide ? activeSlide.kpiMetrics[kpiSlot] ?? null : null}
+        channel={activeSlide?.channel ?? 'instagram'}
+        onClose={() => setConfigBlock(null)}
+        onSelect={applyMetric}
+      />
+
+      <KpiTargetPickerModal
+        open={slotOpen && activeSlide?.type === 'kpi'}
         current={kpiSlot !== null && activeSlide ? activeSlide.kpiMetrics[kpiSlot] ?? null : null}
         channel={activeSlide?.channel ?? 'instagram'}
         onClose={() => setConfigBlock(null)}
@@ -690,6 +729,7 @@ export default function ReportBuilder({
     </ReportPostContext.Provider>
     </ReportAudienceContext.Provider>
     </ReportCompetitorPostContext.Provider>
+    </ReportKpiTargetContext.Provider>
     </ReportKpiContext.Provider>
     </ReportChartContext.Provider>
     </ReportMetricsContext.Provider>

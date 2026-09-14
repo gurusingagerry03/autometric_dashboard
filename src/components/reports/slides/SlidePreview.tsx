@@ -1,7 +1,7 @@
 'use client'
 
 import { CoverColors, tint } from '@/lib/reports/cover/colors'
-import { ContentSlide, SlideChrome, ConfigBlock } from '@/lib/reports/data/slideModel'
+import { ContentSlide, SlideChrome, ConfigBlock, usesKpiLayout } from '@/lib/reports/data/slideModel'
 import { fontStack } from '@/lib/reports/data/fonts'
 import { PJ, Card, Title, ChannelBadge, Footer } from './parts'
 import SectionSlide from './SectionSlide'
@@ -65,7 +65,7 @@ export default function SlidePreview({
 
         {slide.type === 'dashboard' ? (
           <DashboardSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
-        ) : slide.type === 'kpi' ? (
+        ) : usesKpiLayout(slide.type) ? (
           <KpiSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
         ) : slide.type === 'visual' ? (
           <VisualSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />

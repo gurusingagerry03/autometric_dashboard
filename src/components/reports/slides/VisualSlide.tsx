@@ -13,7 +13,8 @@ function hue(id: number) { return (id * 47) % 360 }
 // Card geometry in slide-relative units, mirroring postCardFit in
 // exportReport.ts so the preview and the PPTX agree. HEAD_H is the padded
 // "#id + format · pillar" block above the metric list — measured from the markup
-// below, so it is taller here than the exporter's flat 4.8cqh.
+// below, so it is taller here than the exporter's flat 4.8cqh. (Post kompetitor
+// hanya membawa jenis post, tanpa pilar — blok ini tingginya sama.)
 const CARD_H = 50, IMG_MAX = 0.55, IMG_MIN = 0.34, METRIC_LINE = 1.25
 const HEAD_H: Record<number, number> = { 4: 7.1, 6: 6.1, 8: 5.7 }
 const CQW_TO_CQH = 13.333 / 7.5   // 16:9 slide — 1cqw is this many cqh
@@ -28,7 +29,11 @@ function metricFsCqw(rows: number, baseCqw: number, count: number) {
   return Math.min(baseCqw, (CARD_H - head - imgH) / n / (CQW_TO_CQH * METRIC_LINE))
 }
 
-function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar: string; metrics: Record<string, string>; postMetrics: string[]; count: number }) {
+function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number }) {
+  // Pilar boleh kosong (post kompetitor tidak punya), jadi keterangannya dirakit
+  // dari bagian yang benar-benar ada — bukan template "format · pilar" yang
+  // menyisakan pemisah menggantung. Exporter merakitnya dengan cara yang sama.
+  const caption = [format, pillar].filter(Boolean).join('  ·  ')
   const baseFs = count === 4 ? 1.05 : count === 6 ? 0.9 : 0.78
   const labelFs = `${baseFs}cqw`
   const metricFs = `${metricFsCqw(postMetrics.length, baseFs, count).toFixed(3)}cqw`
@@ -53,7 +58,7 @@ function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count 
         <div className="flex items-start justify-between gap-[0.4cqw]" style={{ paddingBottom: '0.5cqh', marginBottom: '0.5cqh', borderBottom: '1px solid #f1f3f5' }}>
           <div className="min-w-0">
             <span className="block" style={{ fontSize: labelFs, fontWeight: 800, color: '#334155', ...PJ }}>#{id}</span>
-            <span className="block truncate" style={{ fontSize: capFs, fontWeight: 500, color: '#94a3b8', ...PJ }} title={`${format} · ${pillar}`}>{format} · {pillar}</span>
+            <span className="block truncate" style={{ fontSize: capFs, fontWeight: 500, color: '#94a3b8', ...PJ }} title={caption}>{caption}</span>
           </div>
           <span className="material-symbols-outlined shrink-0" style={{ fontSize: '1.2cqw', color: '#94a3b8' }}>open_in_new</span>
         </div>
@@ -138,12 +143,13 @@ export default function VisualSlide({
   const shownMetrics = effectiveShownMetrics(slide.postMetrics, populatedMetrics)
 
   // Format / pillar filter options — derived from the live pool ("All" only until it loads).
+  const allFormatsLabel = isComp ? 'All types' : 'All formats'
   const formatOptions = useMemo(() => {
-    if (!hasData) return [{ id: 'all', label: 'All formats' }]
+    if (!hasData) return [{ id: 'all', label: allFormatsLabel }]
     const seen = new Map<string, string>()
     livePool!.forEach(p => { if (!seen.has(p.formatId)) seen.set(p.formatId, p.format) })
-    return [{ id: 'all', label: 'All formats' }, ...[...seen].sort((a, b) => a[1].localeCompare(b[1])).map(([id, label]) => ({ id, label }))]
-  }, [hasData, livePool])
+    return [{ id: 'all', label: allFormatsLabel }, ...[...seen].sort((a, b) => a[1].localeCompare(b[1])).map(([id, label]) => ({ id, label }))]
+  }, [hasData, livePool, allFormatsLabel])
   const pillarOptions = useMemo(() => {
     if (!hasData) return [{ id: 'all', label: 'All pillars' }]
     const seen = new Map<string, string>()
@@ -156,7 +162,10 @@ export default function VisualSlide({
   const postFormat = effectiveFilterId(slide.postFormat, formatOptions.map(o => o.id))
   const postPillar = effectiveFilterId(slide.postPillar, pillarOptions.map(o => o.id))
 
-  const posts = buildPosts(count, slide.postFilter, { format: postFormat, pillar: postPillar, sortMetric, source })
+  // Pilar tidak pernah menyaring apa pun di mode kompetitor — semua post-nya
+  // ber-pillarId 'none' — dan pemilihnya ikut disembunyikan di bawah, jadi
+  // filternya dipaksa 'all' supaya pilihan sisa dari mode Owned tidak terbawa.
+  const posts = buildPosts(count, slide.postFilter, { format: postFormat, pillar: isComp ? 'all' : postPillar, sortMetric, source })
   const cols = count === 4 ? 'repeat(4, 1fr)' : count === 6 ? 'repeat(6, 1fr)' : 'repeat(8, 1fr)'
 
   const toggleMetric = (id: string) => {
@@ -196,7 +205,7 @@ export default function VisualSlide({
         ) : (
           <div className="h-full" style={{ display: 'grid', gridTemplateColumns: cols, gap: count === 4 ? '1.2cqw' : count === 6 ? '0.9cqw' : '0.7cqw' }}>
             {posts.map((p, i) => (
-              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} />
+              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} />
             ))}
           </div>
         )}
@@ -214,7 +223,7 @@ export default function VisualSlide({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{t('Visual content')}</h3>
-                <p className="text-[12px] text-[#94a3b8] mt-0.5">Order, format, pillar &amp; metrics — from live data.</p>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5">{isComp ? 'Order, post type & metrics — from live data.' : 'Order, format, pillar & metrics — from live data.'}</p>
               </div>
               <button onClick={() => setCfgOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
                 <span className="material-symbols-outlined text-[20px]">close</span>
@@ -266,7 +275,7 @@ export default function VisualSlide({
               {metricOptions.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Format')}</p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{isComp ? t('Post type') : t('Format')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {formatOptions.map(f => (
                 <button key={f.id} onClick={() => onChange?.({ ...slide, postFormat: f.id })} style={PJ}
@@ -276,11 +285,17 @@ export default function VisualSlide({
               ))}
             </div>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Content pillar')}</p>
-            <select value={postPillar} onChange={e => onChange?.({ ...slide, postPillar: e.target.value })} style={PJ}
-              className="w-full mb-4 h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
-              {pillarOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </select>
+            {/* Pilar konten adalah tag editorial milik brand sendiri; kompetitor tidak
+                punya, jadi pemilihnya tidak muncul di mode competitive review. */}
+            {!isComp && (
+              <>
+                <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Content pillar')}</p>
+                <select value={postPillar} onChange={e => onChange?.({ ...slide, postPillar: e.target.value })} style={PJ}
+                  className="w-full mb-4 h-10 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
+                  {pillarOptions.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+              </>
+            )}
 
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Posts')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">

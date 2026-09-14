@@ -15,10 +15,15 @@ import {
 } from '../data/audienceTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
 import { KpiMetric, ReportKpiMetrics, deltaIsGood, resolveKpiMetric } from '../data/kpiMetrics'
+import {
+  KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiCount, fmtKpiPeriod, fmtKpiRate,
+  kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
+} from '../data/kpiTargets'
 import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool } from '../data/posts'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
 import type { ContentSlide, SlideChrome, AiInsight } from '../data/slideModel'
+import { usesKpiLayout, type KpiCompare } from '../data/slideModel'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Slide = any
@@ -400,24 +405,87 @@ function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, 
   slide.addText(trend, { x: x + pad, y: y + H(11.8), w: w - 2 * pad, h: H(3), fontSize: FS(0.95), fontFace: PJ })
 }
 
-async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, chartMetrics?: ReportChartMetrics, kpiMetrics?: ReportKpiMetrics, metrics?: ReportTableMetrics) {
+/**
+ * Kartu satu KPI brand. Cerminan TargetCard di preview: capaian, lalu target +
+ * periodenya, lalu achievement & run rate — tanpa delta "vs periode lalu", yang
+ * tidak punya arti untuk sebuah target (lihat kpiTargets.ts).
+ */
+function targetCard(slide: Slide, target: KpiTarget, accent: string, count: number, compare: KpiCompare, x: number, y: number, w: number, h: number) {
+  card(slide, x, y, w, h)
+  slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { width: 0 } })
+  const pad = W(1.2)
+  const bw = w - 2 * pad
+  const valueCqw = count <= 3 ? 2.4 : count === 4 ? 2.1 : count === 5 ? 1.85 : 1.6
+  const metaFs = FS(count >= 6 ? 0.64 : count === 5 ? 0.7 : count === 4 ? 0.75 : 0.8)
+  const rateFs = FS(count >= 6 ? 0.72 : count === 5 ? 0.78 : count === 4 ? 0.82 : 0.88)
+
+  slide.addText(kpiTargetLabel(target.metric).toUpperCase(), { x: x + pad, y: y + H(1.6), w: bw, h: H(2.4), fontSize: FS(count >= 6 ? 0.8 : 0.95), bold: true, color: '94A3B8', fontFace: PJ })
+  slide.addText(fmtKpiCount(target.achieved), { x: x + pad, y: y + H(4.6), w: bw, h: H(5), fontSize: FS(valueCqw), bold: true, color: '0F172A', fontFace: PJ })
+  slide.addText(
+    `Target ${target.operation} ${fmtKpiCount(target.target)}  ·  ${fmtKpiPeriod(target.startDate, target.endDate)}`,
+    { x: x + pad, y: y + H(10), w: bw, h: H(2.2), fontSize: metaFs, color: '94A3B8', fontFace: PJ },
+  )
+
+  // Dua baris "label — nilai"; labelnya rata kiri, angkanya rata kanan di kotak
+  // yang sama lebarnya, supaya keduanya sejajar seperti di preview.
+  const rateColor = target.achievementRate == null ? '94A3B8' : kpiOnPace(target) ? '16A34A' : 'DC2626'
+  const all: [string, string, string, boolean][] = [
+    ['Achievement', fmtKpiRate(target.achievementRate), rateColor, true],
+    ['Run rate', fmtKpiRate(target.runRate), '475569', compare === 'run'],
+  ]
+  const rows = compare === 'achievement' ? [all[0]] : compare === 'run' ? [all[1]] : all
+  rows.forEach(([label, value, color, bold], i) => {
+    const ry = y + H(13.2) + i * H(2.6)
+    slide.addText(label, { x: x + pad, y: ry, w: bw, h: H(2.4), fontSize: rateFs, color: '94A3B8', align: 'left', fontFace: PJ })
+    slide.addText(value, { x: x + pad, y: ry, w: bw, h: H(2.4), fontSize: rateFs, bold, color, align: 'right', fontFace: PJ })
+  })
+}
+
+async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, chartMetrics?: ReportChartMetrics, kpiMetrics?: ReportKpiMetrics, metrics?: ReportTableMetrics, kpiTargets?: ReportKpiTargets) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
   s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
-  const n = Math.max(1, slide.metricCount)
-  const gap = n >= 6 ? W(1) : W(1.6)
-  const cardW = (hw - gap * (n - 1)) / n
-  const ry = H(18), rh = H(17)
-  for (let i = 0; i < n; i++) {
-    const key = slide.kpiMetrics[i] ?? null
-    const metric = resolveKpiMetric(kpiMetrics ?? null, metrics ?? null, slide.channel, key)   // "—" when no data; never dummy
-    scorecard(s, metric, colors.primary, n, hx + i * (cardW + gap), ry, cardW, rh)
+  // KPI Overview menggambar target KPI brand; Dashboard Overview menggambar
+  // scorecard metrik dashboard. Barisnya beda tinggi, jadi chart di bawahnya
+  // ikut bergeser — persis seperti ROW_H di preview.
+  const isTargets = slide.type === 'kpi'
+  const ry = H(18), rh = isTargets ? H(20) : H(17)
+
+  if (isTargets) {
+    // Brand tanpa KPI aktif di channel ini: satu blok yang menyebutkan itu,
+    // bukan deretan kartu kosong yang di deck jadi seperti slide yang lupa diisi.
+    if (kpiTargetsFor(kpiTargets ?? null, slide.channel).length === 0) {
+      placeholder(s, hx, ry, hw, rh, 'NO ACTIVE KPI FOR THIS CHANNEL')
+    } else {
+      const compare: KpiCompare = slide.kpiCompare ?? 'both'
+      const n = Math.min(Math.max(1, slide.metricCount), KPI_TARGET_MAX)
+      const gap = n >= 6 ? W(1) : W(1.6)
+      const cardW = (hw - gap * (n - 1)) / n
+      for (let i = 0; i < n; i++) {
+        const target = kpiTargetById(kpiTargets ?? null, slide.channel, slide.kpiMetrics[i] ?? null)
+        const x = hx + i * (cardW + gap)
+        if (target) targetCard(s, target, colors.primary, n, compare, x, ry, cardW, rh)
+        else placeholder(s, x, ry, cardW, rh, 'ADD KPI')
+      }
+    }
+  } else {
+    const n = Math.max(1, slide.metricCount)
+    const gap = n >= 6 ? W(1) : W(1.6)
+    const cardW = (hw - gap * (n - 1)) / n
+    for (let i = 0; i < n; i++) {
+      const key = slide.kpiMetrics[i] ?? null
+      const metric = resolveKpiMetric(kpiMetrics ?? null, metrics ?? null, slide.channel, key)   // "—" when no data; never dummy
+      scorecard(s, metric, colors.primary, n, hx + i * (cardW + gap), ry, cardW, rh)
+    }
   }
 
-  const cy = H(37), ch = H(50)
+  // Jarak 2cqh = gap kolom di SlidePreview; H(87) adalah batas bawah blok isi,
+  // tepat di atas footer. Keduanya dihitung dari rh supaya baris KPI yang lebih
+  // tinggi memendekkan chart, bukan menabrak footer.
+  const cy = ry + rh + H(2), ch = H(87) - (ry + rh + H(2))
   const chartW = W(60)
   await chartCard(pptx, s, slide.chart, colors, hx, cy, chartW, ch, 'DEEP DIVE ANALYSIS', chartMetrics, slide.channel)
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx + chartW + W(2), cy, hw - chartW - W(2), ch, 'SUMMARY & ACTIONS')
@@ -434,8 +502,9 @@ function hslToHex(h: number, sat: number, lig: number): string {
   return to(r) + to(g) + to(b)
 }
 
-// Height of the #id + format·pillar block that sits between the photo and the
-// metric list, plus the padding under it.
+// Height of the #id + caption block (post type, plus the pillar for owned posts)
+// that sits between the photo and the metric list, plus the padding under it.
+// Kompetitor tidak punya pilar, jadi keterangannya lebih pendek — tingginya sama.
 const POST_HEAD_H = H(4.8)
 const METRIC_LINE = 1.25          // lineSpacingMultiple of the metric list
 const POST_IMG_MAX = 0.55         // share of the card the photo gets by default
@@ -517,12 +586,21 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
   const sortMetric = effectiveSortMetric(slide.postSortMetric, populated)
   const shownMetrics = effectiveShownMetrics(slide.postMetrics, populated)
   const format = effectiveFilterId(slide.postFormat, availableFilterIds(source, 'formatId'))
-  const pillar = effectiveFilterId(slide.postPillar, availableFilterIds(source, 'pillarId'))
+  // Pilar hanya milik post sendiri: pemilihnya disembunyikan di mode kompetitor
+  // (lihat VisualSlide), jadi filternya dipaksa 'all' di sini juga — kalau tidak,
+  // pilihan sisa dari mode Owned akan menyaring di ekspor tapi tidak di pratinjau.
+  const pillar = comp ? 'all' : effectiveFilterId(slide.postPillar, availableFilterIds(source, 'pillarId'))
   const posts = buildPosts(n, slide.postFilter, { format, pillar, sortMetric, source })
   const gap = n === 4 ? W(1.2) : n === 6 ? W(0.9) : W(0.7)
   const cw = (hw - gap * (n - 1)) / n
   const gy = H(18), gh = H(49)
-  for (let i = 0; i < posts.length; i++) await postCard(s, posts[i], shownMetrics, n, hx + i * (cw + gap), gy, cw, gh)
+  // Pilar dibuang dari kartu kompetitor — semuanya "No pillar", dan keterangan itu
+  // hanya jadi derau di samping jenis post. postCard merakit keterangannya dari
+  // bagian yang tidak kosong, persis seperti PostCard di pratinjau.
+  for (let i = 0; i < posts.length; i++) {
+    const post = comp ? { ...posts[i], pillar: undefined } : posts[i]
+    await postCard(s, post, shownMetrics, n, hx + i * (cw + gap), gy, cw, gh)
+  }
 
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(69), hw, H(18), 'VISUAL STRATEGY NOTES & INSIGHTS')
   await footer(s, chrome, colors, hx, H(89), hw)
@@ -780,6 +858,8 @@ export interface ReportExportOptions {
   metrics?: ReportTableMetrics | null
   chartMetrics?: ReportChartMetrics | null
   kpiMetrics?: ReportKpiMetrics | null
+  /** Target KPI brand + capaiannya, untuk slide KPI Overview. */
+  kpiTargets?: ReportKpiTargets | null
   postMetrics?: ReportPostMetrics | null
   /** Post kompetitor untuk slide Visual Content bermode competitive review. */
   competitorPosts?: CompetitorPostPool | null
@@ -787,7 +867,7 @@ export interface ReportExportOptions {
   audienceMetrics?: ReportAudienceMetrics | null
 }
 
-export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, postMetrics, competitorPosts, audienceMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
+export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, postMetrics, competitorPosts, audienceMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
   PJ = font
   const { default: PptxGenJS } = await import('pptxgenjs')
   const pptx = new PptxGenJS()
@@ -801,7 +881,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     const chrome = chromes[i]
     if (slide.type === 'section') await addSectionSlide(pptx, slide, chrome, colors)
     else if (slide.type === 'comparison') await addComparisonSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined)
-    else if (slide.type === 'kpi') await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined)
+    else if (usesKpiLayout(slide.type)) await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined, kpiTargets ?? undefined)
     else if (slide.type === 'visual') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts)
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)

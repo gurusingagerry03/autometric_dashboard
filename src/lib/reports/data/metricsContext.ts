@@ -5,6 +5,7 @@ import type { DashPlatform } from '@/components/dashboard/data'
 import type { ReportTableMetrics, SectionMetrics, CompetitorSection, PlatformMetrics } from './tableTypes'
 import type { ReportChartMetrics } from './chartTypes'
 import type { ReportKpiMetrics } from './kpiMetrics'
+import type { ReportKpiTargets } from './kpiTargets'
 import type { ReportPostMetrics } from './posts'
 import type { ReportCompetitorPosts } from './competitorPostsQuery'
 import type { ReportAudienceMetrics } from './audienceTypes'
@@ -41,6 +42,20 @@ export const ReportKpiContext = createContext<ReportKpiMetrics | null>(null)
 
 export function useReportKpi(): ReportKpiMetrics | null {
   return useContext(ReportKpiContext)
+}
+
+/**
+ * Target KPI brand + capaiannya, dipakai slide KPI Overview (bukan Dashboard
+ * Overview, yang tetap memakai ReportKpiContext di atas). Terpisah karena
+ * sumbernya memang lain — `kpi_setting` + `kpi_achievement`, bukan agregat
+ * gold — dan periodenya milik KPI-nya sendiri, bukan bulan report.
+ *
+ * null selama memuat; slide-nya lalu menyebut begitu, tidak menggambar nol.
+ */
+export const ReportKpiTargetContext = createContext<ReportKpiTargets | null>(null)
+
+export function useReportKpiTargets(): ReportKpiTargets | null {
+  return useContext(ReportKpiTargetContext)
 }
 
 /**

@@ -41,7 +41,11 @@ Return ONE flowing analytical paragraph written like a short narrative — conti
 
 /** Per-slide-type analytical focus appended to the data prompt. */
 const SLIDE_FOCUS: Record<SlideType, string> = {
-  kpi: 'Focus on the KPI scorecards: which metrics moved most vs the previous period, and what the deltas imply together.',
+  // KPI Overview membawa target, bukan perbandingan antar periode: tidak ada
+  // "vs periode lalu" untuk dibahas, dan memintanya akan mengundang model
+  // mengarang delta yang tidak ada di datanya.
+  kpi: 'Focus on progress against the targets set for this brand. For each KPI compare its achievement rate against its run rate — the share of the target period already elapsed — to say which targets are ahead of schedule and which are behind, by how much, and what that implies for the remaining days of each period. Never describe these as period-over-period changes; there is no previous period here, only a target and a deadline.',
+  dashboard_overview: 'Focus on the KPI scorecards: which metrics moved most vs the previous period, and what the deltas imply together.',
   dashboard: 'Focus on the trend in the main chart and the supporting table: where the series accelerates/decelerates and which rows explain it.',
   comparison: 'Focus on the two compared series/periods: what diverged, what converged, and which side drives the difference.',
   overview: 'Focus on the headline metrics as a whole: the dominant story across reach, engagement and growth.',

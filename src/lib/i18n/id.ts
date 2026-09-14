@@ -657,8 +657,13 @@ export const ID: Record<string, string> = {
 
   /* ── Brands: tab KPI ──────────────────────────────────────────────── */
   'YTD Periode': 'Periode YTD',
-  'Default period for new KPIs — each KPI can still use its own.':
-    'Periode awal untuk KPI baru — tiap KPI tetap bisa memakai rentangnya sendiri.',
+  'Pick the starting month — the window is always 12 months.':
+    'Pilih bulan awalnya — rentangnya selalu 12 bulan.',
+  'No custom metric yet — shared with Report Maker once created.':
+    'Belum ada metrik kustom — begitu dibuat, ikut tersedia di Report Maker.',
+  '{n} saved — the same library Report Maker uses.':
+    '{n} metrik tersimpan — pustaka yang sama dengan Report Maker.',
+  'Manage': 'Kelola',
   'Set KPI': 'Atur KPI',
   'Targets are measured daily against this brand’s metrics.':
     'Target diukur harian terhadap metrik brand ini.',
@@ -673,6 +678,15 @@ export const ID: Record<string, string> = {
   'No KPI set for this brand yet.': 'Belum ada KPI untuk brand ini.',
   'Failed to remove KPI.': 'Gagal menghapus KPI.',
   'Inactive': 'Nonaktif',
+
+  /* Nama metrik KPI (KPI_METRIC_LABEL). Yang sudah ada di bagian dashboard —
+     Reach, Engagement, Likes, Comments, Shares, Views — sengaja tidak diulang:
+     tabelnya satu, dan entri kedua hanya akan menimpa yang pertama. */
+  'Followers Growth': 'Pertumbuhan Pengikut',
+  'Impressions': 'Impresi',
+  'Video Views': 'Tayangan Video',
+  'Saves': 'Disimpan',
+  'Post Count': 'Jumlah Post',
 
   /* ── Brands: connect & create ─────────────────────────────────────── */
   'Connect Account': 'Hubungkan Akun',
@@ -1000,13 +1014,32 @@ export const ID: Record<string, string> = {
   'Save your changes back onto it, or keep it and create a separate template.':
     'Simpan perubahanmu ke template itu, atau biarkan dan buat template terpisah.',
   'Back to channels': 'Kembali ke kanal',
+  'Back to layouts': 'Kembali ke layout',
   'Soon': 'Segera',
   'Configure Data Table': 'Atur Tabel Data',
   'Select a template and customize metrics.': 'Pilih template dan sesuaikan metriknya.',
   'Visible Columns': 'Kolom Terlihat',
+  'Content Level': 'Level Konten',
+  'Channel Level': 'Level Channel',
   'Add metric': 'Tambah metrik',
   'No prior-period data': 'Tidak ada data periode sebelumnya',
   'vs last period': 'vs periode lalu',
+  'Target': 'Target',
+  'Achievement': 'Capaian',
+  'Run rate': 'Run rate',
+  'Loading KPI targets…': 'Memuat target KPI…',
+  'No active KPI for this channel': 'Belum ada KPI aktif untuk channel ini',
+  'Set targets on the brand’s KPI tab.': 'Atur targetnya di tab KPI brand.',
+  'Select KPI': 'Pilih KPI',
+  'Active KPI targets for {channel} — set on the brand’s KPI tab.':
+    'Target KPI aktif untuk {channel} — diatur di tab KPI brand.',
+  'achieved': 'tercapai',
+  'Cards & comparison': 'Kartu & comparison',
+  'Comparison': 'Comparison',
+  'Which rate each card shows under its value.': 'Angka mana yang ditampilkan tiap kartu di bawah nilainya.',
+  'Achievement & run rate': 'Achievement & run rate',
+  'Achievement rate only': 'Achievement rate saja',
+  'Run rate only': 'Run rate saja',
   'Number of metrics': 'Jumlah metrik',
   'How many scorecards to show.': 'Berapa banyak kartu skor yang ditampilkan.',
   'Switch visualization type': 'Ganti jenis visualisasi',
@@ -1019,6 +1052,7 @@ export const ID: Record<string, string> = {
   'Order': 'Urutan',
   'Rank by (metric)': 'Urutkan berdasarkan (metrik)',
   'Content pillar': 'Pilar konten',
+  'Post type': 'Jenis post',
   'Metrics': 'Metrik',
   'shown on each card': 'ditampilkan di tiap kartu',
   '• Type a key insight per line…': '• Ketik satu insight utama per baris…',

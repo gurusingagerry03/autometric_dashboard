@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  TABLE_TYPES, TableConfig,
+  TABLE_TYPES, TableConfig, TableColumn,
   columnsForChannel, defaultColumnsFor, isTypeEnabledForChannel, normalizeColumnIds, typeChannelHint,
 } from '@/lib/reports/data/tableTypes'
 import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
@@ -12,6 +12,26 @@ import CustomMetricModal from './CustomMetricModal'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
+
+/**
+ * Kolom dipecah jadi blok-blok sesuai `TableColumn.group`, mengikuti urutan
+ * aslinya (tidak diurutkan ulang: urutan kolom adalah urutan spesifikasi).
+ *
+ * Dipakai tabel Cross-Level. Labelnya sengaja tidak lagi membawa "· Content" /
+ * "· Channel" — di tabel laporan itu jargon internal — jadi heading kelompok
+ * inilah satu-satunya yang memberi tahu level sebuah metrik. Tanpa itu, dua
+ * "Profile Visit" (ct: dan ch:, artinya berbeda) tidak bisa dibedakan di daftar.
+ * Tabel tanpa `group` tetap satu blok tanpa judul, seperti sebelumnya.
+ */
+function groupColumns(cols: TableColumn[]): { group?: string; cols: TableColumn[] }[] {
+  const out: { group?: string; cols: TableColumn[] }[] = []
+  for (const c of cols) {
+    const last = out[out.length - 1]
+    if (last && last.group === c.group) last.cols.push(c)
+    else out.push({ group: c.group, cols: [c] })
+  }
+  return out
+}
 
 // content_level now carries a proper all-channel layout (Content Performance spec),
 // so it's the sensible default on every channel including "all".
@@ -174,21 +194,28 @@ export default function TableSelectionModal({
                 Reset to Default
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {visibleColumns.map(col => {
-                const on = columns.includes(col.id)
-                return (
-                  <label key={col.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer select-none transition-all ${on ? 'bg-[#F1F2FB] border-[#bcd9cf]' : 'border-[#eef0f2] hover:bg-[#f9fafb]'}`}>
-                    <span className={`w-4 h-4 rounded border flex items-center justify-center ${on ? 'bg-[#2C3079] border-[#2C3079]' : 'border-[#cbd5e1] bg-white'}`}>
-                      {on && <span className="material-symbols-outlined text-[12px] text-white">check</span>}
-                    </span>
-                    <input type="checkbox" className="hidden" checked={on} onChange={() => toggle(col.id)} />
-                    <span style={PJ} className={`text-[12px] font-medium ${on ? 'text-[#2C3079]' : 'text-[#64748b]'}`}>{col.label}</span>
-                    <span className="ml-auto"><MetricInfo metricKey={col.id} size={13} /></span>
-                  </label>
-                )
-              })}
-            </div>
+            {groupColumns(visibleColumns).map((g, gi) => (
+              <div key={g.group ?? gi} className={gi > 0 ? 'mt-4' : ''}>
+                {g.group && (
+                  <p style={PJ} className="text-[10.5px] font-bold uppercase tracking-wider text-[#cbd5e1] mb-2">{t(g.group)}</p>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {g.cols.map(col => {
+                    const on = columns.includes(col.id)
+                    return (
+                      <label key={col.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer select-none transition-all ${on ? 'bg-[#F1F2FB] border-[#bcd9cf]' : 'border-[#eef0f2] hover:bg-[#f9fafb]'}`}>
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center ${on ? 'bg-[#2C3079] border-[#2C3079]' : 'border-[#cbd5e1] bg-white'}`}>
+                          {on && <span className="material-symbols-outlined text-[12px] text-white">check</span>}
+                        </span>
+                        <input type="checkbox" className="hidden" checked={on} onChange={() => toggle(col.id)} />
+                        <span style={PJ} className={`text-[12px] font-medium ${on ? 'text-[#2C3079]' : 'text-[#64748b]'}`}>{col.label}</span>
+                        <span className="ml-auto"><MetricInfo metricKey={col.id} size={13} /></span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
 
             {/* Custom metrics (org library) — selectable like built-in columns. */}
             {showCustom && (

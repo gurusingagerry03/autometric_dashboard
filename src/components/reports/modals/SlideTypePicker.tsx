@@ -15,18 +15,41 @@ interface Item {
   enabled: boolean
 }
 
+/** Pintu ke langkah ketiga, BUKAN sebuah SlideType. Memilihnya tidak membuat
+ *  slide apa pun; yang akhirnya dikirim ke onSelect adalah 'dashboard_overview'
+ *  atau 'kpi'. Id-nya sengaja tidak menyerupai SlideType mana pun supaya tidak
+ *  pernah lolos ke slideModel kalau suatu saat alurnya berubah. */
+const KPI_DASHBOARD = 'kpi_dashboard'
+
 // Modeled on report_2's LAYOUT_TEMPLATES. Three are built; the rest are listed
 // (matching the reference) but disabled until their layouts exist.
+//
+// Standard Dashboard tetap berdiri sendiri di sini — layoutnya (chart + insight +
+// tabel) memang lain sendiri. Yang bercabang cuma entri di bawahnya: Dashboard
+// Overview dan KPI Overview sama-sama memakai layout KPI, jadi keduanya masuk
+// lewat satu pintu dan dipisah di langkah berikutnya.
 const TEMPLATES: Item[] = [
   { id: 'section', name: 'Section Heading', desc: 'Centered section divider title', icon: 'title', enabled: true },
   { id: 'dashboard', name: 'Standard Dashboard', desc: 'Chart, Key Insights & Data Table', icon: 'dashboard', enabled: true },
-  { id: 'kpi', name: 'KPI Overview', desc: 'Top Metrics with Deep Dive', icon: 'leaderboard', enabled: true },
+  { id: KPI_DASHBOARD, name: 'KPI/Dashboard Overview', desc: 'Top Metrics with Deep Dive', icon: 'leaderboard', enabled: true },
   { id: 'comparison', name: 'Comparison View', desc: 'Side-by-side Metric Analysis', icon: 'compare_arrows', enabled: true },
   { id: 'visual', name: 'Visual Analysis', desc: 'Media / Screenshot & Analysis', icon: 'image', enabled: true },
   { id: 'overview', name: 'Overview Slide', desc: 'Full Visualization & Notes', icon: 'view_quilt', enabled: true },
   { id: 'sentiment', name: 'Audience Sentiment', desc: 'Comments & tagged posts + word cloud', icon: 'sentiment_satisfied', enabled: true },
   { id: 'demographic', name: 'Audience Demographics', desc: 'Age & gender, month over month', icon: 'groups', enabled: true },
   { id: 'custom', name: 'Custom Template', desc: 'Configurable Grid (2×2, 3×3)', icon: 'grid_view', enabled: false },
+]
+
+/** Langkah ketiga: dua slide yang berbagi layout KPI tapi isinya berbeda —
+ *  Dashboard Overview membandingkan metrik dengan periode sebelumnya, KPI
+ *  Overview membandingkan capaian dengan target yang di-set di tab KPI brand.
+ *
+ *  Bentuknya sengaja Item yang sama dengan TEMPLATES supaya kartunya dirender
+ *  markup yang sama persis — satu-satunya beda, memilih di sini menutup modal
+ *  alih-alih membuka langkah berikutnya. */
+const KPI_DASHBOARD_VARIANTS: Item[] = [
+  { id: 'dashboard_overview', name: 'Dashboard Overview', desc: 'Dashboard metrics vs the previous period', icon: 'dashboard', enabled: true },
+  { id: 'kpi', name: 'KPI Overview', desc: 'Brand KPI targets — achievement & run rate', icon: 'leaderboard', enabled: true },
 ]
 
 // When "All Channels" is picked, only these layouts make sense.
@@ -61,15 +84,25 @@ export default function SlideTypePicker({
 }) {
   const t = useT()
   const [channel, setChannel] = useState<string | null>(null)
+  // Langkah ketiga (bentuk slide) hanya terbuka lewat entri gabungan.
+  const [variantStep, setVariantStep] = useState(false)
 
   // Always start at the channel step when (re)opened.
-  useEffect(() => { if (open) setChannel(null) }, [open])
+  useEffect(() => { if (open) { setChannel(null); setVariantStep(false) } }, [open])
 
   if (!open) return null
 
   const templates = channel === 'all'
     ? TEMPLATES.filter(t => ALL_CHANNEL_TYPES.has(t.id as string))
     : TEMPLATES
+
+  // Kartu yang ditampilkan langkah kedua/ketiga — markupnya satu, isinya yang bertukar.
+  const items = variantStep ? KPI_DASHBOARD_VARIANTS : templates
+  const pick = (tpl: Item) => {
+    if (!tpl.enabled) return
+    if (tpl.id === KPI_DASHBOARD) { setVariantStep(true); return }
+    onSelect(tpl.id as SlideType, channel!)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -81,8 +114,8 @@ export default function SlideTypePicker({
         <div className="flex items-center gap-3 px-6 py-4 border-b border-[#f0f1f2]">
           {channel && (
             <button
-              onClick={() => setChannel(null)}
-              title={t('Back to channels')}
+              onClick={() => (variantStep ? setVariantStep(false) : setChannel(null))}
+              title={variantStep ? t('Back to layouts') : t('Back to channels')}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors"
             >
               <span className="material-symbols-outlined text-[20px]">arrow_back</span>
@@ -90,14 +123,16 @@ export default function SlideTypePicker({
           )}
           <div className="flex-1">
             <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a]">
-              {channel ? 'Choose a slide layout' : 'Choose a channel'}
+              {variantStep ? 'Choose a template' : channel ? 'Choose a slide layout' : 'Choose a channel'}
             </h2>
             <p className="text-[12px] text-[#94a3b8] mt-0.5">
-              {channel
-                ? channel === 'all'
-                  ? 'All Channels supports Overview & Comparison layouts.'
-                  : 'Pick a template — content fills with sample data you can edit.'
-                : 'Which channel is this slide about?'}
+              {variantStep
+                ? 'Same layout, different content — pick which one this slide is.'
+                : channel
+                  ? channel === 'all'
+                    ? 'All Channels supports Overview & Comparison layouts.'
+                    : 'Pick a template — content fills with sample data you can edit.'
+                  : 'Which channel is this slide about?'}
             </p>
           </div>
           <button
@@ -133,14 +168,14 @@ export default function SlideTypePicker({
           </div>
         )}
 
-        {/* Step 2 — layout */}
+        {/* Step 2 — layout, dan Step 3 — bentuk slide di balik entri gabungan */}
         {channel && (
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {templates.map(tpl => (
+            {items.map(tpl => (
               <button
                 key={tpl.id}
                 disabled={!tpl.enabled}
-                onClick={() => tpl.enabled && onSelect(tpl.id as SlideType, channel)}
+                onClick={() => pick(tpl)}
                 className={`group flex items-center gap-3.5 p-4 rounded-xl border text-left transition-all ${
                   tpl.enabled
                     ? 'border-[#e5e7eb] hover:border-[#2C3079] hover:bg-[#F1F2FB] hover:shadow-sm cursor-pointer'

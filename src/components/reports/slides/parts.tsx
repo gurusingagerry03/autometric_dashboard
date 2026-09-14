@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
-import { SlideChrome, ContentSlide } from '@/lib/reports/data/slideModel'
-import { useReportKpi, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { SlideChrome, ContentSlide, usesKpiLayout } from '@/lib/reports/data/slideModel'
+import { useReportKpi, useReportKpiTargets, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import {
   AGE_BUCKETS, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
   demographicsFor, sentimentFor, type SourceFilter,
 } from '@/lib/reports/data/audienceTypes'
 import { kpiDefsForChannel, kpiMetricFor, resolveKpiMetric, type KpiMetric } from '@/lib/reports/data/kpiMetrics'
+import { fmtKpiPeriod, kpiTargetById, kpiTargetLabel } from '@/lib/reports/data/kpiTargets'
 import { TABLE_TYPES, buildTable, columnsForChannel, customColumnsFrom } from '@/lib/reports/data/tableTypes'
 import { resolveLineData, resolveBarData, type ChartConfig } from '@/lib/reports/data/chartData'
 import { buildPosts } from '@/lib/reports/data/posts'
@@ -152,7 +153,7 @@ function chartToData(cfg: ChartConfig | null, chart: ReturnType<typeof useReport
 /** Build the AI payload from what THIS slide actually shows (its table/chart/kpi/posts). */
 function gatherSlideData(
   slide: ContentSlide,
-  ctx: { kpi: ReturnType<typeof useReportKpi>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience> },
+  ctx: { kpi: ReturnType<typeof useReportKpi>; kpiTargets: ReturnType<typeof useReportKpiTargets>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience> },
 ) {
   const ch = slide.channel
   const out: Record<string, unknown> = { channel: ch }
@@ -179,7 +180,23 @@ function gatherSlideData(
   } else if (slide.type !== 'overview' || overviewMode === 'chart') {
     const c = chartToData(slide.chart, ctx.chart, ch); if (c) out.chart = c
   }
+  // KPI Overview membawa target, bukan scorecard: yang dikirim adalah kartu yang
+  // BENAR-BENAR digambar (shownKpiTargets), supaya ringkasannya tidak pernah
+  // membahas KPI yang tidak terlihat di slide yang sama.
   if (slide.type === 'kpi') {
+    out.kpiTargets = slide.kpiMetrics
+      .slice(0, Math.max(1, slide.metricCount))
+      .map(id => kpiTargetById(ctx.kpiTargets, ch, id))
+      .filter((t): t is NonNullable<typeof t> => !!t)
+      .map(t => ({
+      metric: kpiTargetLabel(t.metric),
+      target: t.target,
+      achieved: t.achieved,
+      achievementRatePct: t.achievementRate,
+      runRatePct: t.runRate,
+      period: fmtKpiPeriod(t.startDate, t.endDate),
+    }))
+  } else if (usesKpiLayout(slide.type)) {
     out.scorecards = slide.kpiMetrics.map(k => resolveKpiMetric(ctx.kpi, ctx.table, ch, k)).filter((m): m is KpiMetric => !!m).map(kpiRow)
   }
   // Sentimen: kirim angka MUTLAK bersama sharenya. Tanpa jumlahnya, model tidak
@@ -229,6 +246,7 @@ function gatherSlideData(
   }
   const has = out.table || out.chart || out.chartLeft || out.sentiment || out.demographics
     || (out.scorecards as unknown[] | undefined)?.length || (out.posts as unknown[] | undefined)?.length
+    || (out.kpiTargets as unknown[] | undefined)?.length
   if (!has) {
     out.metrics = kpiDefsForChannel(ch).map(d => kpiMetricFor(ctx.kpi, ch, d.key)).filter((m): m is KpiMetric => !!m && m.value !== '—').map(kpiRow)
   }
@@ -258,6 +276,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
 }) {
   const t = useT()
   const kpi = useReportKpi()
+  const kpiTargets = useReportKpiTargets()
   const table = useReportMetrics()
   const chart = useReportChart()
   const posts = useReportPosts()
@@ -272,7 +291,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
     if (!ai || loading) return
     setLoading(true); setErr(null)
     try {
-      const data = gatherSlideData(slide, { kpi, table, chart, posts, audience })
+      const data = gatherSlideData(slide, { kpi, kpiTargets, table, chart, posts, audience })
       const res = await fetch(`/api/organizations/${encodeURIComponent(ai.orgId)}/reports/ai-insight`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slideType: slide.type, channel: slide.channel, brandName: ai.brandName, period: ai.period, title: slide.title, data }),

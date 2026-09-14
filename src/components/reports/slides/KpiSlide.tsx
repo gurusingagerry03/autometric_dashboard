@@ -2,14 +2,25 @@
 
 import { useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
-import { ContentSlide, ConfigBlock } from '@/lib/reports/data/slideModel'
+import {
+  ContentSlide, ConfigBlock, KPI_COMPARES, KPI_COMPARE_LABEL, type KpiCompare,
+} from '@/lib/reports/data/slideModel'
 import { KpiMetric, deltaIsGood, resolveKpiMetric } from '@/lib/reports/data/kpiMetrics'
-import { useReportKpi, useReportMetrics } from '@/lib/reports/data/metricsContext'
+import {
+  KPI_TARGET_MAX, KpiTarget, fmtKpiCount, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
+  kpiTargetById, kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
+} from '@/lib/reports/data/kpiTargets'
+import { useReportKpi, useReportKpiTargets, useReportMetrics } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { ChartBlock } from './charts'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const COUNTS = [3, 4, 5, 6]
+
+// Tinggi baris kartu. KPI Overview lebih tinggi karena kartunya membawa dua baris
+// yang tidak dimiliki scorecard dashboard: target + periodenya, dan dua tingkat
+// (achievement & run rate) alih-alih satu badge delta.
+const ROW_H = { kpi: '20cqh', dashboard: '17cqh' } as const
 
 // Font sizes scale with the number of scorecards (smaller when there are more).
 function sizesFor(n: number) {
@@ -71,10 +82,169 @@ function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMe
   )
 }
 
+// Ukuran huruf kartu target, mengecil seiring jumlah kartu — sejajar dengan
+// sizesFor di atas, tapi punya dua ukuran tambahan untuk baris meta dan tingkat.
+function targetSizesFor(n: number) {
+  if (n <= 3) return { value: '2.4cqw', label: '0.95cqw', meta: '0.8cqw', rate: '0.88cqw' }
+  if (n === 4) return { value: '2.1cqw', label: '0.9cqw', meta: '0.75cqw', rate: '0.82cqw' }
+  if (n === 5) return { value: '1.85cqw', label: '0.85cqw', meta: '0.7cqw', rate: '0.78cqw' }
+  return { value: '1.6cqw', label: '0.8cqw', meta: '0.64cqw', rate: '0.72cqw' }
+}
+
+/** Satu baris "label — nilai" di kaki kartu target. */
+function RateRow({ label, value, size, color, strong }: { label: string; value: string; size: string; color: string; strong?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between" style={{ gap: '0.4cqw', fontSize: size, ...PJ }}>
+      <span style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ color, fontWeight: strong ? 800 : 700, whiteSpace: 'nowrap' }}>{value}</span>
+    </div>
+  )
+}
+
+/**
+ * Kartu satu KPI: capaiannya, targetnya, periodenya, lalu achievement & run rate.
+ *
+ * Tidak ada delta "vs periode lalu" di sini, dan itu disengaja: sebuah KPI tidak
+ * punya periode sebelumnya untuk dibandingkan — ia punya target dan tenggat.
+ * Yang menggantikannya adalah run rate, yang menyebut berapa banyak periodenya
+ * sudah terpakai, sehingga achievement rate bisa dibaca sebagai di depan atau
+ * tertinggal dari jadwal (lihat kpiOnPace).
+ */
+function TargetCard({
+  target, accent, count, compare, editable, onClick,
+}: {
+  target: KpiTarget | undefined; accent: string; count: number
+  compare: KpiCompare; editable: boolean; onClick?: () => void
+}) {
+  const t = useT()
+  const s = targetSizesFor(count)
+
+  // Slot kosong — atau KPI-nya sudah dihapus / pindah channel, yang dari sini
+  // tidak bisa dibedakan dan memang tidak perlu: dua-duanya diselesaikan dengan
+  // memilih ulang.
+  if (!target) {
+    return (
+      <button
+        onClick={editable ? onClick : undefined}
+        disabled={!editable}
+        className={`w-full h-full flex flex-col items-center justify-center rounded-[1.2cqw] border-2 border-dashed transition-colors ${
+          editable ? 'border-[#cbd5e1] text-[#94a3b8] hover:border-[#2C3079] hover:text-[#2C3079] hover:bg-[#F1F2FB] cursor-pointer' : 'border-[#dbe1e8] text-[#b6bcc4] cursor-default'
+        }`}
+        style={{ background: 'rgba(255,255,255,0.45)' }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: '2.2cqw' }}>add</span>
+        <span style={{ fontSize: s.meta, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', ...PJ }}>{t('Add KPI')}</span>
+      </button>
+    )
+  }
+
+  const pace = kpiOnPace(target)
+  const rateColor = target.achievementRate == null ? '#94a3b8' : pace ? '#16a34a' : '#dc2626'
+  return (
+    <div
+      onClick={editable ? onClick : undefined}
+      className={`group relative w-full h-full rounded-[1.2cqw] bg-white border border-[#e8ebee] overflow-hidden flex flex-col justify-between ${editable ? 'cursor-pointer' : ''}`}
+      style={{ padding: count >= 6 ? '1.4cqh 1cqw' : '1.6cqh 1.2cqw', boxShadow: '0 1cqh 2.4cqh -1.4cqh rgba(16,24,40,0.18)' }}
+    >
+      <div className="absolute top-0 left-0" style={{ width: '100%', height: '0.5cqh', background: accent }} />
+
+      <div className="flex items-center justify-between" style={{ marginTop: '0.3cqh' }}>
+        <span className="flex items-center min-w-0" style={{ gap: '0.5cqw', fontSize: s.label, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em', ...PJ }}>
+          <span className="material-symbols-outlined" style={{ fontSize: `calc(${s.label} + 0.4cqw)`, color: accent }}>{kpiTargetIcon(target.metric)}</span>
+          <span className="truncate">{t(kpiTargetLabel(target.metric))}</span>
+        </span>
+        {editable && (
+          <span className="material-symbols-outlined opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: '1.4cqw', color: '#cbd5e1' }}>edit</span>
+        )}
+      </div>
+
+      <div style={{ fontSize: s.value, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, ...PJ }}>
+        {fmtKpiCount(target.achieved)}
+      </div>
+
+      {/* Target dan periodenya — dua dari tiga hal yang mendefinisikan KPI ini
+          (metriknya sudah jadi judul kartu). Tanpa keduanya, angka capaian di
+          atas tidak bisa dinilai siapa pun yang tidak ikut men-set-nya. */}
+      <div className="truncate" style={{ fontSize: s.meta, color: '#94a3b8', ...PJ }}>
+        {t('Target')} {target.operation} {fmtKpiCount(target.target)} · {fmtKpiPeriod(target.startDate, target.endDate)}
+      </div>
+
+      <div className="flex flex-col" style={{ gap: '0.35cqh' }}>
+        {compare !== 'run' && (
+          <RateRow label={t('Achievement')} value={fmtKpiRate(target.achievementRate)} size={s.rate} color={rateColor} strong />
+        )}
+        {compare !== 'achievement' && (
+          <RateRow label={t('Run rate')} value={fmtKpiRate(target.runRate)} size={s.rate} color="#475569" strong={compare === 'run'} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Baris kartu KPI Overview — slot yang bisa dipilih, persis seperti scorecard
+ * Dashboard Overview. Yang berbeda hanya isi slotnya: `kpiMetrics[i]` di sini
+ * menyimpan `kpiId`, dan yang ditawarkan pemilihnya adalah KPI aktif brand,
+ * bukan katalog metrik dashboard.
+ */
+function TargetRow({
+  slide, accent, editable, onConfigure,
+}: {
+  slide: ContentSlide; accent: string; editable: boolean
+  onConfigure?: (block: ConfigBlock) => void
+}) {
+  const t = useT()
+  const targets = useReportKpiTargets()
+  const count = Math.min(Math.max(1, slide.metricCount), KPI_TARGET_MAX)
+  const compare = slide.kpiCompare ?? 'both'
+
+  // Belum ada satu pun KPI aktif: kartu kosong yang bisa diklik tidak menolong
+  // di sini — pemilihnya juga akan kosong — jadi barisnya menyebut di mana
+  // KPI-nya di-set, bukan mengundang klik yang tidak ada ujungnya.
+  if (targets === null || kpiTargetsFor(targets, slide.channel).length === 0) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center rounded-[1.2cqw] border-2 border-dashed border-[#dbe1e8]" style={{ background: 'rgba(255,255,255,0.45)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '2.6cqw', color: '#c4c9d4' }}>flag</span>
+        <span style={{ fontSize: '1.1cqw', fontWeight: 700, color: '#94a3b8', marginTop: '0.6cqh', ...PJ }}>
+          {targets === null ? t('Loading KPI targets…') : t('No active KPI for this channel')}
+        </span>
+        {targets !== null && (
+          <span style={{ fontSize: '0.95cqw', color: '#b6bcc4', marginTop: '0.3cqh', ...PJ }}>
+            {t('Set targets on the brand’s KPI tab.')}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full" style={{ gap: count >= 6 ? '1cqw' : '1.6cqw' }}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} style={{ flex: 1, minWidth: 0 }}>
+          <TargetCard
+            target={kpiTargetById(targets, slide.channel, slide.kpiMetrics[i] ?? null)}
+            accent={accent}
+            count={count}
+            compare={compare}
+            editable={editable}
+            onClick={() => onConfigure?.(`kpi-${i}`)}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /**
  * KPI Overview body — a row of metric scorecards over a deep-dive chart + summary.
  * Clicking a scorecard opens metric selection; the metric count is changed via the
  * edit button (modal). Header & footer come from the slide shell (SlidePreview).
+ *
+ * Dua tipe slide memakai badan ini dan hanya barisnya yang berbeda:
+ *   - 'dashboard_overview' → scorecard metrik dashboard, dibandingkan dengan
+ *     periode sebelumnya, metriknya dipilih sendiri per kartu.
+ *   - 'kpi'                → target KPI brand, dibandingkan dengan targetnya,
+ *     isinya datang dari tab KPI brand (lihat TargetRow).
  */
 export default function KpiSlide({
   slide, colors, editable, onChange, onConfigure,
@@ -93,34 +263,39 @@ export default function KpiSlide({
   // Real scorecard values only — "—" while loading or when a metric has no data (never dummy).
   // A custom-metric key resolves from the table payload (same value the table shows).
   const metricFor = (key: string | null) => resolveKpiMetric(kpi, table, slide.channel, key)
+  const isTargets = slide.type === 'kpi'
 
   return (
     <>
       {/* Scorecards */}
-      <div style={{ height: '17cqh', flexShrink: 0, position: 'relative' }}>
+      <div style={{ height: isTargets ? ROW_H.kpi : ROW_H.dashboard, flexShrink: 0, position: 'relative' }}>
         {editable && (
           <button
             onClick={() => setCountOpen(true)}
-            title={t('Number of metrics')}
+            title={isTargets ? t('Cards & comparison') : t('Number of metrics')}
             className="absolute z-10 flex items-center justify-center rounded-[0.5cqw] bg-white border border-[#e2e8f0] text-[#94a3b8] hover:text-[#2C3079] hover:border-[#cbd5e1] shadow-sm transition-colors"
             style={{ top: '-3cqh', right: 0, width: '2.6cqw', height: '2.6cqw' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: '1.5cqw' }}>tune</span>
           </button>
         )}
-        <div className="flex h-full" style={{ gap: count >= 6 ? '1cqw' : '1.6cqw' }}>
-          {Array.from({ length: count }, (_, i) => (
-            <div key={i} style={{ flex: 1, minWidth: 0 }}>
-              <Scorecard
-                metric={metricFor(slide.kpiMetrics[i] ?? null)}
-                accent={colors.primary}
-                count={count}
-                editable={editable}
-                onClick={() => onConfigure?.(`kpi-${i}`)}
-              />
-            </div>
-          ))}
-        </div>
+        {isTargets ? (
+          <TargetRow slide={slide} accent={colors.primary} editable={editable} onConfigure={onConfigure} />
+        ) : (
+          <div className="flex h-full" style={{ gap: count >= 6 ? '1cqw' : '1.6cqw' }}>
+            {Array.from({ length: count }, (_, i) => (
+              <div key={i} style={{ flex: 1, minWidth: 0 }}>
+                <Scorecard
+                  metric={metricFor(slide.kpiMetrics[i] ?? null)}
+                  accent={colors.primary}
+                  count={count}
+                  editable={editable}
+                  onClick={() => onConfigure?.(`kpi-${i}`)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Deep dive + summary */}
@@ -151,7 +326,7 @@ export default function KpiSlide({
               {COUNTS.map(n => (
                 <button
                   key={n}
-                  onClick={() => { onChange?.({ ...slide, metricCount: n }); setCountOpen(false) }}
+                  onClick={() => { onChange?.({ ...slide, metricCount: n }); if (!isTargets) setCountOpen(false) }}
                   style={PJ}
                   className={`py-4 rounded-xl border flex flex-col items-center gap-1 transition-all ${count === n ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}
                 >
@@ -160,6 +335,35 @@ export default function KpiSlide({
                 </button>
               ))}
             </div>
+
+            {/* Comparison — hanya KPI Overview yang punya pilihan ini. Dashboard
+                Overview cuma punya satu pembanding yang masuk akal (periode
+                sebelumnya), jadi menawarkannya di sana hanya akan jadi pilihan
+                dengan satu isi. */}
+            {isTargets && (
+              <div className="mt-5 pt-4 border-t border-[#f0f1f2]">
+                <h3 style={PJ} className="text-[14px] font-bold text-[#0f172a]">{t('Comparison')}</h3>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5 mb-3">{t('Which rate each card shows under its value.')}</p>
+                <div className="flex flex-col gap-2">
+                  {KPI_COMPARES.map(mode => {
+                    const on = (slide.kpiCompare ?? 'both') === mode
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => { onChange?.({ ...slide, kpiCompare: mode }); setCountOpen(false) }}
+                        style={PJ}
+                        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all ${on ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}
+                      >
+                        <span className={`material-symbols-outlined text-[18px] ${on ? 'text-[#2C3079]' : 'text-[#cbd5e1]'}`}>
+                          {on ? 'radio_button_checked' : 'radio_button_unchecked'}
+                        </span>
+                        <span className="text-[12.5px] font-semibold">{t(KPI_COMPARE_LABEL[mode])}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

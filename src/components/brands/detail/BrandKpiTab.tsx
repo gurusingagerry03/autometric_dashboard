@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useBrandDetail } from './BrandDetailContext'
 import PlatformIcon from '../PlatformIcon'
-import DateRangePicker, { fmtSelection, todayISO, withResolved, type DateSelection } from '@/components/dashboard/DateRangePicker'
+import DateRangePicker, { fmtSelection, withResolved, type DateSelection } from '@/components/dashboard/DateRangePicker'
+import CustomMetricModal from '@/components/reports/modals/CustomMetricModal'
+import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
+import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import {
   KPI_METRICS_BY_PLATFORM, KPI_METRIC_LABEL, KPI_OPERATIONS, KPI_PLATFORMS,
   type KpiInput, type KpiMetric, type KpiOperation, type KpiPlatform, type KpiRow,
@@ -41,20 +44,60 @@ function draftToInput(d: Draft): KpiInput | null {
 
 const fieldCls = 'h-9 w-full rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80]'
 
+// Nama bulan dalam Inggris adalah KUNCI terjemahan — sama seperti DateRangePicker,
+// yang memetakan empat yang berbeda di Indonesia (May, Aug, Oct, Dec).
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const
+const pad2 = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * Rentang 12 bulan penuh yang DIMULAI dari (year, month0).
+ *
+ * Panjangnya dipatok, bukan dipilih: YTD di sini selalu satu tahun penuh, dan
+ * yang ditentukan pemakai cuma bulan awalnya. Akhirnya dihitung sebagai hari
+ * terakhir bulan ke-12 — bukan "tanggal yang sama tahun depan" — supaya Feb dan
+ * bulan 30 hari tidak meleset sehari.
+ */
+function twelveMonthsFrom(year: number, month0: number): { start: string; end: string } {
+  const endAbs = year * 12 + month0 + 11
+  const ey = Math.floor(endAbs / 12)
+  const em = endAbs % 12
+  const lastDay = new Date(Date.UTC(ey, em + 1, 0)).getUTCDate()
+  return { start: `${year}-${pad2(month0 + 1)}-01`, end: `${ey}-${pad2(em + 1)}-${pad2(lastDay)}` }
+}
+
 export default function BrandKpiTab() {
   const t = useT()
   const { brand } = useBrandDetail()
 
   /**
-   * Periode YTD. Bukan setting yang disimpan — ini nilai awal kolom Periode di
-   * form Add KPI, supaya membuat beberapa KPI dengan rentang yang sama tidak
-   * berarti memilih tanggal yang sama berulang kali. Tiap baris tetap bisa
-   * memakai rentangnya sendiri.
+   * Periode YTD: pemakai memilih BULAN AWAL saja, panjangnya selalu 12 bulan.
+   *
+   * Bukan setting yang disimpan — ini nilai awal kolom Periode di form Add KPI,
+   * supaya membuat beberapa KPI dengan rentang yang sama tidak berarti memilih
+   * tanggal yang sama berulang kali. Tiap baris tetap bisa memakai rentangnya
+   * sendiri lewat picker di form.
    */
-  const [ytd, setYtd] = useState<DateSelection>(() => {
-    const today = todayISO()
-    return { mode: 'fixed', start: `${today.slice(0, 4)}-01-01`, end: today }
-  })
+  const now = new Date()
+  const [ytdYear, setYtdYear] = useState(now.getFullYear())
+  const [ytdMonth, setYtdMonth] = useState(0)   // Januari — tahun berjalan penuh
+  const ytd: DateSelection = useMemo(
+    () => ({ mode: 'fixed', ...twelveMonthsFrom(ytdYear, ytdMonth) }),
+    [ytdYear, ytdMonth],
+  )
+  const years = useMemo(() => {
+    const y = new Date().getFullYear()
+    return [y - 2, y - 1, y, y + 1, y + 2]
+  }, [])
+
+  // Pustaka custom metric milik organisasi — sama persis dengan yang dipakai
+  // Report Maker (satu tabel `org_custom_metrics`, satu API), jadi metrik yang
+  // dibuat di sini langsung tersedia di report, dan sebaliknya.
+  const [customMetrics, setCustomMetrics] = useState<CustomMetricDef[]>([])
+  const [cmOpen, setCmOpen] = useState(false)
+  const loadCustomMetrics = useCallback(() => {
+    listCustomMetrics(brand.organization_id).then(setCustomMetrics).catch(() => {})
+  }, [brand.organization_id])
+  useEffect(loadCustomMetrics, [loadCustomMetrics])
 
   const [rows, setRows] = useState<KpiRow[] | null>(null)
   const [adding, setAdding] = useState(false)
@@ -161,13 +204,29 @@ export default function BrandKpiTab() {
   return (
     <div className="max-w-4xl pb-10">
 
-      {/* ── YTD periode ─────────────────────────────────────────────── */}
+      {/* ── YTD periode: bulan awal saja, panjang dipatok 12 bulan ──── */}
       <div className="flex items-center justify-between py-4 border-b border-[#e5e7eb]">
         <div>
           <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('YTD Periode')}</h2>
-          <p className="text-[12px] text-[#6b7280] mt-0.5">{t('Default period for new KPIs — each KPI can still use its own.')}</p>
+          <p className="text-[12px] text-[#6b7280] mt-0.5">
+            {t('Pick the starting month — the window is always 12 months.')}
+          </p>
         </div>
-        <DateRangePicker value={ytd} onChange={setYtd} />
+        <div className="flex items-center gap-2">
+          <select value={ytdMonth} onChange={e => setYtdMonth(Number(e.target.value))}
+            className="h-9 rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80]">
+            {MONTHS.map((m, i) => <option key={m} value={i}>{t(m)}</option>)}
+          </select>
+          <select value={ytdYear} onChange={e => setYtdYear(Number(e.target.value))}
+            className="h-9 rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80]">
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          {/* Rentang hasilnya ditulis apa adanya — 12 bulan dari Sep 2026 berakhir
+              di Agu 2027, dan itu tidak jelas sampai tanggalnya benar-benar terlihat. */}
+          <span style={PJB} className="text-[12.5px] font-semibold text-[#374151] whitespace-nowrap">
+            {fmtSelection(ytd.start, ytd.end, t)}
+          </span>
+        </div>
       </div>
 
       {/* ── set KPI ─────────────────────────────────────────────────── */}
@@ -184,6 +243,31 @@ export default function BrandKpiTab() {
           </button>
         )}
       </div>
+
+      {/* ── pustaka custom metric ───────────────────────────────────── */}
+      <div className="flex items-center justify-between py-4 border-b border-[#e5e7eb]">
+        <div>
+          <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('Custom Metrics')}</h2>
+          <p className="text-[12px] text-[#6b7280] mt-0.5">
+            {customMetrics.length === 0
+              ? t('No custom metric yet — shared with Report Maker once created.')
+              : t('{n} saved — the same library Report Maker uses.', { n: customMetrics.length })}
+          </p>
+        </div>
+        <button onClick={() => setCmOpen(true)} style={PJB}
+          className="flex items-center gap-1.5 px-3.5 h-9 rounded-lg text-[12.5px] font-semibold text-[#1B8A80] bg-white border border-[#cfe6e1] hover:bg-[#f0f7f5] transition-colors">
+          <span className="material-symbols-outlined text-[16px]">calculate</span>
+          {t('Manage')}
+        </button>
+      </div>
+
+      <CustomMetricModal
+        open={cmOpen}
+        orgId={brand.organization_id}
+        metrics={customMetrics}
+        onClose={() => setCmOpen(false)}
+        onChanged={loadCustomMetrics}
+      />
 
       {platforms.length === 0 && (
         <p className="text-[12.5px] text-[#6b7280] py-4">

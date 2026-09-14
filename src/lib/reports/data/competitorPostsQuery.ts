@@ -18,6 +18,7 @@
 //   tidak tersedia per-post untuk kompetitor. Menghitungnya dari follower hari ini
 //   akan menghasilkan angka yang terlihat wajar tapi salah.
 import pool from '@/lib/db'
+import { normFormat } from './posts'
 import type { PostCandidate } from './posts'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -36,9 +37,10 @@ export interface ReportCompetitorPosts {
   posts: Record<string, PostCandidate[]>
 }
 
-/** Post kompetitor tidak punya format editorial maupun pilar — keduanya milik
- *  brand sendiri. Diisi label netral supaya penyaring di slide tetap konsisten. */
-const NO_FORMAT = { formatId: 'other', format: 'Other' }
+/** Pilar konten adalah tag editorial milik brand sendiri — kompetitor tidak
+ *  punya, dan tidak akan pernah punya. Diisi label netral supaya bentuk
+ *  PostCandidate tetap satu, tapi slide Visual Content mode competitive review
+ *  sengaja TIDAK menampilkannya: "No pillar" di setiap kartu hanya jadi derau. */
 const NO_PILLAR = { pillarId: 'none', pillar: 'No pillar' }
 
 export async function getReportCompetitorPosts(
@@ -70,13 +72,13 @@ export async function getReportCompetitorPosts(
   // Kedua platform diseragamkan ke bentuk yang sama supaya pemetaannya satu jalur.
   const { rows } = await pool.query<Record<string, any>>(
     `SELECT social_account_id::text acct, 'instagram' platform, media_id post_id,
-            cover_image, caption, permalink url, posted_at post_date,
+            cover_image, caption, media_type, permalink url, posted_at post_date,
             like_count, comment_count, view_count plays, 0 shares, 0 saves
        FROM l0_raw.ig_competitor_media
       WHERE social_account_id = ANY($1::uuid[]) AND posted_at >= $2 AND posted_at < $3
      UNION ALL
      SELECT social_account_id::text, 'tiktok', post_id,
-            cover_image, caption, url, post_date,
+            cover_image, caption, media_type, url, post_date,
             like_count, comment_count, play_count, share_count, saved_count
        FROM l0_raw.tiktok_competitor_media
       WHERE social_account_id = ANY($1::uuid[]) AND post_date >= $2 AND post_date < $3
@@ -97,10 +99,18 @@ export async function getReportCompetitorPosts(
         }
       : { post_date: '—', post_datetime: '—' }
 
+    // Jenis post datang dari media_type di tabel mentah — IG menulis
+    // REELS/VIDEO/CAROUSEL_ALBUM/IMAGE, TikTok video/image (slideshow) — dan
+    // dinormalkan lewat jalur yang sama dengan post sendiri, jadi "Reel" di kartu
+    // kompetitor berarti hal yang sama dengan "Reel" di kartu brand. `link` ikut
+    // dikirim untuk pemulihan Reel dari permalink; durasi TIDAK, karena di TikTok
+    // setiap video punya durasi dan itu akan salah dibaca sebagai Reel.
+    const fmt = normFormat(null, { postType: r.media_type, link: r.url })
     const cand: PostCandidate = {
       id: ++seq,
       image: r.cover_image || null,
-      ...NO_FORMAT, ...NO_PILLAR,
+      formatId: fmt.id, format: fmt.label,
+      ...NO_PILLAR,
       values: {
         likes, comments, shares, saves,
         impressions_views: num(r.plays),

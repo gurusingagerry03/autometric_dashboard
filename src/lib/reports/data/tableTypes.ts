@@ -12,7 +12,13 @@ export type TableRowType = 'comparison' | 'competitors' | 'sentiments' | 'platfo
 
 // `channels` omitted = available on every channel; otherwise the metric only
 // exists for the listed platforms (per the ROBZ LAUNCH mapping).
-export interface TableColumn { id: string; label: string; format: TableFormat; channels?: DashPlatform[] }
+export interface TableColumn {
+  id: string; label: string; format: TableFormat; channels?: DashPlatform[]
+  /** Judul kelompok di pemilih kolom. Dipakai tabel Cross-Level: labelnya tidak
+   *  menyebut level, jadi heading inilah yang membedakan 'Profile Visit' milik
+   *  Content dari milik Channel. Kosong = tidak dikelompokkan. */
+  group?: string
+}
 export interface TableType {
   id: string
   label: string
@@ -251,12 +257,18 @@ const CHANNEL_LEVEL_COLUMNS: TableColumn[] = [
 // sama dipakai saat merakit nilainya di metricsContext, jadi tidak ada
 // kemungkinan satu kolom diam-diam mengambil angka dari level yang salah.
 //
-// Label ikut menyebut levelnya ("Followers · Channel") — persis cara permintaan
-// aslinya ditulis, dan tanpa itu dua kolom bernama "Profile Visit" akan tampak
-// duplikat di pemilih.
+// LEVELNYA TIDAK IKUT DI LABEL
+//   Sebelumnya label membawa akhiran "· Content" / "· Channel". Di tabel laporan
+//   yang diserahkan ke klien akhiran itu hanya jargon internal — pembaca laporan
+//   tidak memilah metrik per level, dia membaca "Followers", bukan "Followers ·
+//   Channel". Yang memang butuh pembeda adalah PEMILIH kolom, karena beberapa nama
+//   ada di dua level (Profile Visit, Engagement, Engagement Public); di sana
+//   pembedanya `group`, yang dirender sebagai heading per level.
+const CROSS_GROUP = { content: 'Content Level', channel: 'Channel Level' } as const
+
 const CROSS_ALL_COLUMNS: TableColumn[] = [
-  ...CONTENT_ALL_COLUMNS.map(c => ({ ...c, id: 'ct:' + c.id, label: c.label + ' · Content' })),
-  ...CHANNEL_ALL_COLUMNS.map(c => ({ ...c, id: 'ch:' + c.id, label: c.label + ' · Channel' })),
+  ...CONTENT_ALL_COLUMNS.map(c => ({ ...c, id: 'ct:' + c.id, group: CROSS_GROUP.content })),
+  ...CHANNEL_ALL_COLUMNS.map(c => ({ ...c, id: 'ch:' + c.id, group: CROSS_GROUP.channel })),
 ]
 // Default mengikuti contoh di brief: campuran follower (channel) dengan
 // engagement & ER (content), supaya begitu dipasang tabelnya langsung
@@ -272,8 +284,8 @@ const CROSS_ALL_DEFAULTS = [
 // `channels` ikut terbawa dari kolom aslinya, jadi metrik yang cuma ada di satu
 // platform tetap hilang sendiri lewat columnsForChannel.
 const CROSS_COLUMNS: TableColumn[] = [
-  ...CONTENT_LEVEL_COLUMNS.map(c => ({ ...c, id: 'ct:' + c.id, label: c.label + ' · Content' })),
-  ...CHANNEL_LEVEL_COLUMNS.map(c => ({ ...c, id: 'ch:' + c.id, label: c.label + ' · Channel' })),
+  ...CONTENT_LEVEL_COLUMNS.map(c => ({ ...c, id: 'ct:' + c.id, group: CROSS_GROUP.content })),
+  ...CHANNEL_LEVEL_COLUMNS.map(c => ({ ...c, id: 'ch:' + c.id, group: CROSS_GROUP.channel })),
 ]
 const CROSS_DEFAULTS = [
   'ch:total_followers', 'ch:followers_net_growth',
