@@ -83,8 +83,29 @@ export interface TaggedPost {
   boosted:    boolean | null
   campaign:   boolean | null
   activity:   boolean | null
+  /** Detail activity. Selalu ada objeknya; field yang belum diisi bernilai null. */
+  activityDetail: ActivityDetail
   /** Tag bebas dari kolom `tagging`. */
   tags:       string[]
+}
+
+/**
+ * Detail activity sebuah post — isi kolom activity_name / submission / participant /
+ * start_date / end_date di l0_extra.
+ *
+ * Detail ini HANYA berlaku saat `activity === true`. Nilainya tidak dihapus ketika
+ * activity dimatikan: orang yang salah pencet No lalu menekan Yes lagi mendapatkan
+ * kembali angkanya, bukan form kosong. Yang tidak boleh terjadi adalah detail ini
+ * ikut terbaca sebagai activity yang berlangsung — itu urusan `is_activity`, dan
+ * pembacaan di hilir harus menyaringnya lewat kolom itu.
+ */
+export interface ActivityDetail {
+  name:        string | null
+  submission:  number | null
+  participant: number | null
+  /** 'YYYY-MM-DD' — teks polos, bukan Date, supaya bebas zona waktu. */
+  startDate:   string | null
+  endDate:     string | null
 }
 
 /** Perubahan untuk satu post. Field yang tidak disertakan tidak diubah. */
@@ -94,6 +115,8 @@ export interface PostAttributePatch {
   boosted?:  boolean | null
   campaign?: boolean | null
   activity?: boolean | null
+  /** Dikirim utuh — kelima field ditimpa sekaligus, karena disunting bersamaan. */
+  activityDetail?: ActivityDetail
 }
 
 export interface TagPillar { id: string; name: string; color: string; isActive: boolean }
@@ -124,15 +147,31 @@ const DEFAULT_COLORS = ['#6c4cd6', '#d23f6f', '#3d7eea', '#5fa783', '#e0a458', '
 const colorFor = (name: string, given: string | null): string =>
   given || DEFAULT_COLORS[[...name].reduce((s, c) => s + c.charCodeAt(0), 0) % DEFAULT_COLORS.length]
 
+// `start_date`/`end_date` sengaja dikeluarkan sebagai TEKS lewat to_char, bukan
+// sebagai `date`. Driver pg mengubah kolom date jadi Date pada tengah malam LOKAL;
+// di WIB (UTC+7) `toISOString()` atas nilai itu mundur sehari. Teks 'YYYY-MM-DD'
+// langsung cocok dengan yang dipakai <input type="date">, tanpa zona waktu sama sekali.
 export const EXTRA_UNION = `
   SELECT brand_id, post_id, 'instagram' AS platform, tagging, content_pillar,
-         is_boosted, is_campaign, is_activity FROM l0_extra.instagram_post_extra_attribute
+         is_boosted, is_campaign, is_activity,
+         activity_name, submission, participant,
+         to_char(start_date, 'YYYY-MM-DD') AS start_date,
+         to_char(end_date,   'YYYY-MM-DD') AS end_date
+    FROM l0_extra.instagram_post_extra_attribute
   UNION ALL
   SELECT brand_id, post_id, 'facebook',              tagging, content_pillar,
-         is_boosted, is_campaign, is_activity FROM l0_extra.facebook_post_extra_attribute
+         is_boosted, is_campaign, is_activity,
+         activity_name, submission, participant,
+         to_char(start_date, 'YYYY-MM-DD'),
+         to_char(end_date,   'YYYY-MM-DD')
+    FROM l0_extra.facebook_post_extra_attribute
   UNION ALL
   SELECT brand_id, post_id, 'tiktok',                tagging, content_pillar,
-         is_boosted, is_campaign, is_activity FROM l0_extra.tiktok_post_extra_attribute
+         is_boosted, is_campaign, is_activity,
+         activity_name, submission, participant,
+         to_char(start_date, 'YYYY-MM-DD'),
+         to_char(end_date,   'YYYY-MM-DD')
+    FROM l0_extra.tiktok_post_extra_attribute
 `
 
 /** Pilar efektif: yang ditulis di l0_extra menang atas warisan di silver. */
@@ -171,7 +210,8 @@ export async function getTaggablePosts(
              p.cover_image, p.link,
              ${PILLAR} AS pillar,
              ${TAGS}   AS tags,
-             e.is_boosted, e.is_campaign, e.is_activity
+             e.is_boosted, e.is_campaign, e.is_activity,
+             e.activity_name, e.submission, e.participant, e.start_date, e.end_date
         FROM l1_silver.unified_post p
         JOIN acct a ON a.id = p.brand_id
         LEFT JOIN extra e
@@ -198,6 +238,8 @@ export async function getTaggablePosts(
       cover_image: string | null; link: string | null
       pillar: string | null; tags: string[] | null
       is_boosted: boolean | null; is_campaign: boolean | null; is_activity: boolean | null
+      activity_name: string | null; submission: number | null; participant: number | null
+      start_date: string | null; end_date: string | null
     }>(
       `${scope} SELECT * FROM joined ${where}
         ORDER BY post_date DESC NULLS LAST, post_id DESC
@@ -253,6 +295,15 @@ export async function getTaggablePosts(
       boosted:    r.is_boosted,
       campaign:   r.is_campaign,
       activity:   r.is_activity,
+      activityDetail: {
+        name:        r.activity_name,
+        // `submission`/`participant` integer, tapi driver bisa mengembalikannya
+        // sebagai string pada beberapa tipe numerik — dinormalkan di satu tempat.
+        submission:  r.submission  === null ? null : Number(r.submission),
+        participant: r.participant === null ? null : Number(r.participant),
+        startDate:   r.start_date,
+        endDate:     r.end_date,
+      },
       tags:       r.tags ?? [],
     })),
     pillars: dim.rows.map(r => ({
@@ -362,8 +413,13 @@ export async function savePostAttributes(
   const { rows: cur } = await pool.query<{
     tagging: unknown; content_pillar: string | null
     is_boosted: boolean | null; is_campaign: boolean | null; is_activity: boolean | null
+    activity_name: string | null; submission: number | null; participant: number | null
+    start_date: string | null; end_date: string | null
   }>(
-    `SELECT tagging, content_pillar, is_boosted, is_campaign, is_activity
+    `SELECT tagging, content_pillar, is_boosted, is_campaign, is_activity,
+            activity_name, submission, participant,
+            to_char(start_date, 'YYYY-MM-DD') AS start_date,
+            to_char(end_date,   'YYYY-MM-DD') AS end_date
        FROM l0_extra.${table} WHERE brand_id = $1::uuid AND post_id = $2`,
     [accountId, postId],
   )
@@ -379,15 +435,32 @@ export async function savePostAttributes(
   const activity = patch.activity !== undefined ? patch.activity : (now?.is_activity ?? null)
   const aon = campaign === null ? null : !campaign
 
+  // Detail activity ditimpa sebagai satu kesatuan kalau dikirim, karena kelimanya
+  // disunting dalam satu form. Kalau tidak dikirim, nilai lama dipertahankan —
+  // termasuk saat activity diubah ke No, supaya salah pencet tidak menghapus data.
+  const act: ActivityDetail = patch.activityDetail ?? {
+    name:        now?.activity_name ?? null,
+    submission:  now?.submission  === null || now?.submission  === undefined ? null : Number(now.submission),
+    participant: now?.participant === null || now?.participant === undefined ? null : Number(now.participant),
+    startDate:   now?.start_date ?? null,
+    endDate:     now?.end_date ?? null,
+  }
+
   await pool.query(
     `INSERT INTO l0_extra.${table}
-       (brand_id, post_id, content_pillar, tagging, is_boosted, is_campaign, is_aon, is_activity, created_at)
-     VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7, $8, now())
+       (brand_id, post_id, content_pillar, tagging, is_boosted, is_campaign, is_aon, is_activity,
+        activity_name, submission, participant, start_date, end_date, created_at)
+     VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, $7, $8,
+             $9, $10, $11, $12::date, $13::date, now())
      ON CONFLICT (brand_id, post_id) DO UPDATE
        SET content_pillar = EXCLUDED.content_pillar, tagging = EXCLUDED.tagging,
            is_boosted = EXCLUDED.is_boosted, is_campaign = EXCLUDED.is_campaign,
-           is_aon = EXCLUDED.is_aon, is_activity = EXCLUDED.is_activity`,
-    [accountId, postId, pillar, JSON.stringify(tags), boosted, campaign, aon, activity],
+           is_aon = EXCLUDED.is_aon, is_activity = EXCLUDED.is_activity,
+           activity_name = EXCLUDED.activity_name, submission = EXCLUDED.submission,
+           participant = EXCLUDED.participant,
+           start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date`,
+    [accountId, postId, pillar, JSON.stringify(tags), boosted, campaign, aon, activity,
+     act.name, act.submission, act.participant, act.startDate, act.endDate],
   )
   return true
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgMemberById } from '@/lib/reports/access'
 import { getTaggablePosts, savePostAttributes } from '@/lib/dashboard/pillarTags'
-import type { PostAttributePatch } from '@/lib/dashboard/pillarTags'
+import type { ActivityDetail, PostAttributePatch } from '@/lib/dashboard/pillarTags'
 import type { TagFilter } from '@/lib/dashboard/pillarTags'
 
 const FILTERS: TagFilter[] = ['all', 'untagged', 'tagged']
@@ -69,6 +69,38 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       Array.isArray(v) ? (v as unknown[]).filter(x => typeof x === 'string') as string[] : undefined
     const tri = (v: unknown) => (v === true || v === false || v === null ? v as boolean | null : undefined)
 
+    /** Teks yang dipangkas; kosong dianggap belum diisi, bukan string kosong. */
+    const txt = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+    /** Cacah non-negatif. Pecahan, negatif, dan NaN ditolak jadi null, bukan disimpan apa adanya. */
+    const count = (v: unknown) => {
+      const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() ? Number(v) : NaN
+      return Number.isInteger(n) && n >= 0 ? n : null
+    }
+    /** Hanya 'YYYY-MM-DD' yang benar-benar ada di kalender — sisanya null. */
+    const day = (v: unknown) => {
+      if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null
+      const d = new Date(`${v}T00:00:00Z`)
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : null
+    }
+
+    // Detail activity selalu diterima sebagai satu objek utuh — kelima kolomnya
+    // ditimpa bersamaan, sama seperti cara form menyuntingnya.
+    const activityDetail = (v: unknown): ActivityDetail | undefined => {
+      if (!v || typeof v !== 'object') return undefined
+      const o = v as Record<string, unknown>
+      const startDate = day(o.startDate)
+      const endDate   = day(o.endDate)
+      return {
+        name:        txt(o.name),
+        submission:  count(o.submission),
+        participant: count(o.participant),
+        startDate,
+        // Periode terbalik ditolak di sini, bukan dibiarkan masuk lalu menghasilkan
+        // rentang negatif di laporan.
+        endDate:     startDate && endDate && endDate < startDate ? null : endDate,
+      }
+    }
+
     // Hanya field yang benar-benar dikirim yang diteruskan — savePostAttributes
     // membiarkan sisanya apa adanya, jadi mengubah satu atribut tidak menghapus
     // atribut lain yang sudah diisi.
@@ -81,6 +113,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         if ('boosted'  in u) p.boosted  = tri(u.boosted)
         if ('campaign' in u) p.campaign = tri(u.campaign)
         if ('activity' in u) p.activity = tri(u.activity)
+        if ('activityDetail' in u) p.activityDetail = activityDetail(u.activityDetail)
         return { postId: u.postId as string, platform: u.platform as string, patch: p }
       })
 

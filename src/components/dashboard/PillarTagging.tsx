@@ -1,13 +1,24 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Card } from './ui'
 import { PILLAR_COLORS } from './data'
 import { useT } from '@/lib/i18n/LanguageContext'
-import type { TaggedPost, TagPillar, TagFilter, PostAttributePatch } from '@/lib/dashboard/pillarTags'
+import type { ActivityDetail, TaggedPost, TagPillar, TagFilter, PostAttributePatch } from '@/lib/dashboard/pillarTags'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 const PAGE_SIZE = 25
+
+/**
+ * Sengaja didefinisikan di sini, bukan diimpor dari pillarTags.ts. Modul itu
+ * membuka koneksi `pg`; mengimpor NILAI apa pun darinya (bukan `import type`,
+ * yang hilang saat kompilasi) menyeret pg ke bundle browser dan build gagal di
+ * `Can't resolve 'dns'`.
+ */
+const EMPTY_ACTIVITY: ActivityDetail = {
+  name: null, submission: null, participant: null, startDate: null, endDate: null,
+}
 
 /**
  * Atribut editorial per-post — permukaan kerja di tab Content Pillars.
@@ -626,6 +637,294 @@ function BulkModal({ posts, pillars, busy, t, pillar, setPillar, attr, setAttr, 
  * Preview gambar sengaja besar dan di sisi kiri: keputusan pilar hampir selalu
  * diambil dari melihat kontennya, bukan dari membaca caption yang terpotong.
  */
+/**
+ * Pembungkus untuk modal yang dibuka DARI DALAM modal Edit post.
+ *
+ * KENAPA PORTAL
+ *   Anak dari kartu Edit post adalah tempat yang buruk untuk `position: fixed`.
+ *   Kartu itu `relative z-10` di dalam pembungkus `fixed z-50`, jadi ia membuka
+ *   stacking context sendiri — `z-[60]` di dalamnya tidak pernah berarti "di atas
+ *   modal induk", hanya "di atas saudara-saudaranya". Kartu itu juga
+ *   `overflow-y-auto`, sehingga tata letak anaknya terikat pada kotak yang
+ *   menggulir, bukan pada viewport. Hasilnya modal anak muncul sebagai bilah
+ *   tipis di tengah layar.
+ *
+ *   Dipasang ke document.body, modal ini tidak punya leluhur selain <body>:
+ *   `fixed inset-0` pasti seukuran viewport dan z-indexnya diadu di tingkat
+ *   teratas. Tidak ada satu pun class di kartu induk yang bisa mempersempitnya
+ *   lagi di kemudian hari.
+ *
+ * LEBARNYA WAJIB NILAI ARBITRER, JANGAN `max-w-md`/`max-w-lg`/`max-w-xl`
+ *   globals.css mendefinisikan --spacing-md/lg/xl di blok @theme, dan di
+ *   Tailwind v4 namespace --spacing-* ikut menyetir max-w-*. Akibatnya
+ *   `max-w-lg` BUKAN 32rem melainkan var(--spacing-lg) = 24px, dan modalnya
+ *   menyusut jadi bilah setipis 24px tanpa error apa pun — class-nya ada di
+ *   CSS, nilainya yang dibajak. `max-w-2xl` ke atas kebetulan selamat karena
+ *   --spacing-2xl tidak didefinisikan, tapi itu keselamatan yang menumpang
+ *   nasib. Nilai arbitrer kebal terhadap token tema.
+ */
+function NestedModal({ title, t, onClose, children, footer, width = 'max-w-[32rem]' }: {
+  title: string
+  t: (k: string, v?: Record<string, string | number>) => string
+  onClose: () => void
+  children: React.ReactNode
+  footer: React.ReactNode
+  width?: string
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <button className="absolute inset-0 bg-black/45 cursor-default" onClick={onClose} aria-label={t('Close')} />
+      <div className={`relative z-10 w-full ${width} max-h-[85vh] flex flex-col bg-white rounded-2xl shadow-2xl`}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#f1f3f5] shrink-0">
+          <h3 style={PJ} className="text-[15px] font-bold text-[#111827]">{title}</h3>
+          <button onClick={onClose} className="material-symbols-outlined text-[20px] text-[#9ca3af] hover:text-[#374151]">close</button>
+        </div>
+        <div className="p-5 overflow-y-auto">{children}</div>
+        <div className="px-5 py-3 border-t border-[#f1f3f5] flex items-center justify-end gap-2 shrink-0">{footer}</div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * Free tags — dipindahkan ke modal sendiri supaya kosakata brand muat ditampilkan.
+ *
+ * Di kolom sempit Edit post, tag yang sudah ada hanya bisa muncul sebagai daftar
+ * saran setelah orang mulai mengetik — yang berarti tag itu baru ketahuan ada
+ * kalau ejaannya sudah ditebak dengan benar. Persis begitulah kosakata tag
+ * beranak-pinak: "giveaway", "give away", "Giveaway". Di sini seluruh kosakata
+ * tampil sebagai chip yang tinggal diklik, jadi memakai ulang lebih mudah
+ * daripada mengarang baru.
+ *
+ * Tag disimpan seketika seperti sebelumnya (bukan tombol Save) — satu klik satu
+ * tag, tidak ada isian setengah jadi yang perlu ditahan seperti di modal Activity.
+ */
+function TagsModal({ t, tags, knownTags, onClose, onPatch }: {
+  t: (k: string, v?: Record<string, string | number>) => string
+  tags: string[]
+  knownTags: string[]
+  onClose: () => void
+  onPatch: (patch: PostAttributePatch) => void
+}) {
+  const [input, setInput] = useState('')
+
+  const add = (raw?: string) => {
+    const v = (raw ?? input).trim()
+    if (!v || tags.includes(v)) return
+    onPatch({ tags: [...tags, v] })
+    setInput('')
+  }
+  const remove = (tg: string) => onPatch({ tags: tags.filter(x => x !== tg) })
+
+  const q = input.trim().toLowerCase()
+  const available = knownTags.filter(k => !tags.includes(k) && (!q || k.toLowerCase().includes(q)))
+  const isNew = !!q
+    && !knownTags.some(k => k.toLowerCase() === q)
+    && !tags.some(k => k.toLowerCase() === q)
+
+  return (
+    <NestedModal
+      title={t('Free tags')} t={t} onClose={onClose} width="max-w-[34rem]" 
+      footer={
+        <button onClick={onClose} style={PJ}
+          className="text-[12.5px] font-bold text-white bg-[#1f2937] hover:bg-[#374151] rounded-lg px-4 py-2">{t('Done')}</button>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div>
+          <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">
+            {t('On this post')} <span className="font-medium text-[#cbd5e1]">· {tags.length}</span>
+          </p>
+          {tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map(tg => (
+                <span key={tg} className="inline-flex items-center gap-1 text-[12px] font-semibold text-[#6b7280] bg-[#f3f4f6] rounded-full pl-3 pr-1.5 py-1.5">
+                  {tg}
+                  <button onClick={() => remove(tg)} aria-label={t('Remove')}
+                    className="material-symbols-outlined text-[15px] text-[#9ca3af] hover:text-[#c2553f]">close</button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-[#9ca3af]">{t('No tags yet')}</p>
+          )}
+        </div>
+
+        <div>
+          <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">{t('Add tag')}</p>
+          <div className="flex items-center gap-1.5">
+            <input value={input} autoFocus
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); add() } }}
+              placeholder={knownTags.length ? t('Pick a tag or type a new one') : t('Add tag — press Enter')} style={PJ}
+              className="flex-1 h-9 text-[13px] text-[#374151] bg-white border border-[#e5e7eb] rounded-lg px-2.5 outline-none focus:border-[#6c4cd6]" />
+            <button onClick={() => add()} disabled={!input.trim()} style={PJ}
+              className={`text-[12.5px] font-semibold rounded-lg px-3.5 h-9 border ${
+                input.trim() ? 'border-[#e5e7eb] text-[#374151] hover:border-[#d1d5db]' : 'border-[#f1f5f9] text-[#cbd5e1] cursor-not-allowed'
+              }`}>{t('Add')}</button>
+          </div>
+          {isNew && (
+            <button onClick={() => add()} style={PJ}
+              className="mt-2 text-[12.5px] font-semibold text-[#6c4cd6] hover:underline">
+              {t('Create “{tag}”', { tag: input.trim() })}
+            </button>
+          )}
+        </div>
+
+        <div>
+          <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">
+            {t('Used by this brand')} <span className="font-medium text-[#cbd5e1]">· {available.length}</span>
+          </p>
+          {available.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 max-h-56 overflow-y-auto">
+              {available.map(tg => (
+                <button key={tg} onClick={() => add(tg)} style={PJ}
+                  className="text-[12px] font-semibold text-[#6b7280] bg-white border border-[#e5e7eb] rounded-full px-3 py-1.5 hover:border-[#6c4cd6] hover:text-[#6c4cd6]">
+                  + {tg}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12.5px] text-[#9ca3af]">
+              {knownTags.length ? t('Every known tag is already on this post.') : t('This brand has no tags yet.')}
+            </p>
+          )}
+        </div>
+      </div>
+    </NestedModal>
+  )
+}
+
+/**
+ * Detail activity — lima field yang hanya berarti kalau activity-nya YA.
+ *
+ * KENAPA BURAM, BUKAN DISEMBUNYIKAN
+ *   Menyembunyikan field saat jawabannya No membuat orang tidak tahu bahwa
+ *   memilih Yes akan meminta lima isian lagi, dan tinggi modal melompat setiap
+ *   kali tombolnya ditekan. Buram + nonaktif menunjukkan bentuk formulirnya tanpa
+ *   mengizinkan pengisian — sekaligus tetap memperlihatkan angka yang sudah
+ *   tersimpan sebelumnya.
+ *
+ * KENAPA SIMPAN EKSPLISIT, BUKAN SIMPAN SAMBIL MENGETIK
+ *   Modal induknya menyimpan setiap perubahan seketika, dan itu cocok untuk
+ *   pilihan sekali-klik. Di sini isiannya teks dan angka: menyimpan per ketukan
+ *   berarti satu request per huruf, dan periode yang setengah diketik sempat
+ *   tersimpan sebagai rentang terbalik.
+ *
+ * DETAIL TIDAK DIHAPUS SAAT MEMILIH No — lihat ActivityDetail di pillarTags.ts.
+ */
+function ActivityModal({ t, TriPick, activity, detail, onClose, onSave }: {
+  t: (k: string, v?: Record<string, string | number>) => string
+  TriPick: (p: { value: boolean | null | undefined; onPick: (v: boolean | null) => void; labels: [string, string]; clearLabel?: string }) => React.JSX.Element
+  activity: boolean | null
+  detail: ActivityDetail
+  onClose: () => void
+  onSave: (activity: boolean | null, detail: ActivityDetail) => void
+}) {
+  const [isAct, setIsAct] = useState<boolean | null>(activity)
+  // Angka disimpan sebagai teks selama disunting: menghapus isi kotak angka harus
+  // menghasilkan kotak kosong, bukan melompat balik ke 0.
+  const [name, setName] = useState(detail.name ?? '')
+  const [submission, setSubmission] = useState(detail.submission === null ? '' : String(detail.submission))
+  const [participant, setParticipant] = useState(detail.participant === null ? '' : String(detail.participant))
+  const [startDate, setStartDate] = useState(detail.startDate ?? '')
+  const [endDate, setEndDate] = useState(detail.endDate ?? '')
+
+  const on = isAct === true
+  const badEnd = !!startDate && !!endDate && endDate < startDate
+
+  const num = (v: string) => {
+    const n = Number(v)
+    return v.trim() && Number.isInteger(n) && n >= 0 ? n : null
+  }
+
+  const save = () => {
+    if (badEnd) return
+    onSave(isAct, {
+      name: name.trim() || null,
+      submission: num(submission),
+      participant: num(participant),
+      startDate: startDate || null,
+      endDate: endDate || null,
+    })
+  }
+
+  const field = 'w-full h-9 text-[13px] text-[#374151] bg-white border border-[#e5e7eb] rounded-lg px-2.5 outline-none focus:border-[#6c4cd6] disabled:bg-[#f9fafb]'
+  const label = 'block text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1'
+
+  return (
+    <NestedModal
+      title={t('Activity')} t={t} onClose={onClose} width="max-w-[30rem]" 
+      footer={
+        <>
+          <button onClick={onClose} style={PJ}
+            className="text-[12.5px] font-semibold text-[#6b7280] border border-[#e5e7eb] hover:border-[#d1d5db] rounded-lg px-3.5 py-2">{t('Cancel')}</button>
+          <button onClick={save} disabled={badEnd} style={PJ}
+            className={`text-[12.5px] font-bold rounded-lg px-4 py-2 ${
+              badEnd ? 'bg-[#e5e7eb] text-[#9ca3af] cursor-not-allowed' : 'text-white bg-[#1f2937] hover:bg-[#374151]'
+            }`}>{t('Save')}</button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+          <div>
+            <p style={PJ} className={label}>{t('Activity Type')}</p>
+            <TriPick value={isAct} labels={[t('No'), t('Yes')]} onPick={setIsAct} />
+          </div>
+
+          <div
+            aria-hidden={!on}
+            className={`flex flex-col gap-3.5 transition-all ${on ? '' : 'blur-[2px] opacity-55 pointer-events-none select-none'}`}
+          >
+            <div>
+              <label style={PJ} className={label}>{t('Activity Name')}</label>
+              <input value={name} onChange={e => setName(e.target.value)} disabled={!on}
+                placeholder={t('e.g. Photo contest')} style={PJ} className={field} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label style={PJ} className={label}>{t('Submission')}</label>
+                <input type="number" min={0} step={1} inputMode="numeric" disabled={!on}
+                  value={submission} onChange={e => setSubmission(e.target.value)}
+                  placeholder="0" style={PJ} className={field} />
+              </div>
+              <div>
+                <label style={PJ} className={label}>{t('Participant')}</label>
+                <input type="number" min={0} step={1} inputMode="numeric" disabled={!on}
+                  value={participant} onChange={e => setParticipant(e.target.value)}
+                  placeholder="0" style={PJ} className={field} />
+              </div>
+            </div>
+
+            <div>
+              <p style={PJ} className={label}>{t('Activity Period')}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="date" value={startDate} disabled={!on}
+                  onChange={e => setStartDate(e.target.value)} style={PJ} className={field} />
+                <input type="date" value={endDate} disabled={!on}
+                  // `min` menahan pemilihan lewat kalender; ketikan manual tetap bisa
+                  // lolos, jadi badEnd di bawah yang jadi penjaga sebenarnya.
+                  min={startDate || undefined}
+                  onChange={e => setEndDate(e.target.value)} style={PJ} className={field} />
+              </div>
+              {badEnd && (
+                <p className="mt-1 text-[11px] font-semibold text-[#c2553f]">{t('End date is before the start date.')}</p>
+              )}
+            </div>
+          </div>
+      </div>
+    </NestedModal>
+  )
+}
+
 function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, onAddPillar, knownTags, TriPick }: {
   post: TaggedPost & { key: string }
   pillars: TagPillar[]
@@ -639,48 +938,32 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
   knownTags: string[]
   TriPick: (p: { value: boolean | null | undefined; onPick: (v: boolean | null) => void; labels: [string, string]; clearLabel?: string }) => React.JSX.Element
 }) {
-  const [tagInput, setTagInput] = useState('')
-  const [tagOpen, setTagOpen] = useState(false)
-  const tagBox = useRef<HTMLDivElement>(null)
   const [newPillar, setNewPillar] = useState('')
   const [creating, setCreating] = useState(false)
   const [imgFailed, setImgFailed] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [tagsOpen, setTagsOpen] = useState(false)
 
+  // Escape menutup modal ini — KECUALI saat salah satu modal anak sedang terbuka.
+  // Ketiganya memasang listener di window, jadi tanpa penjaga ini satu ketukan
+  // Escape menutup semuanya sekaligus dan post ikut hilang dari layar.
+  const childOpen = activityOpen || tagsOpen
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !childOpen) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, childOpen])
 
-  // Daftar saran tag ditutup dengan klik di luar kotaknya. Dipasang hanya selama
-  // daftarnya terbuka supaya tidak ada listener menganggur di setiap modal.
-  useEffect(() => {
-    if (!tagOpen) return
-    const away = (e: MouseEvent) => {
-      if (tagBox.current && !tagBox.current.contains(e.target as Node)) setTagOpen(false)
-    }
-    document.addEventListener('mousedown', away)
-    return () => document.removeEventListener('mousedown', away)
-  }, [tagOpen])
-
-  const addTag = (raw?: string) => {
-    const v = (raw ?? tagInput).trim()
-    if (!v || post.tags.includes(v)) return
-    onPatch({ tags: [...post.tags, v] })
-    setTagInput(''); setTagOpen(false)
-  }
-
-  // Saran diambil dari kosakata brand, dikurangi yang sudah terpasang di post ini,
-  // lalu disaring dengan apa yang sedang diketik. `isNew` hanya menyala kalau yang
-  // diketik memang belum ada di mana pun — supaya "Create" tidak pernah muncul
-  // berdampingan dengan tag yang sama persis di daftar atas.
-  const tagQuery = tagInput.trim().toLowerCase()
-  const tagOptions = knownTags.filter(
-    k => !post.tags.includes(k) && (!tagQuery || k.toLowerCase().includes(tagQuery)),
-  )
-  const tagIsNew = !!tagQuery
-    && !knownTags.some(k => k.toLowerCase() === tagQuery)
-    && !post.tags.some(k => k.toLowerCase() === tagQuery)
+  // Baris ringkas di bawah tombol: hanya yang sudah terisi. Nama sudah tampil di
+  // tombolnya, jadi tidak diulang di sini.
+  const activity = post.activityDetail ?? EMPTY_ACTIVITY
+  const activitySummary = [
+    activity.submission  !== null ? t('{n} submission',  { n: activity.submission.toLocaleString('id-ID') })  : null,
+    activity.participant !== null ? t('{n} participant', { n: activity.participant.toLocaleString('id-ID') }) : null,
+    activity.startDate || activity.endDate
+      ? `${activity.startDate ?? '…'} → ${activity.endDate ?? '…'}`
+      : null,
+  ].filter(Boolean).join(' · ')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -775,61 +1058,65 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
 
             <div>
               <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">{t('Activity')}</p>
-              <TriPick value={post.activity} labels={[t('No'), t('Yes')]} onPick={v => onPatch({ activity: v })} />
+              {/* Tombol, bukan TriPick langsung: activity bukan lagi satu jawaban ya/tidak
+                  melainkan lima field. Menyelipkan kelimanya ke kolom ini akan menenggelamkan
+                  Pillar dan Free tags yang jauh lebih sering dipakai. */}
+              <button onClick={() => setActivityOpen(true)} style={PJ}
+                className="w-full flex items-center justify-between gap-2 text-left bg-white border border-[#e5e7eb] rounded-lg px-3 py-2 hover:border-[#d1d5db]">
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className={`text-[12px] font-semibold rounded-md px-2 py-0.5 ${
+                    post.activity === true  ? 'bg-[#f3f0fd] text-[#6c4cd6]'
+                    : post.activity === false ? 'bg-[#f3f4f6] text-[#6b7280]'
+                    : 'bg-[#f9fafb] text-[#9ca3af]'
+                  }`}>
+                    {post.activity === true ? t('Yes') : post.activity === false ? t('No') : t('Not set')}
+                  </span>
+                  {post.activity === true && activity.name && (
+                    <span className="truncate text-[12.5px] font-medium text-[#374151]">{activity.name}</span>
+                  )}
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-[#9ca3af]">tune</span>
+              </button>
+              {post.activity === true && activitySummary && (
+                <p className="mt-1 text-[11px] text-[#9ca3af] truncate">{activitySummary}</p>
+              )}
             </div>
 
             <div>
               <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-1.5">{t('Free tags')}</p>
-              {post.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {post.tags.map(tg => (
-                    <span key={tg} className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-[#6b7280] bg-[#f3f4f6] rounded-full pl-2.5 pr-1.5 py-1">
-                      {tg}
-                      <button onClick={() => onPatch({ tags: post.tags.filter(x => x !== tg) })}
-                        className="material-symbols-outlined text-[14px] text-[#9ca3af] hover:text-[#c2553f]">close</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {/* Pemilih tag: kosakata brand lebih dulu, ketik bebas tetap boleh.
-                  Mengetik ulang tag yang sudah ada dengan ejaan sedikit berbeda
-                  adalah cara kosakata tag beranak-pinak — menawarkan yang sudah
-                  ada lebih dulu memotong itu di tempat, tanpa mengunci orang
-                  yang memang butuh istilah baru. */}
-              <div ref={tagBox} className="relative">
-                <div className="flex items-center gap-1.5">
-                  <input value={tagInput}
-                    onChange={e => { setTagInput(e.target.value); setTagOpen(true) }}
-                    onFocus={() => setTagOpen(true)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
-                    placeholder={knownTags.length ? t('Pick a tag or type a new one') : t('Add tag — press Enter')} style={PJ}
-                    className="flex-1 text-[12.5px] text-[#374151] bg-white border border-[#e5e7eb] rounded-lg px-2.5 py-2 outline-none focus:border-[#6c4cd6]" />
-                  <button onClick={() => addTag()} disabled={!tagInput.trim()} style={PJ}
-                    className={`text-[12px] font-semibold rounded-lg px-3 py-2 border ${
-                      tagInput.trim() ? 'border-[#e5e7eb] text-[#374151] hover:border-[#d1d5db]' : 'border-[#f1f5f9] text-[#cbd5e1] cursor-not-allowed'
-                    }`}>{t('Add')}</button>
-                </div>
-
-                {tagOpen && (tagOptions.length > 0 || tagIsNew) && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white border border-[#e5e7eb] rounded-lg shadow-lg py-1">
-                    {tagOptions.map(tg => (
-                      <button key={tg} onClick={() => addTag(tg)} style={PJ}
-                        className="w-full text-left text-[12.5px] text-[#374151] px-3 py-1.5 hover:bg-[#f5f3ff]">{tg}</button>
-                    ))}
-                    {tagIsNew && (
-                      <button onClick={() => addTag()} style={PJ}
-                        className={`w-full text-left text-[12.5px] font-semibold text-[#6c4cd6] px-3 py-1.5 hover:bg-[#f5f3ff] ${
-                          tagOptions.length ? 'border-t border-[#f1f3f5] mt-1 pt-2' : ''
-                        }`}>
-                        {t('Create “{tag}”', { tag: tagInput.trim() })}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+              <button onClick={() => setTagsOpen(true)} style={PJ}
+                className="w-full flex items-center justify-between gap-2 text-left bg-white border border-[#e5e7eb] rounded-lg px-3 py-2 hover:border-[#d1d5db]">
+                <span className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                  {post.tags.length > 0 ? post.tags.slice(0, 3).map(tg => (
+                    <span key={tg} className="text-[11.5px] font-semibold text-[#6b7280] bg-[#f3f4f6] rounded-full px-2.5 py-0.5">{tg}</span>
+                  )) : (
+                    <span className="text-[12.5px] text-[#9ca3af]">{t('No tags yet')}</span>
+                  )}
+                  {post.tags.length > 3 && (
+                    <span className="text-[11.5px] font-semibold text-[#9ca3af]">+{post.tags.length - 3}</span>
+                  )}
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-[#9ca3af]">tune</span>
+              </button>
             </div>
           </div>
         </div>
+
+        {tagsOpen && (
+          <TagsModal
+            t={t} tags={post.tags} knownTags={knownTags}
+            onClose={() => setTagsOpen(false)} onPatch={onPatch}
+          />
+        )}
+
+        {activityOpen && (
+          <ActivityModal
+            t={t} TriPick={TriPick}
+            activity={post.activity} detail={activity}
+            onClose={() => setActivityOpen(false)}
+            onSave={(a, d) => { onPatch({ activity: a, activityDetail: d }); setActivityOpen(false) }}
+          />
+        )}
 
         <div className="px-5 py-3 border-t border-[#f1f3f5] flex items-center justify-between">
           <span className="text-[11px] text-[#9ca3af]">{t('Changes are saved as you make them.')}</span>
