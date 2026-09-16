@@ -56,6 +56,69 @@ export function readableText(bgHex: string): string {
   return luminance(bgHex) > 0.55 ? '#111827' : '#ffffff'
 }
 
+/**
+ * Perceived distance between two colors (0..~765), via the "redmean" approximation.
+ * Cheap (no color-space conversion) and much closer to "do these read as different
+ * colors?" than a plain RGB euclidean distance.
+ */
+export function colorDistance(a: string, b: string): number {
+  const x = toRgb(a), y = toRgb(b)
+  const rm = (x.r + y.r) / 2
+  const dr = x.r - y.r, dg = x.g - y.g, db = x.b - y.b
+  return Math.sqrt((2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db)
+}
+
+/**
+ * Below this the two colors read as "the same color, slightly different shade" —
+ * tuned for thin ~2px chart lines, where far more separation is needed than for
+ * two big filled shapes sitting side by side.
+ */
+const MIN_SERIES_DISTANCE = 190
+
+/**
+ * A line paler than this washes out against the near-white chart card. Such a brand
+ * color is REPLACED with a deck color, never darkened — a darkened brand color would
+ * just read as a second shade of the first line, which is the thing we're avoiding.
+ */
+const MAX_SERIES_LUMINANCE = 0.72
+
+// Deck of vivid, clearly different HUES (blue / amber / emerald / rose / violet /
+// cyan / lime / fuchsia) — a series that can't keep a brand color is given a real
+// second color from here, never a darker or lighter version of the first one.
+const SERIES_DECK = ['#2563eb', '#f59e0b', '#059669', '#e11d48', '#7c3aed', '#0891b2', '#65a30d', '#c026d3']
+
+/**
+ * Pick `count` colors that are guaranteed to read as DIFFERENT COLORS, not as
+ * shades of one color.
+ *
+ * Brand colors are preferred and kept in order, but a logo-extracted palette often
+ * hands back two shades of the same hue (primary and accent are just the two biggest
+ * buckets of the same logo), which would draw both lines in what looks like one color.
+ * A brand color is dropped when it lands too close to one already taken, or when it is
+ * too pale to read on the card; the slot is then filled from the deck by farthest-point
+ * pick — the deck color with the LARGEST distance to everything chosen so far — so every
+ * line is a plainly different hue AND visible.
+ */
+export function distinctSeriesColors(preferred: string[], count: number): string[] {
+  const out: string[] = []
+
+  for (const c of preferred) {
+    if (out.length >= count) break
+    const hex = normalizeHex(c)
+    if (luminance(hex) > MAX_SERIES_LUMINANCE) continue   // invisible on the card — hand the slot to the deck
+    if (out.every(o => colorDistance(o, hex) >= MIN_SERIES_DISTANCE)) out.push(hex)
+  }
+
+  while (out.length < count) {
+    const free = SERIES_DECK.filter(c => !out.includes(c))
+    if (!free.length) break   // more series than the deck can separate — unreachable in practice
+    out.push(free.reduce((best, c) =>
+      Math.min(...out.map(o => colorDistance(o, c))) > Math.min(...out.map(o => colorDistance(o, best))) ? c : best,
+      free[0]))
+  }
+  return out
+}
+
 /** pptxgenjs wants hex without the leading '#'. */
 export const noHash = (hex: string) => normalizeHex(hex).slice(1)
 

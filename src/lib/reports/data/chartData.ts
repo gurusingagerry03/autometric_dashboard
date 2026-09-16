@@ -1,6 +1,6 @@
 // Chart configuration data + real-data resolvers, mirrored 1:1 from report_2's
 // ChartSelectionModal / SmartChartBlock so the metric-selection flow matches exactly.
-import { CoverColors } from '../cover/colors'
+import { CoverColors, distinctSeriesColors } from '../cover/colors'
 import {
   AxisScale, ReportChartMetrics, niceScale, chartSeriesFor, dimensionLabelsFor,
   barCategoryFor, barScale, sentimentSeriesFor, SentimentKey,
@@ -191,13 +191,17 @@ export function resolveLineData(
     return { labels, series: raw.map(x => ({ name: x.d.name, color: SENTIMENT_COLORS[x.d.name], data: x.data, scale })) }
   }
 
-  const palette = [colors.primary, colors.accent, colors.secondary]
+  // Brand palette, but forced apart: a logo-extracted primary/accent pair is often
+  // two shades of the same hue, which would draw both lines in what looks like one
+  // color. Sized to the metric count so no series ever wraps onto another's color.
+  const ids = config.metrics ?? []
+  const palette = distinctSeriesColors([colors.primary, colors.accent, colors.secondary], Math.max(ids.length, 1))
   const customLabel = (id: string) => ctx?.customMetrics?.find(c => c.id === id)?.label
   const series: LineSeries[] = []
-  ;(config.metrics ?? []).forEach((id, idx) => {
+  ids.forEach((id, idx) => {
     const data = chartSeriesFor(ctx, channel, id, dim)
     if (data && data.length) {
-      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx % palette.length], data, scale: niceScale(data) })
+      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx], data, scale: niceScale(data) })
     }
   })
   return { labels, series }
