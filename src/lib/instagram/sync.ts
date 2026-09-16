@@ -42,13 +42,21 @@ export type IgSyncResult = {
   ig_comments: { count: number; error: string | null }
 }
 
+/**
+ * Rentang tarik dalam hari, dihitung mundur dari hari ini.
+ *
+ * 30 adalah jendela harian scheduler — cukup untuk menjaga data tetap segar,
+ * dan sengaja pendek supaya kuota Graph API tidak habis tiap malam. Penarikan
+ * ulang untuk mengisi bulan yang terlewat memberi angka yang lebih besar; lihat
+ * scripts/dev/backfill-posts.ts.
+ */
 export async function initialIgSync(
   socialAccountId: string,
   platformUserId:  string,
   oauthToken:      string,
   brandId:         string,
+  days = 30,
 ): Promise<IgSyncResult> {
-  const days = 30
 
   const [profileResult, mediaResult, taggedResult, storiesResult] = await Promise.allSettled([
     // 1. Profile snapshot (today)

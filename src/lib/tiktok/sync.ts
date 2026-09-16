@@ -9,10 +9,19 @@ export type TtSyncResult = {
   tt_videos:  { count: number; error: string | null }
 }
 
+/**
+ * Rentang tarik dalam hari, dihitung mundur dari hari ini.
+ *
+ * 30 adalah jendela harian scheduler — cukup untuk menjaga data tetap segar,
+ * dan sengaja pendek supaya kuota Graph API tidak habis tiap malam. Penarikan
+ * ulang untuk mengisi bulan yang terlewat memberi angka yang lebih besar; lihat
+ * scripts/dev/backfill-posts.ts.
+ */
 export async function initialTtSync(
   socialAccountId: string,
   accessToken:     string,
   brandId:         string,
+  days = 30,
 ): Promise<TtSyncResult> {
   console.log(`[initialTtSync] START brandId=${brandId} socialAccountId=${socialAccountId}`)
 
@@ -48,7 +57,7 @@ export async function initialTtSync(
     // 2. Videos snapshot
     (async () => {
       console.log('[initialTtSync] fetching videos...')
-      const videos = await fetchAllTtVideos(accessToken)
+      const videos = await fetchAllTtVideos(accessToken, days)
       console.log(`[initialTtSync] fetched ${videos.length} videos`)
       const items: TtVideoSnapshotItem[] = videos.map((v) => ({
         socialAccountId,

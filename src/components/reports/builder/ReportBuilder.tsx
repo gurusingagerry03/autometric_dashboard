@@ -14,9 +14,10 @@ import { ReportTableMetrics } from '@/lib/reports/data/tableTypes'
 import { ReportChartMetrics } from '@/lib/reports/data/chartTypes'
 import { ReportKpiMetrics } from '@/lib/reports/data/kpiMetrics'
 import { ReportKpiTargets, autofillKpiSlots } from '@/lib/reports/data/kpiTargets'
+import { ReportYtdMetrics } from '@/lib/reports/data/ytdMetrics'
 import { ReportPostMetrics } from '@/lib/reports/data/posts'
 import type { AvailablePeriod } from '@/lib/reports/data/periodsQuery'
-import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportYtdContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import {
   ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig, makeSlide,
   type ReportTemplateConfig, type ReportTemplateRecord,
@@ -24,6 +25,7 @@ import {
 import CoverPreview from '../cover/CoverPreview'
 import SlideTypePicker from '../modals/SlideTypePicker'
 import KpiTargetPickerModal from '../modals/KpiTargetPickerModal'
+import YtdMetricPickerModal from '../modals/YtdMetricPickerModal'
 import ChartSelectionModal from '../modals/ChartSelectionModal'
 import TableSelectionModal from '../modals/TableSelectionModal'
 import MetricPickerModal from '../modals/MetricPickerModal'
@@ -141,6 +143,8 @@ export default function ReportBuilder({
   const [kpiMetrics, setKpiMetrics] = useState<ReportKpiMetrics | null>(null)
   // Target KPI brand + capaiannya, untuk slide KPI Overview.
   const [kpiTargets, setKpiTargets] = useState<ReportKpiTargets | null>(null)
+  // Metrik YTD (akumulasi sejak awal jendela YTD brand), untuk slide YTD Performance.
+  const [ytdMetrics, setYtdMetrics] = useState<ReportYtdMetrics | null>(null)
   // Live post pool (per channel) for this brand + report month, provided via context
   // so the Visual Analysis slide ranks real posts by Format / Pillar / metric.
   const [postMetrics, setPostMetrics] = useState<ReportPostMetrics | null>(null)
@@ -175,19 +179,24 @@ export default function ReportBuilder({
     setMonth(MONTHS[latest.month - 1])
     setYear(latest.year)
   }, [availablePeriods]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Target KPI brand — TIDAK bergantung pada bulan report: periode sebuah KPI
-  // ditentukan oleh KPI itu sendiri. Karena itu efeknya berdiri sendiri, supaya
-  // mengganti bulan tidak mengosongkan slide KPI lalu mengisinya dengan isi yang
-  // sama persis.
+  // Target KPI brand dan metrik YTD — sama-sama TIDAK bergantung pada bulan
+  // report: periodenya ditentukan KPI itu sendiri. Karena itu efeknya berdiri
+  // sendiri, supaya mengganti bulan tidak mengosongkan kedua slide lalu
+  // mengisinya lagi dengan isi yang sama persis.
   useEffect(() => {
-    if (!brandId) { setKpiTargets(null); return }
+    if (!brandId) { setKpiTargets(null); setYtdMetrics(null); return }
     let alive = true
-    setKpiTargets(null)
-    const url = `/api/organizations/${encodeURIComponent(orgId)}/reports/kpi-targets?brand=${encodeURIComponent(brandId)}`
-    fetch(url, { cache: 'no-store' })
+    setKpiTargets(null); setYtdMetrics(null)
+    const base = `/api/organizations/${encodeURIComponent(orgId)}/reports`
+    const q = `brand=${encodeURIComponent(brandId)}`
+    fetch(`${base}/kpi-targets?${q}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then((d: ReportKpiTargets | null) => { if (alive) setKpiTargets(d) })
       .catch(e => { if (alive) { console.error('[report] kpi targets fetch failed:', e); setKpiTargets(null) } })
+    fetch(`${base}/ytd-metrics?${q}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: ReportYtdMetrics | null) => { if (alive) setYtdMetrics(d) })
+      .catch(e => { if (alive) { console.error('[report] ytd metrics fetch failed:', e); setYtdMetrics(null) } })
     return () => { alive = false }
   }, [orgId, brandId])
   // Table metrics — also refetched on custom-metric changes (cmVersion).
@@ -361,7 +370,7 @@ export default function ReportBuilder({
       const cover = { brandName, title, subtitle, period, logoDataUrl, colors, mode, template, font }
       const { blob, fileName } = slides.length === 0
         ? await exportCoverPptx(cover)
-        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics, kpiMetrics, kpiTargets, postMetrics, competitorPosts, audienceMetrics })
+        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics })
 
       downloadBlob(blob, fileName)
 
@@ -432,6 +441,7 @@ export default function ReportBuilder({
     <ReportChartContext.Provider value={chartMetrics}>
     <ReportKpiContext.Provider value={kpiMetrics}>
     <ReportKpiTargetContext.Provider value={kpiTargets}>
+    <ReportYtdContext.Provider value={ytdMetrics}>
     <ReportCompetitorPostContext.Provider value={competitorPosts}>
     <ReportAudienceContext.Provider value={audienceMetrics}>
     <ReportPostContext.Provider value={postMetrics}>
@@ -701,9 +711,17 @@ export default function ReportBuilder({
           Dashboard Overview di antara katalog metrik. Keduanya menulis ke slot
           yang sama lewat applyMetric — yang disimpan hanya berbeda artinya. */}
       <MetricPickerModal
-        open={slotOpen && activeSlide?.type !== 'kpi'}
+        open={slotOpen && activeSlide?.type === 'dashboard_overview'}
         orgId={orgId}
         onCustomMetricsChanged={() => setCmVersion(v => v + 1)}
+        current={kpiSlot !== null && activeSlide ? activeSlide.kpiMetrics[kpiSlot] ?? null : null}
+        channel={activeSlide?.channel ?? 'instagram'}
+        onClose={() => setConfigBlock(null)}
+        onSelect={applyMetric}
+      />
+
+      <YtdMetricPickerModal
+        open={slotOpen && activeSlide?.type === 'ytd'}
         current={kpiSlot !== null && activeSlide ? activeSlide.kpiMetrics[kpiSlot] ?? null : null}
         channel={activeSlide?.channel ?? 'instagram'}
         onClose={() => setConfigBlock(null)}
@@ -729,6 +747,7 @@ export default function ReportBuilder({
     </ReportPostContext.Provider>
     </ReportAudienceContext.Provider>
     </ReportCompetitorPostContext.Provider>
+    </ReportYtdContext.Provider>
     </ReportKpiTargetContext.Provider>
     </ReportKpiContext.Provider>
     </ReportChartContext.Provider>

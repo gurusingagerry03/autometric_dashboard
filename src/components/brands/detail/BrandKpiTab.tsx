@@ -72,18 +72,67 @@ export default function BrandKpiTab() {
   /**
    * Periode YTD: pemakai memilih BULAN AWAL saja, panjangnya selalu 12 bulan.
    *
-   * Bukan setting yang disimpan — ini nilai awal kolom Periode di form Add KPI,
-   * supaya membuat beberapa KPI dengan rentang yang sama tidak berarti memilih
-   * tanggal yang sama berulang kali. Tiap baris tetap bisa memakai rentangnya
-   * sendiri lewat picker di form.
+   * DISIMPAN, dan dipakai dua hal sekaligus: nilai awal kolom Periode di form
+   * Add KPI, dan periode yang dibaca `l2_gold.sp_calculate_ytd_performance`
+   * untuk membangun deret YTD (slide YTD Performance di Report Maker).
+   *
+   * Tersimpan sebagai tanggal, bukan sebagai (tahun, bulan): tabelnya menyimpan
+   * start_date/end_date, dan bulan awal hanyalah cara memilihnya. Saat dimuat,
+   * bulan/tahun-nya diturunkan kembali dari start_date.
    */
   const now = new Date()
   const [ytdYear, setYtdYear] = useState(now.getFullYear())
   const [ytdMonth, setYtdMonth] = useState(0)   // Januari — tahun berjalan penuh
+  const [ytdSaving, setYtdSaving] = useState(false)
+  const [ytdSaved, setYtdSaved] = useState(false)
   const ytd: DateSelection = useMemo(
     () => ({ mode: 'fixed', ...twelveMonthsFrom(ytdYear, ytdMonth) }),
     [ytdYear, ytdMonth],
   )
+
+  // Periode tersimpan brand ini. Dimuat sekali; kalau belum pernah di-set,
+  // pilihannya tetap di Januari tahun berjalan seperti sebelumnya.
+  useEffect(() => {
+    let alive = true
+    fetch(`/api/brands/${brand.id}/ytd`)
+      .then(r => r.json())
+      .then(j => {
+        const start: string | undefined = j?.data?.startDate
+        if (!alive || !start) return
+        const [y, m] = start.split('-').map(Number)
+        if (y && m) { setYtdYear(y); setYtdMonth(m - 1) }
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [brand.id])
+
+  /**
+   * Simpan periode YTD begitu dipilih.
+   *
+   * Menyimpan langsung, tanpa tombol: pemilihnya hanya dua dropdown, dan setiap
+   * kombinasinya sah — tidak ada keadaan setengah jadi yang perlu ditahan dulu.
+   * Perhitungan deretnya ikut jalan di server (lihat lib/ytd/queries.ts), jadi
+   * satu kali pilih sudah membuat slide YTD Performance punya angka.
+   */
+  async function saveYtd(year: number, month0: number) {
+    const range = twelveMonthsFrom(year, month0)
+    setYtdSaving(true); setYtdSaved(false); setErr(null)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/ytd`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate: range.start, endDate: range.end }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error ?? t('Failed to save YTD period.'))
+      setYtdSaved(true)
+      window.setTimeout(() => setYtdSaved(false), 2500)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t('Failed to save YTD period.'))
+    } finally {
+      setYtdSaving(false)
+    }
+  }
   const years = useMemo(() => {
     const y = new Date().getFullYear()
     return [y - 2, y - 1, y, y + 1, y + 2]
@@ -209,22 +258,30 @@ export default function BrandKpiTab() {
         <div>
           <h2 style={PJB} className="text-[15px] font-bold text-[#111827]">{t('YTD Periode')}</h2>
           <p className="text-[12px] text-[#6b7280] mt-0.5">
-            {t('Pick the starting month — the window is always 12 months.')}
+            {t('Pick the starting month — the window is always 12 months. Used by KPI and the YTD report slide.')}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select value={ytdMonth} onChange={e => setYtdMonth(Number(e.target.value))}
-            className="h-9 rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80]">
+          <select value={ytdMonth} disabled={ytdSaving}
+            onChange={e => { const v = Number(e.target.value); setYtdMonth(v); saveYtd(ytdYear, v) }}
+            className="h-9 rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80] disabled:opacity-60">
             {MONTHS.map((m, i) => <option key={m} value={i}>{t(m)}</option>)}
           </select>
-          <select value={ytdYear} onChange={e => setYtdYear(Number(e.target.value))}
-            className="h-9 rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80]">
+          <select value={ytdYear} disabled={ytdSaving}
+            onChange={e => { const v = Number(e.target.value); setYtdYear(v); saveYtd(v, ytdMonth) }}
+            className="h-9 rounded-lg border border-[#e5e7eb] bg-white px-2.5 text-[12.5px] text-[#374151] outline-none focus:border-[#1B8A80] disabled:opacity-60">
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           {/* Rentang hasilnya ditulis apa adanya — 12 bulan dari Sep 2026 berakhir
               di Agu 2027, dan itu tidak jelas sampai tanggalnya benar-benar terlihat. */}
           <span style={PJB} className="text-[12.5px] font-semibold text-[#374151] whitespace-nowrap">
             {fmtSelection(ytd.start, ytd.end, t)}
+          </span>
+          {/* Tersimpan tanpa tombol, jadi harus ada yang mengatakannya —
+              perubahan diam-diam pada angka yang dipakai semua report adalah
+              hal terakhir yang boleh terjadi tanpa jejak di layar. */}
+          <span className="w-[86px] text-[11.5px] text-[#6b7280] whitespace-nowrap">
+            {ytdSaving ? t('Saving…') : ytdSaved ? `✓ ${t('Saved')}` : ''}
           </span>
         </div>
       </div>

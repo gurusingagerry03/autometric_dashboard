@@ -6,6 +6,7 @@ import type { ReportTableMetrics, SectionMetrics, CompetitorSection, PlatformMet
 import type { ReportChartMetrics } from './chartTypes'
 import type { ReportKpiMetrics } from './kpiMetrics'
 import type { ReportKpiTargets } from './kpiTargets'
+import type { ReportYtdMetrics } from './ytdMetrics'
 import type { ReportPostMetrics } from './posts'
 import type { ReportCompetitorPosts } from './competitorPostsQuery'
 import type { ReportAudienceMetrics } from './audienceTypes'
@@ -56,6 +57,18 @@ export const ReportKpiTargetContext = createContext<ReportKpiTargets | null>(nul
 
 export function useReportKpiTargets(): ReportKpiTargets | null {
   return useContext(ReportKpiTargetContext)
+}
+
+/**
+ * Metrik YTD untuk slide YTD Performance: akumulasi sejak awal jendela YTD brand
+ * plus jendela pembandingnya. Terpisah dari ReportKpiContext karena rentangnya
+ * bukan bulan report — bulan report hanya menentukan di mana akumulasinya
+ * berhenti. null selama memuat.
+ */
+export const ReportYtdContext = createContext<ReportYtdMetrics | null>(null)
+
+export function useReportYtd(): ReportYtdMetrics | null {
+  return useContext(ReportYtdContext)
 }
 
 /**

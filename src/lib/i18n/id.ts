@@ -657,8 +657,8 @@ export const ID: Record<string, string> = {
 
   /* ── Brands: tab KPI ──────────────────────────────────────────────── */
   'YTD Periode': 'Periode YTD',
-  'Pick the starting month — the window is always 12 months.':
-    'Pilih bulan awalnya — rentangnya selalu 12 bulan.',
+  'Pick the starting month — the window is always 12 months. Used by KPI and the YTD report slide.':
+    'Pilih bulan awalnya — rentangnya selalu 12 bulan. Dipakai KPI dan slide YTD di report.',
   'No custom metric yet — shared with Report Maker once created.':
     'Belum ada metrik kustom — begitu dibuat, ikut tersedia di Report Maker.',
   '{n} saved — the same library Report Maker uses.':
@@ -1040,6 +1040,23 @@ export const ID: Record<string, string> = {
   'Achievement & run rate': 'Achievement & run rate',
   'Achievement rate only': 'Achievement rate saja',
   'Run rate only': 'Run rate saja',
+  'Add YTD metric': 'Tambah metrik YTD',
+  'Select YTD metric': 'Pilih metrik YTD',
+  'No YTD window for this channel': 'Belum ada periode YTD untuk channel ini',
+  'YTD {range}': 'YTD {range}',
+  'No prior-year data': 'Tidak ada data tahun sebelumnya',
+  'Failed to save YTD period.': 'Gagal menyimpan periode YTD.',
+  'No YTD period set for this brand': 'Brand ini belum punya periode YTD',
+  'Set the YTD period on the brand’s KPI tab.': 'Atur periode YTD-nya di tab KPI brand.',
+  'KPI metrics': 'Metrik KPI',
+  'Dashboard metrics': 'Metrik Dashboard',
+  'vs {range}': 'vs {range}',
+  'Total Followers': 'Total Pengikut',
+  'Engagement Rate': 'Engagement Rate',
+  'Profile Visits': 'Kunjungan Profil',
+  'Website Clicks': 'Klik Website',
+  'Avg. Watch Time': 'Rata-rata Durasi Tonton',
+  'Reposts': 'Dibagikan Ulang',
   'Number of metrics': 'Jumlah metrik',
   'How many scorecards to show.': 'Berapa banyak kartu skor yang ditampilkan.',
   'Switch visualization type': 'Ganti jenis visualisasi',

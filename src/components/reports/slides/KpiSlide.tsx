@@ -10,7 +10,11 @@ import {
   KPI_TARGET_MAX, KpiTarget, fmtKpiCount, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
   kpiTargetById, kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
 } from '@/lib/reports/data/kpiTargets'
-import { useReportKpi, useReportKpiTargets, useReportMetrics } from '@/lib/reports/data/metricsContext'
+import { useReportKpi, useReportKpiTargets, useReportMetrics, useReportYtd } from '@/lib/reports/data/metricsContext'
+import {
+  fmtYtdPct, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta,
+  ytdIcon, ytdLabel, ytdRowFor,
+} from '@/lib/reports/data/ytdMetrics'
 import { PJ, AiInsightBlock } from './parts'
 import { ChartBlock } from './charts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -20,7 +24,9 @@ const COUNTS = [3, 4, 5, 6]
 // Tinggi baris kartu. KPI Overview lebih tinggi karena kartunya membawa dua baris
 // yang tidak dimiliki scorecard dashboard: target + periodenya, dan dua tingkat
 // (achievement & run rate) alih-alih satu badge delta.
-const ROW_H = { kpi: '20cqh', dashboard: '17cqh' } as const
+// YTD sama tingginya dengan KPI: kartunya juga membawa satu baris tambahan
+// (sejak kapan diakumulasi) di atas badge deltanya.
+const ROW_H = { kpi: '20cqh', ytd: '20cqh', dashboard: '17cqh' } as const
 
 // Font sizes scale with the number of scorecards (smaller when there are more).
 function sizesFor(n: number) {
@@ -29,7 +35,15 @@ function sizesFor(n: number) {
   return { value: '1.8cqw', label: '0.85cqw', trend: '0.85cqw', cap: '0.78cqw' }
 }
 
-function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMetric | undefined; accent: string; count: number; editable: boolean; onClick?: () => void }) {
+/**
+ * Scorecard nilai + delta. Dipakai Dashboard Overview apa adanya, dan YTD
+ * Performance dengan `meta` (sejak kapan diakumulasi) dan `caption` sendiri —
+ * bentuk kartunya memang diminta sama, yang berbeda hanya keterangannya.
+ */
+function Scorecard({ metric, accent, count, editable, onClick, meta, caption, emptyLabel, noDeltaLabel }: {
+  metric: KpiMetric | undefined; accent: string; count: number; editable: boolean
+  onClick?: () => void; meta?: string; caption?: string; emptyLabel?: string; noDeltaLabel?: string
+}) {
   const t = useT()
   const s = sizesFor(count)
   if (!metric) {
@@ -43,7 +57,7 @@ function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMe
         style={{ background: 'rgba(255,255,255,0.45)' }}
       >
         <span className="material-symbols-outlined" style={{ fontSize: '2.2cqw' }}>add</span>
-        <span style={{ fontSize: s.cap, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', ...PJ }}>{t('Add metric')}</span>
+        <span style={{ fontSize: s.cap, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', ...PJ }}>{t(emptyLabel ?? 'Add metric')}</span>
       </button>
     )
   }
@@ -65,16 +79,17 @@ function Scorecard({ metric, accent, count, editable, onClick }: { metric: KpiMe
         )}
       </div>
       <div style={{ fontSize: s.value, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, ...PJ }}>{metric.value}</div>
+      {meta && <div className="truncate" style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{meta}</div>}
       <div className="flex items-center" style={{ gap: '0.6cqw' }}>
         {metric.hasDelta === false ? (
-          <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{t('No prior-period data')}</span>
+          <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{t(noDeltaLabel ?? 'No prior-period data')}</span>
         ) : (
           <>
             <span className="flex items-center rounded-full" style={{ gap: '0.2cqw', fontSize: s.trend, fontWeight: 800, padding: '0.2cqh 0.7cqw', color: good ? '#16a34a' : '#dc2626', background: good ? '#f0fdf4' : '#fef2f2', ...PJ }}>
               <span className="material-symbols-outlined" style={{ fontSize: `calc(${s.trend} + 0.4cqw)` }}>{metric.delta >= 0 ? 'arrow_outward' : 'south_east'}</span>
               {Math.abs(metric.delta)}%
             </span>
-            <span style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{t('vs last period')}</span>
+            <span className="truncate" style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{caption ?? t('vs last period')}</span>
           </>
         )}
       </div>
@@ -236,6 +251,82 @@ function TargetRow({
 }
 
 /**
+ * Baris kartu YTD Performance — slot yang bisa dipilih, sama seperti Dashboard
+ * Overview. Yang berbeda hanya rentang yang diringkasnya: bukan bulan report vs
+ * bulan sebelumnya, melainkan akumulasi sejak awal jendela YTD brand vs jendela
+ * sepanjang itu tepat sebelumnya.
+ */
+function YtdRow({
+  slide, accent, editable, onConfigure,
+}: {
+  slide: ContentSlide; accent: string; editable: boolean
+  onConfigure?: (block: ConfigBlock) => void
+}) {
+  const t = useT()
+  const ytd = useReportYtd()
+  const section = ytdChannelFor(ytd, slide.channel)
+  const count = Math.max(1, slide.metricCount)
+
+  // Jendela YTD lahir dari periode yang di-set di tab KPI brand. Tanpa itu tidak
+  // ada tanggal mulai yang bisa dipakai siapa pun — termasuk pemilih metriknya.
+  // KPI aktif tidak lagi jadi syarat: metrik dashboard tetap terakumulasi.
+  if (ytd === null || !section) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center rounded-[1.2cqw] border-2 border-dashed border-[#dbe1e8]" style={{ background: 'rgba(255,255,255,0.45)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '2.6cqw', color: '#c4c9d4' }}>timeline</span>
+        <span style={{ fontSize: '1.1cqw', fontWeight: 700, color: '#94a3b8', marginTop: '0.6cqh', ...PJ }}>
+          {ytd === null ? t('Loading…') : t('No YTD window for this channel')}
+        </span>
+        {ytd !== null && (
+          <span style={{ fontSize: '0.95cqw', color: '#b6bcc4', marginTop: '0.3cqh', ...PJ }}>
+            {t('Set the YTD period on the brand’s KPI tab.')}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  // Rentangnya ditulis apa adanya di kedua baris: "YTD" saja tidak memberi tahu
+  // siapa pun sejak kapan dihitung, dan pembandingnya harus bisa dibaca tanpa
+  // menghitung mundur setahun sendiri.
+  const range = fmtYtdRange(section.window)
+  const caption = t('vs {range}', { range: fmtYtdPriorRange(section.window) })
+  return (
+    <div className="flex h-full" style={{ gap: count >= 6 ? '1cqw' : '1.6cqw' }}>
+      {Array.from({ length: count }, (_, i) => {
+        const row = ytdRowFor(ytd, slide.channel, slide.kpiMetrics[i] ?? null)
+        const delta = row ? ytdDelta(row) : null
+        return (
+          <div key={i} style={{ flex: 1, minWidth: 0 }}>
+            <Scorecard
+              metric={row ? {
+                key: row.metric,
+                label: t(ytdLabel(row.metric)),
+                icon: ytdIcon(row.metric),
+                value: fmtYtdRow(row),
+                delta: delta ?? 0,
+                positiveIsGood: true,
+                // Tahun lalu kosong bukan "naik 0%" — badge-nya disembunyikan,
+                // dan Scorecard menggantinya dengan kalimat yang menyebutkannya.
+                hasDelta: delta != null,
+              } : undefined}
+              accent={accent}
+              count={count}
+              editable={editable}
+              onClick={() => onConfigure?.(`kpi-${i}`)}
+              meta={row ? `${range} · ${fmtYtdPct(row.runRate)}` : undefined}
+              caption={caption}
+              emptyLabel="Add YTD metric"
+              noDeltaLabel="No prior-year data"
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
  * KPI Overview body — a row of metric scorecards over a deep-dive chart + summary.
  * Clicking a scorecard opens metric selection; the metric count is changed via the
  * edit button (modal). Header & footer come from the slide shell (SlidePreview).
@@ -264,11 +355,12 @@ export default function KpiSlide({
   // A custom-metric key resolves from the table payload (same value the table shows).
   const metricFor = (key: string | null) => resolveKpiMetric(kpi, table, slide.channel, key)
   const isTargets = slide.type === 'kpi'
+  const isYtd = slide.type === 'ytd'
 
   return (
     <>
       {/* Scorecards */}
-      <div style={{ height: isTargets ? ROW_H.kpi : ROW_H.dashboard, flexShrink: 0, position: 'relative' }}>
+      <div style={{ height: isTargets ? ROW_H.kpi : isYtd ? ROW_H.ytd : ROW_H.dashboard, flexShrink: 0, position: 'relative' }}>
         {editable && (
           <button
             onClick={() => setCountOpen(true)}
@@ -281,6 +373,8 @@ export default function KpiSlide({
         )}
         {isTargets ? (
           <TargetRow slide={slide} accent={colors.primary} editable={editable} onConfigure={onConfigure} />
+        ) : isYtd ? (
+          <YtdRow slide={slide} accent={colors.primary} editable={editable} onConfigure={onConfigure} />
         ) : (
           <div className="flex h-full" style={{ gap: count >= 6 ? '1cqw' : '1.6cqw' }}>
             {Array.from({ length: count }, (_, i) => (

@@ -9,7 +9,7 @@ import type { SourceFilter } from './audienceTypes'
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'visual' | 'overview' | 'sentiment' | 'demographic'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'overview' | 'sentiment' | 'demographic'
 
 /**
  * Slide yang memakai layout KPI (baris kartu + deep dive + ringkasan).
@@ -18,6 +18,10 @@ export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashbo
  *   - 'dashboard_overview' → scorecard metrik dashboard, dibandingkan dengan
  *     periode sebelumnya; metrik tiap kartu dipilih sendiri (metricCount +
  *     kpiMetrics di bawah).
+ *   - 'ytd'                → metrik yang diakumulasi sejak awal jendela YTD
+ *     brand (diturunkan dari periode KPI aktifnya), dibandingkan dengan jendela
+ *     sepanjang itu tepat sebelumnya. Slot dan pemilihnya seperti Dashboard
+ *     Overview — lihat data/ytdMetrics.ts.
  *   - 'kpi'                → target KPI brand dari tab KPI di halaman detail,
  *     dibandingkan dengan targetnya sendiri (achievement rate / run rate).
  *     Memakai `metricCount` + `kpiMetrics` yang SAMA, hanya isi slotnya yang
@@ -29,7 +33,7 @@ export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashbo
  * keduanya (bingkai slide, chart, ringkasan). Yang membedakan isinya adalah
  * pemeriksaan `type === 'kpi'` di ketiga tempat itu, bukan helper ini.
  */
-export const usesKpiLayout = (type: SlideType) => type === 'kpi' || type === 'dashboard_overview'
+export const usesKpiLayout = (type: SlideType) => type === 'kpi' || type === 'dashboard_overview' || type === 'ytd'
 export type VisualMode = 'chart' | 'table' | null
 
 /**
@@ -145,6 +149,7 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   comparison: { title: 'Period Comparison' },
   kpi: { title: 'KPI Overview' },
   dashboard_overview: { title: 'Dashboard Overview' },
+  ytd: { title: 'YTD Performance' },
   visual: { title: 'Visual Analysis' },
   overview: { title: 'Overview Slide' },
   sentiment: { title: 'Audience Sentiment' },

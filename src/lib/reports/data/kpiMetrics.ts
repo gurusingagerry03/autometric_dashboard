@@ -68,11 +68,17 @@ export function kpiDefsForChannel(channel: string): KpiDef[] {
 export const kpiPairFor = (m: ReportKpiMetrics | null | undefined, channel: string, key: string): KpiPair | null =>
   m?.[channel as DashPlatform]?.[key] ?? null
 
-function fmtVal(format: KpiFmt, v: number): string {
+/**
+ * Nilai satu metrik menurut formatnya. Diekspor karena slide YTD memakai katalog
+ * def yang sama untuk metrik dashboard-nya — kalau di sana nilainya dicetak
+ * sendiri, Engagement Rate akan muncul sebagai "3" di YTD dan "3%" di dashboard.
+ */
+export function formatKpiValue(format: KpiFmt, v: number): string {
   if (format === 'pct') return (Math.round(v * 100) / 100) + '%'
   if (format === 'time') return (Math.round(v * 10) / 10) + 's'
   return groupInt(v) // counts / followers / reach → full numbers with comma separators
 }
+const fmtVal = formatKpiValue
 const round1 = (n: number) => Math.round(n * 10) / 10
 
 /** Build a scorecard metric from a real DB pair (null current → "—", no delta). */

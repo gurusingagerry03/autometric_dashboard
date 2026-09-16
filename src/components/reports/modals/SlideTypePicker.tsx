@@ -31,7 +31,7 @@ const KPI_DASHBOARD = 'kpi_dashboard'
 const TEMPLATES: Item[] = [
   { id: 'section', name: 'Section Heading', desc: 'Centered section divider title', icon: 'title', enabled: true },
   { id: 'dashboard', name: 'Standard Dashboard', desc: 'Chart, Key Insights & Data Table', icon: 'dashboard', enabled: true },
-  { id: KPI_DASHBOARD, name: 'KPI/Dashboard Overview', desc: 'Top Metrics with Deep Dive', icon: 'leaderboard', enabled: true },
+  { id: KPI_DASHBOARD, name: 'KPI/Dashboard Overview', desc: 'Top metrics, KPI targets, or YTD', icon: 'leaderboard', enabled: true },
   { id: 'comparison', name: 'Comparison View', desc: 'Side-by-side Metric Analysis', icon: 'compare_arrows', enabled: true },
   { id: 'visual', name: 'Visual Analysis', desc: 'Media / Screenshot & Analysis', icon: 'image', enabled: true },
   { id: 'overview', name: 'Overview Slide', desc: 'Full Visualization & Notes', icon: 'view_quilt', enabled: true },
@@ -50,6 +50,7 @@ const TEMPLATES: Item[] = [
 const KPI_DASHBOARD_VARIANTS: Item[] = [
   { id: 'dashboard_overview', name: 'Dashboard Overview', desc: 'Dashboard metrics vs the previous period', icon: 'dashboard', enabled: true },
   { id: 'kpi', name: 'KPI Overview', desc: 'Brand KPI targets — achievement & run rate', icon: 'leaderboard', enabled: true },
+  { id: 'ytd', name: 'YTD Performance', desc: 'Accumulated since the brand’s YTD start', icon: 'timeline', enabled: true },
 ]
 
 // When "All Channels" is picked, only these layouts make sense.

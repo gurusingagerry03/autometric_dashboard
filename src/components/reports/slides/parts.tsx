@@ -3,13 +3,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { SlideChrome, ContentSlide, usesKpiLayout } from '@/lib/reports/data/slideModel'
-import { useReportKpi, useReportKpiTargets, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { useReportKpi, useReportKpiTargets, useReportYtd, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import {
   AGE_BUCKETS, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
   demographicsFor, sentimentFor, type SourceFilter,
 } from '@/lib/reports/data/audienceTypes'
 import { kpiDefsForChannel, kpiMetricFor, resolveKpiMetric, type KpiMetric } from '@/lib/reports/data/kpiMetrics'
 import { fmtKpiPeriod, kpiTargetById, kpiTargetLabel } from '@/lib/reports/data/kpiTargets'
+import { fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor } from '@/lib/reports/data/ytdMetrics'
 import { TABLE_TYPES, buildTable, columnsForChannel, customColumnsFrom } from '@/lib/reports/data/tableTypes'
 import { resolveLineData, resolveBarData, type ChartConfig } from '@/lib/reports/data/chartData'
 import { buildPosts } from '@/lib/reports/data/posts'
@@ -153,7 +154,7 @@ function chartToData(cfg: ChartConfig | null, chart: ReturnType<typeof useReport
 /** Build the AI payload from what THIS slide actually shows (its table/chart/kpi/posts). */
 function gatherSlideData(
   slide: ContentSlide,
-  ctx: { kpi: ReturnType<typeof useReportKpi>; kpiTargets: ReturnType<typeof useReportKpiTargets>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience> },
+  ctx: { kpi: ReturnType<typeof useReportKpi>; kpiTargets: ReturnType<typeof useReportKpiTargets>; ytd: ReturnType<typeof useReportYtd>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience> },
 ) {
   const ch = slide.channel
   const out: Record<string, unknown> = { channel: ch }
@@ -183,7 +184,36 @@ function gatherSlideData(
   // KPI Overview membawa target, bukan scorecard: yang dikirim adalah kartu yang
   // BENAR-BENAR digambar (shownKpiTargets), supaya ringkasannya tidak pernah
   // membahas KPI yang tidak terlihat di slide yang sama.
-  if (slide.type === 'kpi') {
+  // YTD: yang dikirim adalah jendelanya DAN kartunya. Tanpa jendelanya, model
+  // tidak punya cara tahu "15,089" itu akumulasi 8 bulan atau 11 hari.
+  if (slide.type === 'ytd') {
+    const section = ytdChannelFor(ctx.ytd, ch)
+    if (section) {
+      out.ytdWindow = {
+        range: fmtYtdRange(section.window),
+        comparedWithPriorYear: fmtYtdPriorRange(section.window),
+        countedThrough: section.window.asOf,
+      }
+      out.ytdMetrics = slide.kpiMetrics
+        .slice(0, Math.max(1, slide.metricCount))
+        .map(k => ytdRowFor(ctx.ytd, ch, k))
+        .filter((r): r is NonNullable<typeof r> => !!r)
+        .map(r => {
+          const delta = ytdDelta(r)
+          return {
+            metric: ytdLabel(r.metric),
+            ytdValue: r.cumulative,
+            // Nilai apa adanya bisa menyesatkan untuk metrik dashboard:
+            // Engagement Rate 3.42 adalah persen, Avg. Watch Time 12.4 adalah
+            // detik. Bentuk tampilnya ikut supaya satuannya tidak hilang.
+            displayValue: fmtYtdRow(r),
+            priorYearValue: r.priorYear,
+            changeVsPriorYear: delta == null ? 'no prior-year data' : `${delta >= 0 ? '+' : ''}${delta}%`,
+            periodElapsedPct: r.runRate,
+          }
+        })
+    }
+  } else if (slide.type === 'kpi') {
     out.kpiTargets = slide.kpiMetrics
       .slice(0, Math.max(1, slide.metricCount))
       .map(id => kpiTargetById(ctx.kpiTargets, ch, id))
@@ -247,6 +277,7 @@ function gatherSlideData(
   const has = out.table || out.chart || out.chartLeft || out.sentiment || out.demographics
     || (out.scorecards as unknown[] | undefined)?.length || (out.posts as unknown[] | undefined)?.length
     || (out.kpiTargets as unknown[] | undefined)?.length
+    || (out.ytdMetrics as unknown[] | undefined)?.length
   if (!has) {
     out.metrics = kpiDefsForChannel(ch).map(d => kpiMetricFor(ctx.kpi, ch, d.key)).filter((m): m is KpiMetric => !!m && m.value !== '—').map(kpiRow)
   }
@@ -277,6 +308,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
   const t = useT()
   const kpi = useReportKpi()
   const kpiTargets = useReportKpiTargets()
+  const ytd = useReportYtd()
   const table = useReportMetrics()
   const chart = useReportChart()
   const posts = useReportPosts()
@@ -291,7 +323,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
     if (!ai || loading) return
     setLoading(true); setErr(null)
     try {
-      const data = gatherSlideData(slide, { kpi, kpiTargets, table, chart, posts, audience })
+      const data = gatherSlideData(slide, { kpi, kpiTargets, ytd, table, chart, posts, audience })
       const res = await fetch(`/api/organizations/${encodeURIComponent(ai.orgId)}/reports/ai-insight`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slideType: slide.type, channel: slide.channel, brandName: ai.brandName, period: ai.period, title: slide.title, data }),

@@ -27,13 +27,21 @@ export type FbSyncResult = {
   fb_posts:   { count: number; error: string | null }
 }
 
+/**
+ * Rentang tarik dalam hari, dihitung mundur dari hari ini.
+ *
+ * 30 adalah jendela harian scheduler — cukup untuk menjaga data tetap segar,
+ * dan sengaja pendek supaya kuota Graph API tidak habis tiap malam. Penarikan
+ * ulang untuk mengisi bulan yang terlewat memberi angka yang lebih besar; lihat
+ * scripts/dev/backfill-posts.ts.
+ */
 export async function initialFbSync(
   socialAccountId: string,
   platformUserId:  string,   // page_id
   oauthToken:      string,
   brandId:         string,
+  days = 30,
 ): Promise<FbSyncResult> {
-  const days = 30
 
   const results = await Promise.allSettled([
     // 1. Profile + page insights + demographics snapshot

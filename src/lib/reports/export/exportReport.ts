@@ -19,6 +19,10 @@ import {
   KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiCount, fmtKpiPeriod, fmtKpiRate,
   kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
 } from '../data/kpiTargets'
+import {
+  ReportYtdMetrics, fmtYtdPct, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow,
+  ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor,
+} from '../data/ytdMetrics'
 import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool } from '../data/posts'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
@@ -386,8 +390,8 @@ async function addComparisonSlide(pptx: any, slide: ContentSlide, chrome: SlideC
 
 /* ── Entry point ─────────────────────────────────────────────────────────── */
 
-function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, count: number, x: number, y: number, w: number, h: number) {
-  if (!metric) { placeholder(slide, x, y, w, h, 'ADD METRIC'); return }
+function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, count: number, x: number, y: number, w: number, h: number, meta?: string, caption?: string, emptyLabel = 'ADD METRIC', noDeltaLabel = 'no prior-period data') {
+  if (!metric) { placeholder(slide, x, y, w, h, emptyLabel); return }
   card(slide, x, y, w, h)
   slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { width: 0 } })
   const pad = W(1.2)
@@ -397,12 +401,15 @@ function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, 
   const good = deltaIsGood(metric)
   const arrow = metric.delta >= 0 ? '▲' : '▼'
   const trend = metric.hasDelta === false
-    ? [{ text: 'no prior-period data', options: { color: '94A3B8' } }]
+    ? [{ text: noDeltaLabel, options: { color: '94A3B8' } }]
     : [
         { text: `${arrow} ${Math.abs(metric.delta)}%  `, options: { color: good ? '16A34A' : 'DC2626', bold: true } },
-        { text: 'vs last period', options: { color: '94A3B8' } },
+        { text: caption ?? 'vs last period', options: { color: '94A3B8' } },
       ]
-  slide.addText(trend, { x: x + pad, y: y + H(11.8), w: w - 2 * pad, h: H(3), fontSize: FS(0.95), fontFace: PJ })
+  // Baris meta (YTD: sejak kapan) menggeser badge deltanya turun, sama seperti
+  // di preview yang menyisipkannya di antara nilai dan badge.
+  if (meta) slide.addText(meta, { x: x + pad, y: y + H(10.4), w: w - 2 * pad, h: H(2.4), fontSize: FS(0.85), color: '94A3B8', fontFace: PJ })
+  slide.addText(trend, { x: x + pad, y: y + (meta ? H(13.8) : H(11.8)), w: w - 2 * pad, h: H(3), fontSize: FS(0.95), fontFace: PJ })
 }
 
 /**
@@ -441,7 +448,7 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
   })
 }
 
-async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, chartMetrics?: ReportChartMetrics, kpiMetrics?: ReportKpiMetrics, metrics?: ReportTableMetrics, kpiTargets?: ReportKpiTargets) {
+async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, chartMetrics?: ReportChartMetrics, kpiMetrics?: ReportKpiMetrics, metrics?: ReportTableMetrics, kpiTargets?: ReportKpiTargets, ytdMetrics?: ReportYtdMetrics) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
   s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
@@ -452,9 +459,36 @@ async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, 
   // scorecard metrik dashboard. Barisnya beda tinggi, jadi chart di bawahnya
   // ikut bergeser — persis seperti ROW_H di preview.
   const isTargets = slide.type === 'kpi'
-  const ry = H(18), rh = isTargets ? H(20) : H(17)
+  const isYtd = slide.type === 'ytd'
+  const ry = H(18), rh = isTargets || isYtd ? H(20) : H(17)
 
-  if (isTargets) {
+  if (isYtd) {
+    const section = ytdChannelFor(ytdMetrics ?? null, slide.channel)
+    if (!section || section.rows.length === 0) {
+      placeholder(s, hx, ry, hw, rh, 'NO YTD PERIOD FOR THIS CHANNEL')
+    } else {
+      const n = Math.max(1, slide.metricCount)
+      const gap = n >= 6 ? W(1) : W(1.6)
+      const cardW = (hw - gap * (n - 1)) / n
+      const range = fmtYtdRange(section.window)
+      const caption = `vs ${fmtYtdPriorRange(section.window)}`
+      for (let i = 0; i < n; i++) {
+        const row = ytdRowFor(ytdMetrics ?? null, slide.channel, slide.kpiMetrics[i] ?? null)
+        const delta = row ? ytdDelta(row) : null
+        scorecard(
+          s,
+          row ? {
+            key: row.metric, label: ytdLabel(row.metric), icon: '',
+            value: fmtYtdRow(row), delta: delta ?? 0,
+            positiveIsGood: true, hasDelta: delta != null,
+          } : undefined,
+          colors.primary, n, hx + i * (cardW + gap), ry, cardW, rh,
+          row ? `${range} · ${fmtYtdPct(row.runRate)}` : undefined,
+          caption, 'ADD YTD METRIC', 'no prior-year data',
+        )
+      }
+    }
+  } else if (isTargets) {
     // Brand tanpa KPI aktif di channel ini: satu blok yang menyebutkan itu,
     // bukan deretan kartu kosong yang di deck jadi seperti slide yang lupa diisi.
     if (kpiTargetsFor(kpiTargets ?? null, slide.channel).length === 0) {
@@ -860,6 +894,8 @@ export interface ReportExportOptions {
   kpiMetrics?: ReportKpiMetrics | null
   /** Target KPI brand + capaiannya, untuk slide KPI Overview. */
   kpiTargets?: ReportKpiTargets | null
+  /** Metrik YTD untuk slide YTD Performance. */
+  ytdMetrics?: ReportYtdMetrics | null
   postMetrics?: ReportPostMetrics | null
   /** Post kompetitor untuk slide Visual Content bermode competitive review. */
   competitorPosts?: CompetitorPostPool | null
@@ -867,7 +903,7 @@ export interface ReportExportOptions {
   audienceMetrics?: ReportAudienceMetrics | null
 }
 
-export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, postMetrics, competitorPosts, audienceMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
+export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
   PJ = font
   const { default: PptxGenJS } = await import('pptxgenjs')
   const pptx = new PptxGenJS()
@@ -881,7 +917,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     const chrome = chromes[i]
     if (slide.type === 'section') await addSectionSlide(pptx, slide, chrome, colors)
     else if (slide.type === 'comparison') await addComparisonSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined)
-    else if (usesKpiLayout(slide.type)) await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined, kpiTargets ?? undefined)
+    else if (usesKpiLayout(slide.type)) await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined, kpiTargets ?? undefined, ytdMetrics ?? undefined)
     else if (slide.type === 'visual') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts)
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)

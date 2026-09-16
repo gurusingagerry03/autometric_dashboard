@@ -7,7 +7,7 @@ import { refreshTiktokToken } from '@/lib/tiktok/refresh'
 import { refreshInstagramToken } from '@/lib/instagram/refresh'
 import { logSyncEntries, SyncEntry } from '@/lib/monitoring/logger'
 
-type SchedulerAccount = {
+export type SchedulerAccount = {
   socialAccountId: string
   platformUserId:  string | null
   oauthToken:      string
@@ -55,7 +55,15 @@ async function markAccountDisconnected(socialAccountId: string): Promise<void> {
   console.log(`[scheduler] marked account ${socialAccountId} as disconnected`)
 }
 
-async function ensureFreshToken(acct: SchedulerAccount): Promise<string> {
+/**
+ * Token yang dijamin masih berlaku, memperbaruinya kalau sudah dekat kedaluwarsa.
+ *
+ * Diekspor bersama SchedulerAccount supaya penarikan sekali-jalan (backfill)
+ * memakai jalur token yang PERSIS sama dengan scheduler malam — TikTok merotasi
+ * refresh_token tiap kali dipakai, jadi dua jalur refresh yang berbeda adalah
+ * dua cara berbeda untuk membuat akun harus di-connect ulang.
+ */
+export async function ensureFreshToken(acct: SchedulerAccount): Promise<string> {
   const { platform, oauthToken, refreshToken, tokenExpiresAt, socialAccountId } = acct
 
   if (!tokenExpiresAt) return oauthToken
