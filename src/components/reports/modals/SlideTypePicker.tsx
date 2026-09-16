@@ -20,6 +20,9 @@ interface Item {
  *  atau 'kpi'. Id-nya sengaja tidak menyerupai SlideType mana pun supaya tidak
  *  pernah lolos ke slideModel kalau suatu saat alurnya berubah. */
 const KPI_DASHBOARD = 'kpi_dashboard'
+/** Pintu kedua, dengan alasan yang sama: 'visual' dan 'activity' berbagi layout
+ *  kartu post tapi menjawab pertanyaan yang berbeda. */
+const VISUAL_CONTENT = 'visual_content'
 
 // Modeled on report_2's LAYOUT_TEMPLATES. Three are built; the rest are listed
 // (matching the reference) but disabled until their layouts exist.
@@ -33,7 +36,7 @@ const TEMPLATES: Item[] = [
   { id: 'dashboard', name: 'Standard Dashboard', desc: 'Chart, Key Insights & Data Table', icon: 'dashboard', enabled: true },
   { id: KPI_DASHBOARD, name: 'KPI/Dashboard Overview', desc: 'Top metrics, KPI targets, or YTD', icon: 'leaderboard', enabled: true },
   { id: 'comparison', name: 'Comparison View', desc: 'Side-by-side Metric Analysis', icon: 'compare_arrows', enabled: true },
-  { id: 'visual', name: 'Visual Analysis', desc: 'Media / Screenshot & Analysis', icon: 'image', enabled: true },
+  { id: VISUAL_CONTENT, name: 'Visual Content', desc: 'Post cards — performance or activity', icon: 'image', enabled: true },
   { id: 'overview', name: 'Overview Slide', desc: 'Full Visualization & Notes', icon: 'view_quilt', enabled: true },
   { id: 'sentiment', name: 'Audience Sentiment', desc: 'Comments & tagged posts + word cloud', icon: 'sentiment_satisfied', enabled: true },
   { id: 'demographic', name: 'Audience Demographics', desc: 'Age & gender, month over month', icon: 'groups', enabled: true },
@@ -52,6 +55,22 @@ const KPI_DASHBOARD_VARIANTS: Item[] = [
   { id: 'kpi', name: 'KPI Overview', desc: 'Brand KPI targets — achievement & run rate', icon: 'leaderboard', enabled: true },
   { id: 'ytd', name: 'YTD Performance', desc: 'Accumulated since the brand’s YTD start', icon: 'timeline', enabled: true },
 ]
+
+/** Langkah ketiga untuk Visual Content — dua slide, satu layout kartu post.
+ *  Activity Performance menarik HANYA post yang ditandai activity di tab Content
+ *  Pillars, jadi pengaturannya tinggal jumlah kartu + metrik: Order, Rank by,
+ *  Format, dan Pillar tidak berarti apa-apa untuk daftar acara. */
+const VISUAL_VARIANTS: Item[] = [
+  { id: 'visual', name: 'Visual Analysis', desc: 'Top/low posts by a metric you pick', icon: 'image', enabled: true },
+  { id: 'activity', name: 'Activity Performance', desc: 'Posts tagged as activity — submissions & participants', icon: 'local_activity', enabled: true },
+]
+
+/** Pintu → daftar variannya. Entri di sini BUKAN SlideType; memilihnya membuka
+ *  langkah berikutnya, bukan membuat slide. */
+const VARIANTS: Record<string, Item[]> = {
+  [KPI_DASHBOARD]: KPI_DASHBOARD_VARIANTS,
+  [VISUAL_CONTENT]: VISUAL_VARIANTS,
+}
 
 // When "All Channels" is picked, only these layouts make sense.
 //
@@ -85,11 +104,12 @@ export default function SlideTypePicker({
 }) {
   const t = useT()
   const [channel, setChannel] = useState<string | null>(null)
-  // Langkah ketiga (bentuk slide) hanya terbuka lewat entri gabungan.
-  const [variantStep, setVariantStep] = useState(false)
+  // Langkah ketiga (bentuk slide) hanya terbuka lewat entri gabungan. Menyimpan
+  // daftar variannya, bukan flag — sekarang ada dua pintu yang memakainya.
+  const [variants, setVariants] = useState<Item[] | null>(null)
 
   // Always start at the channel step when (re)opened.
-  useEffect(() => { if (open) { setChannel(null); setVariantStep(false) } }, [open])
+  useEffect(() => { if (open) { setChannel(null); setVariants(null) } }, [open])
 
   if (!open) return null
 
@@ -98,10 +118,11 @@ export default function SlideTypePicker({
     : TEMPLATES
 
   // Kartu yang ditampilkan langkah kedua/ketiga — markupnya satu, isinya yang bertukar.
-  const items = variantStep ? KPI_DASHBOARD_VARIANTS : templates
+  const items = variants ?? templates
   const pick = (tpl: Item) => {
     if (!tpl.enabled) return
-    if (tpl.id === KPI_DASHBOARD) { setVariantStep(true); return }
+    const next = VARIANTS[tpl.id as string]
+    if (next) { setVariants(next); return }
     onSelect(tpl.id as SlideType, channel!)
   }
 
@@ -115,8 +136,8 @@ export default function SlideTypePicker({
         <div className="flex items-center gap-3 px-6 py-4 border-b border-[#f0f1f2]">
           {channel && (
             <button
-              onClick={() => (variantStep ? setVariantStep(false) : setChannel(null))}
-              title={variantStep ? t('Back to layouts') : t('Back to channels')}
+              onClick={() => (variants ? setVariants(null) : setChannel(null))}
+              title={variants ? t('Back to layouts') : t('Back to channels')}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors"
             >
               <span className="material-symbols-outlined text-[20px]">arrow_back</span>
@@ -124,10 +145,10 @@ export default function SlideTypePicker({
           )}
           <div className="flex-1">
             <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a]">
-              {variantStep ? 'Choose a template' : channel ? 'Choose a slide layout' : 'Choose a channel'}
+              {variants ? 'Choose a template' : channel ? 'Choose a slide layout' : 'Choose a channel'}
             </h2>
             <p className="text-[12px] text-[#94a3b8] mt-0.5">
-              {variantStep
+              {variants
                 ? 'Same layout, different content — pick which one this slide is.'
                 : channel
                   ? channel === 'all'

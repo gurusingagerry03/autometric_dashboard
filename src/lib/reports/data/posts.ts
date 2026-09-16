@@ -7,7 +7,7 @@ import { groupInt } from './format'
 // Engagement → Efficiency). "Impressions/Views" is one combined metric (Facebook
 // = impressions, Instagram/TikTok = views). ER is split into Reach/Views/Followers.
 // All of them are always offered as options; ones with no data render as 0.
-export const POST_METRICS: { id: string; label: string; channels?: string[] }[] = [
+export const POST_METRICS: { id: string; label: string; channels?: string[]; activityOnly?: boolean }[] = [
   // Kapan post tayang. Nilainya BUKAN angka untuk dibaca — tanggal disimpan
   // sebagai epoch di `values` supaya pengurutan tetap jalan, dan bentuk yang
   // dibaca orang ada di `text`. Tanpa epoch, "Rank by Post Date" akan diam-diam
@@ -31,11 +31,38 @@ export const POST_METRICS: { id: string; label: string; channels?: string[] }[] 
   // nol yang menyesatkan, jadi pemilihnya disaring lewat metricsForChannel().
   { id: 'watch_time',      label: 'Avg. Watch Time', channels: ['tiktok'] },
   { id: 'completion_rate', label: 'Completion Rate', channels: ['tiktok'] },
+
+  // Hanya untuk slide Activity Performance. Sumbernya kolom activity di
+  // l0_extra.<platform>_post_extra_attribute, yang diisi manual lewat Edit post
+  // di tab Content Pillars — bukan hasil sync. `activityOnly` menjauhkannya dari
+  // pemilih Visual Analysis: di sana ketujuhnya akan kosong untuk hampir semua
+  // post, dan kartu berisi '—' bukan pilihan yang pantas ditawarkan.
+  { id: 'activity_name',   label: 'Activity Name',   activityOnly: true },
+  { id: 'activity_type',   label: 'Activity Type',   activityOnly: true },
+  { id: 'submission',      label: 'Submission',      activityOnly: true },
+  { id: 'participant',     label: 'Participant',     activityOnly: true },
+  { id: 'activity_period', label: 'Activity Period', activityOnly: true },
 ]
+
+/**
+ * Metrik slide Activity Performance, DALAM URUTAN INI.
+ *
+ * Urutannya tidak mengikuti POST_METRICS karena bacaannya lain: kartu activity
+ * dibaca sebagai "apa acaranya, jenisnya, hasilnya berapa, kapan" — identitas
+ * dulu, angka, baru waktu. Dua di antaranya (New Follow, Post Date) metrik post
+ * biasa yang dipakai ulang, jadi tidak ber-`activityOnly`.
+ */
+export const ACTIVITY_METRIC_IDS = [
+  'activity_name', 'activity_type', 'submission', 'participant',
+  'new_follow', 'activity_period', 'post_date',
+] as const
+
+export const metricsForActivity = () =>
+  ACTIVITY_METRIC_IDS.map(id => POST_METRICS.find(m => m.id === id)!).filter(Boolean)
 
 /** Metrik yang masuk akal untuk sebuah channel — dipakai pemilih di Visual slide. */
 export const metricsForChannel = (channel: string) =>
-  POST_METRICS.filter(m => !m.channels || m.channels.includes(channel))
+  POST_METRICS.filter(m => !m.activityOnly && (!m.channels || m.channels.includes(channel)))
 
 // Kompetitor diukur dari permukaan publiknya, jadi metriknya terbatas pada yang
 // benar-benar dipublikasikan platform — dan ketiganya tidak sama. ER tidak ada di
@@ -82,7 +109,7 @@ export function competitorPoolFor(
 }
 
 /** Metrik yang nilainya teks (tanggal), bukan angka yang bisa diformat. */
-const TEXT_METRIC_IDS = new Set(['post_date', 'post_datetime'])
+const TEXT_METRIC_IDS = new Set(['post_date', 'post_datetime', 'activity_name', 'activity_type', 'activity_period'])
 export const isTextMetric = (id: string) => TEXT_METRIC_IDS.has(id)
 
 // ER metrics render as percentages (and get the ER highlight color in the card).
@@ -113,6 +140,8 @@ export interface PostCandidate {
   image: string | null
   formatId: string; format: string
   pillarId: string; pillar: string
+  /** true kalau is_activity di l0_extra bernilai true — penyaring slide Activity Performance. */
+  isActivity?: boolean
   values: Record<string, number>   // numeric per POST_METRICS id (er_* are percent numbers)
   /** Bentuk siap-baca untuk metrik yang bukan angka (tanggal). Kalau ada, dipakai
    *  apa adanya; `values` untuk id yang sama hanya dipakai mengurutkan. */
@@ -211,6 +240,30 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
 }
 
 export const metricLabel = (id: string) => POST_METRICS.find(m => m.id === id)?.label ?? id
+
+/* ── Activity Performance ─────────────────────────────────────────────────────
+ * Slide ini memakai layout kartu yang sama persis dengan Visual Analysis. Yang
+ * berbeda hanya tiga hal, dan ketiganya ada di bawah: kumpulan post-nya disaring
+ * ke post yang ditandai activity, urutannya tetap (terbaru dulu) alih-alih
+ * top/low, dan katalog metriknya ACTIVITY_METRIC_IDS.
+ */
+
+/** Post yang ditandai activity, terbaru dulu. Urutannya tetap: slide ini tidak
+ *  punya pemilih Order — mengurutkan lomba berdasarkan reach tidak berarti apa-apa. */
+export function activityPool(source: PostCandidate[] | undefined): PostCandidate[] {
+  if (!source || !source.length) return []
+  return source.filter(p => p.isActivity)
+    .sort((a, b) => (b.values.post_date ?? 0) - (a.values.post_date ?? 0))
+}
+
+/** Metrik kartu Activity Performance — urutannya selalu ACTIVITY_METRIC_IDS.
+ *  Tanpa pilihan sama sekali, tampilkan semuanya: tujuh field itu memang isi
+ *  slide ini, bukan sekadar tambahan di atas foto. */
+export function effectiveActivityMetrics(selected: string[]): string[] {
+  const sel = new Set(selected)
+  const shown = ACTIVITY_METRIC_IDS.filter(id => sel.has(id))
+  return shown.length ? [...shown] : [...ACTIVITY_METRIC_IDS]
+}
 
 // ── metric availability ───────────────────────────────────────────────────────
 // Every metric in POST_METRICS is always offered in the Visual slide pickers — a

@@ -13,7 +13,7 @@ import { fmtKpiPeriod, kpiTargetById, kpiTargetLabel } from '@/lib/reports/data/
 import { fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor } from '@/lib/reports/data/ytdMetrics'
 import { TABLE_TYPES, buildTable, columnsForChannel, customColumnsFrom } from '@/lib/reports/data/tableTypes'
 import { resolveLineData, resolveBarData, type ChartConfig } from '@/lib/reports/data/chartData'
-import { buildPosts } from '@/lib/reports/data/posts'
+import { buildPosts, activityPool, effectiveActivityMetrics, metricLabel } from '@/lib/reports/data/posts'
 import { PLATFORM_META } from '@/components/dashboard/data'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -274,8 +274,17 @@ function gatherSlideData(
     out.posts = buildPosts(slide.postCount, slide.postFilter, { source: ctx.posts?.[ch] ?? undefined, format: slide.postFormat, pillar: slide.postPillar, sortMetric: slide.postSortMetric })
       .map(p => ({ rank: p.id, format: p.format, pillar: p.pillar, ...p.metrics }))
   }
+  if (slide.type === 'activity') {
+    // Hanya field activity yang dikirim. Membanjiri model dengan seluruh metrik
+    // post membuatnya berbicara soal reach dan ER, padahal slide ini tidak
+    // menampilkan keduanya — pembacanya akan mencari angka yang tidak ada.
+    const shown = effectiveActivityMetrics(slide.postMetrics)
+    out.activities = buildPosts(slide.postCount, 'top', { source: activityPool(ctx.posts?.[ch] ?? undefined), sortMetric: 'post_date' })
+      .map(p => Object.fromEntries([['rank', p.id], ...shown.map(id => [metricLabel(id), p.metrics[id] ?? '—'])]))
+  }
   const has = out.table || out.chart || out.chartLeft || out.sentiment || out.demographics
     || (out.scorecards as unknown[] | undefined)?.length || (out.posts as unknown[] | undefined)?.length
+    || (out.activities as unknown[] | undefined)?.length
     || (out.kpiTargets as unknown[] | undefined)?.length
     || (out.ytdMetrics as unknown[] | undefined)?.length
   if (!has) {

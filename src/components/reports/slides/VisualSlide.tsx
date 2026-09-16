@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
-import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, competitorVisualSupported, competitorPoolFor, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
+import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
 import { useReportPosts, useReportCompetitorPosts } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -125,22 +125,30 @@ export default function VisualSlide({
   // kumpulan post-nya yang ditukar. Kompetitor dipilih per slide; kalau belum
   // dipilih, ambil yang pertama untuk channel ini supaya slide tidak kosong.
   const compCtx = useReportCompetitorPosts()
-  const isComp = slide.postSource === 'competitor'
+  // Activity Performance memakai komponen ini apa adanya — layout kartunya memang
+  // sama. Yang ditukar cuma kumpulan post, katalog metrik, dan isi panel setting.
+  const isAct = slide.type === 'activity'
+  const isComp = !isAct && slide.postSource === 'competitor'
   const compsForChannel = (compCtx?.competitors ?? []).filter(c => c.platform === slide.channel)
   const { competitorId: compId, pool: compPool } = competitorPoolFor(compCtx, slide.channel, slide.postCompetitorId)
 
   const loading = isComp ? compCtx === null : ctx === null
-  const livePool = isComp ? compPool : (ctx?.[slide.channel] ?? null)
+  const ownedPool = ctx?.[slide.channel] ?? null
+  const livePool = isAct ? activityPool(ownedPool ?? undefined) : isComp ? compPool : ownedPool
   const hasData = !!(livePool && livePool.length)
   const source = hasData ? livePool! : undefined
-  const metricOptions = isComp ? metricsForCompetitor(slide.channel) : metricsForChannel(slide.channel)
+  const metricOptions = isAct ? metricsForActivity()
+    : isComp ? metricsForCompetitor(slide.channel)
+    : metricsForChannel(slide.channel)
 
   // Every metric is selectable; the populated set only decides the defaults when
   // the slide has no explicit pick yet. Identical logic runs in the exporter so
   // preview == export.
   const populatedMetrics = useMemo(() => populatedMetricsFor(source), [source])
   const sortMetric = effectiveSortMetric(slide.postSortMetric, populatedMetrics)
-  const shownMetrics = effectiveShownMetrics(slide.postMetrics, populatedMetrics)
+  const shownMetrics = isAct
+    ? effectiveActivityMetrics(slide.postMetrics)
+    : effectiveShownMetrics(slide.postMetrics, populatedMetrics)
 
   // Format / pillar filter options — derived from the live pool ("All" only until it loads).
   const allFormatsLabel = isComp ? 'All types' : 'All formats'
@@ -165,7 +173,12 @@ export default function VisualSlide({
   // Pilar tidak pernah menyaring apa pun di mode kompetitor — semua post-nya
   // ber-pillarId 'none' — dan pemilihnya ikut disembunyikan di bawah, jadi
   // filternya dipaksa 'all' supaya pilihan sisa dari mode Owned tidak terbawa.
-  const posts = buildPosts(count, slide.postFilter, { format: postFormat, pillar: isComp ? 'all' : postPillar, sortMetric, source })
+  // Activity: urutan kumpulannya sudah tetap (terbaru dulu) dan tidak ada
+  // penyaring — 'top' di sini artinya "ambil N pertama apa adanya", tanpa tag
+  // TOP/LOW yang akan mengklaim peringkat yang tidak pernah dihitung.
+  const posts = isAct
+    ? buildPosts(count, 'top', { sortMetric: 'post_date', source })
+    : buildPosts(count, slide.postFilter, { format: postFormat, pillar: isComp ? 'all' : postPillar, sortMetric, source })
   const cols = count === 4 ? 'repeat(4, 1fr)' : count === 6 ? 'repeat(6, 1fr)' : 'repeat(8, 1fr)'
 
   const toggleMetric = (id: string) => {
@@ -195,7 +208,9 @@ export default function VisualSlide({
         ) : !hasData ? (
           <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: '#94a3b8' }}>
             <span className="material-symbols-outlined" style={{ fontSize: '3cqw' }}>inventory_2</span>
-            <p className="mt-[0.5cqh]" style={{ fontSize: '1.1cqw', ...PJ }}>No {slide.channel} posts in this period</p>
+            <p className="mt-[0.5cqh]" style={{ fontSize: '1.1cqw', ...PJ }}>
+              {isAct ? t('No posts tagged as activity in this period') : `No ${slide.channel} posts in this period`}
+            </p>
           </div>
         ) : posts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center" style={{ color: '#94a3b8' }}>
@@ -212,7 +227,7 @@ export default function VisualSlide({
       </div>
 
       <div style={{ height: '18cqh', flexShrink: 0 }}>
-        <AiInsightBlock slide={slide} editable={editable} onChange={onChange} label="Visual strategy notes & insights" />
+        <AiInsightBlock slide={slide} editable={editable} onChange={onChange} label={isAct ? 'Activity notes & insights' : 'Visual strategy notes & insights'} />
       </div>
 
       {/* Config modal (fixed → px, not cq) */}
@@ -222,14 +237,23 @@ export default function VisualSlide({
           <div onClick={e => e.stopPropagation()} className="relative w-full max-w-[460px] max-h-[85vh] overflow-y-auto bg-white rounded-2xl shadow-[0_24px_60px_rgba(15,23,42,0.30)] p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{t('Visual content')}</h3>
-                <p className="text-[12px] text-[#94a3b8] mt-0.5">{isComp ? 'Order, post type & metrics — from live data.' : 'Order, format, pillar & metrics — from live data.'}</p>
+                <h3 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{isAct ? t('Activity performance') : t('Visual content')}</h3>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5">{
+                  isAct ? 'How many activities to show, and which fields on each card.'
+                  : isComp ? 'Order, post type & metrics — from live data.'
+                  : 'Order, format, pillar & metrics — from live data.'
+                }</p>
               </div>
               <button onClick={() => setCfgOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
+            {/* Semua pemilih di bawah ini tidak berlaku untuk Activity Performance:
+                daftar acara tidak diperingkat oleh metrik, tidak punya padanan
+                kompetitor, dan format/pilar tidak menjelaskan apa pun tentangnya.
+                Menyisakannya dalam keadaan mati hanya akan mengundang pertanyaan. */}
+            {!isAct && (<>
             <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Order')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {POST_FILTERS.map(f => (
@@ -297,7 +321,9 @@ export default function VisualSlide({
               </>
             )}
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Posts')}</p>
+            </>)}
+
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{isAct ? t('Activities') : t('Posts')}</p>
             <div className="grid grid-cols-3 gap-2 mb-4">
               {POST_COUNTS.map(n => (
                 <button key={n} onClick={() => onChange?.({ ...slide, postCount: n })} style={PJ}
@@ -307,7 +333,7 @@ export default function VisualSlide({
               ))}
             </div>
 
-            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Metrics')} <span className="text-[#cbd5e1] normal-case font-medium">· {t('shown on each card')}</span></p>
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{isAct ? t('Fields') : t('Metrics')} <span className="text-[#cbd5e1] normal-case font-medium">· {t('shown on each card')}</span></p>
             <div className="grid grid-cols-3 gap-2">
               {metricOptions.map(m => {
                 const on = slide.postMetrics.includes(m.id)

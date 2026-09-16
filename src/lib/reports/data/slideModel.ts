@@ -9,7 +9,22 @@ import type { SourceFilter } from './audienceTypes'
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'overview' | 'sentiment' | 'demographic'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic'
+
+/**
+ * Slide yang memakai layout kartu post (grid kartu + catatan di bawah).
+ *
+ * - 'visual'   → Visual Analysis: post terbaik/terburuk milik sendiri atau
+ *   kompetitor, diperingkat oleh metrik pilihan, disaring format & pilar.
+ * - 'activity' → Activity Performance: HANYA post yang ditandai activity di tab
+ *   Content Pillars, urutannya tetap (terbaru dulu). Satu-satunya pengaturannya
+ *   jumlah kartu + metrik mana yang tampil — tidak ada Order, Source, Rank by,
+ *   Format, maupun Pillar, karena tidak satu pun berarti untuk daftar acara.
+ *
+ * Keduanya berbagi komponen preview dan fungsi ekspor yang sama; yang berbeda
+ * cuma kumpulan post dan katalog metriknya (lihat data/posts.ts).
+ */
+export const usesPostLayout = (type: SlideType) => type === 'visual' || type === 'activity'
 
 /**
  * Slide yang memakai layout KPI (baris kartu + deep dive + ringkasan).
@@ -151,6 +166,7 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   dashboard_overview: { title: 'Dashboard Overview' },
   ytd: { title: 'YTD Performance' },
   visual: { title: 'Visual Analysis' },
+  activity: { title: 'Activity Performance' },
   overview: { title: 'Overview Slide' },
   sentiment: { title: 'Audience Sentiment' },
   demographic: { title: 'Audience Demographics' },
@@ -178,7 +194,10 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): 
     postFormat: 'all',
     postPillar: 'all',
     postSortMetric: 'engagement',
-    postMetrics: ['reach', 'engagement', 'er'],
+    // Activity Performance berangkat dengan kosong: effectiveActivityMetrics()
+    // membaca itu sebagai "tampilkan ketujuhnya", sedangkan default Visual
+    // ('reach' dsb.) justru akan menampilkan metrik yang tidak ada di katalognya.
+    postMetrics: type === 'activity' ? [] : ['reach', 'engagement', 'er'],
     visualMode: null,
     sentimentSource: 'all',
     cloudSentiment: 'all',

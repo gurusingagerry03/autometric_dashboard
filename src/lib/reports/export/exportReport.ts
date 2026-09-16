@@ -23,7 +23,7 @@ import {
   ReportYtdMetrics, fmtYtdPct, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow,
   ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor,
 } from '../data/ytdMetrics'
-import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool } from '../data/posts'
+import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics } from '../data/posts'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
 import type { ContentSlide, SlideChrome, AiInsight } from '../data/slideModel'
@@ -591,7 +591,11 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
   // Mode competitive review hanya menukar kumpulan post-nya; pemilihan kompetitornya
   // lewat helper yang sama dengan preview supaya keduanya tidak mungkin memilih akun
   // yang berbeda.
-  const comp = slide.postSource === 'competitor'
+  // Activity Performance memakai fungsi ini apa adanya — kartunya identik. Yang
+  // ditukar hanya kumpulan post, katalog metrik, dan hilangnya peringkat. Dijaga
+  // sejajar dengan VisualSlide.tsx supaya pratinjau dan PPTX tidak bisa berbeda.
+  const isAct = slide.type === 'activity'
+  const comp = !isAct && slide.postSource === 'competitor'
     ? competitorPoolFor(competitorPosts, slide.channel, slide.postCompetitorId)
     : null
 
@@ -614,17 +618,22 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
   }
 
   const n = slide.postCount
-  const source = comp ? (comp.pool ?? undefined) : postMetrics?.[slide.channel]
+  const owned = postMetrics?.[slide.channel]
+  const source = isAct ? activityPool(owned) : comp ? (comp.pool ?? undefined) : owned
   // Metric defaults + brand-aware filters — must match VisualSlide exactly so export == preview.
   const populated = populatedMetricsFor(source)
   const sortMetric = effectiveSortMetric(slide.postSortMetric, populated)
-  const shownMetrics = effectiveShownMetrics(slide.postMetrics, populated)
+  const shownMetrics = isAct
+    ? effectiveActivityMetrics(slide.postMetrics)
+    : effectiveShownMetrics(slide.postMetrics, populated)
   const format = effectiveFilterId(slide.postFormat, availableFilterIds(source, 'formatId'))
   // Pilar hanya milik post sendiri: pemilihnya disembunyikan di mode kompetitor
   // (lihat VisualSlide), jadi filternya dipaksa 'all' di sini juga — kalau tidak,
   // pilihan sisa dari mode Owned akan menyaring di ekspor tapi tidak di pratinjau.
   const pillar = comp ? 'all' : effectiveFilterId(slide.postPillar, availableFilterIds(source, 'pillarId'))
-  const posts = buildPosts(n, slide.postFilter, { format, pillar, sortMetric, source })
+  const posts = isAct
+    ? buildPosts(n, 'top', { sortMetric: 'post_date', source })
+    : buildPosts(n, slide.postFilter, { format, pillar, sortMetric, source })
   const gap = n === 4 ? W(1.2) : n === 6 ? W(0.9) : W(0.7)
   const cw = (hw - gap * (n - 1)) / n
   const gy = H(18), gh = H(49)
@@ -636,7 +645,8 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
     await postCard(s, post, shownMetrics, n, hx + i * (cw + gap), gy, cw, gh)
   }
 
-  insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(69), hw, H(18), 'VISUAL STRATEGY NOTES & INSIGHTS')
+  insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(69), hw, H(18),
+    isAct ? 'ACTIVITY NOTES & INSIGHTS' : 'VISUAL STRATEGY NOTES & INSIGHTS')
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 
@@ -918,7 +928,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     if (slide.type === 'section') await addSectionSlide(pptx, slide, chrome, colors)
     else if (slide.type === 'comparison') await addComparisonSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined)
     else if (usesKpiLayout(slide.type)) await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined, kpiTargets ?? undefined, ytdMetrics ?? undefined)
-    else if (slide.type === 'visual') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts)
+    else if (slide.type === 'visual' || slide.type === 'activity') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts)
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)
     else if (slide.type === 'demographic') await addDemographicSlide(pptx, slide, chrome, colors, audienceMetrics)
