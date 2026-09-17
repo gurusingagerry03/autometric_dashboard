@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { auth } from '@/auth'
 import { verifyBrandAccess, getConnectedTtAccount } from '@/lib/brands/queries'
 import { initialTtSync } from '@/lib/tiktok/sync'
+import { initialTtBusinessSync } from '@/lib/tiktok/business/sync'
 import { logSyncEntries, logInitialScrape, summarizeScrapeResult } from '@/lib/monitoring/logger'
 
 type Params = { params: Promise<{ brandId: string }> }
@@ -23,11 +24,21 @@ export async function POST(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'No connected TikTok account found.' }, { status: 404 })
     }
 
-    const { id: socialAccountId, oauth_token } = account
+    const { id: socialAccountId, oauth_token, auth_method, platform_user_id } = account
     const runId     = randomUUID()
     const startedAt = new Date()
 
-    const result = await initialTtSync(socialAccountId, oauth_token, brandId)
+    // Wizard brand baru menunda initial sync lalu memanggil route ini. Tanpa
+    // percabangan di sini, akun yang disambungkan lewat Business API akan ditarik
+    // dengan endpoint Login Kit memakai token Business — gagal total, dan
+    // satu-satunya jejaknya adalah baris 'failed' di log sync.
+    const isBusiness = auth_method === 'tiktok_business'
+    if (isBusiness && !platform_user_id) {
+      return NextResponse.json({ error: 'TikTok Business account has no business_id stored — reconnect required.' }, { status: 400 })
+    }
+    const result = isBusiness
+      ? await initialTtBusinessSync(socialAccountId, oauth_token, platform_user_id!, brandId)
+      : await initialTtSync(socialAccountId, oauth_token, brandId)
     const finishedAt = new Date()
 
     await logSyncEntries(

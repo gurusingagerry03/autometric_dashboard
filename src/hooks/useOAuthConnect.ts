@@ -7,6 +7,9 @@ export const CONNECT_OPTIONS = [
   { id: 'facebook',  platform: 'facebook'  as Platform, label: 'Facebook',                    method: 'facebook-page' },
   { id: 'ig-fb',     platform: 'instagram' as Platform, label: 'Instagram via Facebook login', method: 'facebook'      },
   { id: 'tiktok',    platform: 'tiktok'    as Platform, label: 'TikTok',                       method: 'tiktok'        },
+  // Produk yang berbeda, bukan sekadar scope tambahan: app, host, dan token-nya
+  // sendiri. Satu akun TikTok hanya bisa satu cara — lihat social_accounts.auth_method.
+  { id: 'tiktok-biz', platform: 'tiktok'   as Platform, label: 'TikTok Business API',          method: 'tiktok-business' },
 ]
 
 export type ConnectOption = typeof CONNECT_OPTIONS[0]
@@ -20,6 +23,8 @@ export interface OAuthPayload {
   oauthToken:     string
   refreshToken:   string | null
   tokenExpiresAt: string
+  /** Hanya dikirim oleh callback TikTok Business; absen = 'oauth'. */
+  authMethod?:    string
 }
 
 export interface PendingConnection {
@@ -32,6 +37,7 @@ function buildOAuthUrl(method: string, brandId: string): string | null {
   if (method === 'facebook')      return `/api/auth/facebook?brandId=${brandId}`
   if (method === 'facebook-page') return `/api/auth/facebook?brandId=${brandId}&mode=facebook`
   if (method === 'tiktok')        return `/api/auth/tiktok?brandId=${brandId}`
+  if (method === 'tiktok-business') return `/api/auth/tiktok-business?brandId=${brandId}`
   return null
 }
 
@@ -68,6 +74,7 @@ async function persistConnection(
       oauthToken:      payload.oauthToken,
       refreshToken:    payload.refreshToken ?? null,
       tokenExpiresAt:  payload.tokenExpiresAt,
+      authMethod:      payload.authMethod ?? 'oauth',
       skipInitialSync,
     }),
   })

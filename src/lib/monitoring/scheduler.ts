@@ -3,7 +3,8 @@ import pool from '@/lib/db'
 import { initialIgSync } from '@/lib/instagram/sync'
 import { initialTtSync } from '@/lib/tiktok/sync'
 import { initialFbSync } from '@/lib/facebook/sync'
-import { refreshTiktokToken } from '@/lib/tiktok/refresh'
+import { refreshTiktokToken, refreshTiktokBusinessToken } from '@/lib/tiktok/refresh'
+import { initialTtBusinessSync } from '@/lib/tiktok/business/sync'
 import { refreshInstagramToken } from '@/lib/instagram/refresh'
 import { logSyncEntries, SyncEntry } from '@/lib/monitoring/logger'
 
@@ -16,7 +17,13 @@ export type SchedulerAccount = {
   platform:        string
   brandId:         string
   orgId:           string
+  /** 'oauth' | 'tiktok_business'. Menentukan API mana yang dipakai untuk akun ini. */
+  authMethod:      string
 }
+
+/** Akun TikTok yang disambungkan lewat TikTok API for Business. */
+export const isTtBusiness = (a: { platform: string; authMethod?: string }) =>
+  a.platform === 'tiktok' && a.authMethod === 'tiktok_business'
 
 export type SchedulerSummary = {
   runId:    string
@@ -78,8 +85,13 @@ export async function ensureFreshToken(acct: SchedulerAccount): Promise<string> 
       if (!refreshToken) {
         throw new Error('TikTok token expired and no refresh_token stored — reconnect required')
       }
-      console.log(`[scheduler] refreshing TikTok token for socialAccountId=${socialAccountId}`)
-      return refreshTiktokToken(socialAccountId, refreshToken)
+      // Dua produk, dua endpoint refresh. Memakai yang salah menghasilkan token
+      // yang ditolak di setiap panggilan berikutnya, dan pesan errornya tidak
+      // menyebut sebabnya — jadi percabangannya di sini, bukan di dalam refresh.
+      console.log(`[scheduler] refreshing TikTok token for socialAccountId=${socialAccountId} (${acct.authMethod})`)
+      return isTtBusiness(acct)
+        ? refreshTiktokBusinessToken(socialAccountId, refreshToken)
+        : refreshTiktokToken(socialAccountId, refreshToken)
     }
     return oauthToken
   }
@@ -115,6 +127,7 @@ export async function runScheduler(
       sa.oauth_token      AS "oauthToken",
       sa.refresh_token    AS "refreshToken",
       sa.token_expires_at AS "tokenExpiresAt",
+      COALESCE(sa.auth_method, 'oauth') AS "authMethod",
       p.key               AS platform,
       b.id                AS "brandId",
       b.organization_id   AS "orgId"
@@ -138,6 +151,13 @@ export async function runScheduler(
 
       if (acct.platform === 'instagram' && acct.platformUserId) {
         result = await initialIgSync(acct.socialAccountId, acct.platformUserId, token, acct.brandId)
+      } else if (isTtBusiness(acct)) {
+        // platform_user_id menyimpan business_id untuk akun Business — tanpa itu
+        // tidak ada yang bisa ditanyakan ke API, jadi dilewati dengan jelas.
+        if (!acct.platformUserId) {
+          throw new Error('TikTok Business account has no business_id stored — reconnect required')
+        }
+        result = await initialTtBusinessSync(acct.socialAccountId, token, acct.platformUserId, acct.brandId)
       } else if (acct.platform === 'tiktok') {
         result = await initialTtSync(acct.socialAccountId, token, acct.brandId)
       } else if (acct.platform === 'facebook' && acct.platformUserId) {

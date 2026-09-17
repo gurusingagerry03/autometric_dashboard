@@ -32,3 +32,29 @@ export async function refreshTiktokToken(socialAccountId: string, refreshToken: 
   console.log(`[refreshTiktokToken] socialAccountId=${socialAccountId} refreshed OK, expires=${tokenExpiresAt}`)
   return newAccessToken
 }
+
+/**
+ * Refresh token TikTok API for Business.
+ *
+ * Dipisah dari refreshTiktokToken() karena app, host, dan bentuk permintaannya
+ * berbeda — memakai yang salah menghasilkan token yang ditolak setiap panggilan
+ * berikutnya, dan pesannya tidak menyebut sebabnya.
+ *
+ * TikTok merotasi refresh_token di beberapa alur, jadi yang dikembalikan selalu
+ * disimpan; kalau tidak ada yang baru, yang lama ditulis ulang apa adanya supaya
+ * tidak pernah ada baris dengan refresh_token kosong.
+ */
+export async function refreshTiktokBusinessToken(socialAccountId: string, refreshToken: string): Promise<string> {
+  const { refreshBusinessToken } = await import('./business/api')
+  const t = await refreshBusinessToken(refreshToken)
+
+  await pool.query(
+    `UPDATE social_accounts
+     SET oauth_token = $1, refresh_token = $2, token_expires_at = $3
+     WHERE id = $4`,
+    [t.accessToken, t.refreshToken ?? refreshToken, t.expiresAt, socialAccountId]
+  )
+
+  console.log(`[refreshTiktokBusinessToken] socialAccountId=${socialAccountId} refreshed OK, expires=${t.expiresAt}`)
+  return t.accessToken
+}

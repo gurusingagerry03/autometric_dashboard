@@ -102,9 +102,15 @@ export async function getConnectedIgAccount(brandId: string): Promise<{
 export async function getConnectedTtAccount(brandId: string): Promise<{
   id: string
   oauth_token: string
+  /** 'oauth' | 'tiktok_business' — pemanggil WAJIB memeriksanya sebelum memilih sync. */
+  auth_method: string
+  /** business_id untuk akun Business; open_id untuk Login Kit. */
+  platform_user_id: string | null
 } | null> {
-  const { rows } = await pool.query<{ id: string; oauth_token: string }>(
-    `SELECT sa.id, sa.oauth_token
+  const { rows } = await pool.query<{
+    id: string; oauth_token: string; auth_method: string; platform_user_id: string | null
+  }>(
+    `SELECT sa.id, sa.oauth_token, COALESCE(sa.auth_method, 'oauth') auth_method, sa.platform_user_id
      FROM brand_social_accounts bsa
      JOIN social_accounts sa ON sa.id = bsa.social_account_id
      JOIN platforms p        ON p.id  = sa.platform_id
@@ -231,6 +237,8 @@ export async function connectSocialAccount(
     avatarUrl?: string | null
     profileUrl?: string | null
     platformUserId?: string | null
+    /** 'oauth' (default) atau 'tiktok_business' — menentukan sync mana yang jalan. */
+    authMethod?: string | null
   },
 ): Promise<SocialAccount & { is_new: boolean }> {
   const client = await pool.connect()
@@ -246,8 +254,8 @@ export async function connectSocialAccount(
       id: string; username: string; avatar_url: string | null; profile_url: string | null; connected: boolean; connected_at: string | null; is_new: boolean
     }>(
       `INSERT INTO social_accounts
-         (platform_id, username, oauth_token, refresh_token, token_expires_at, avatar_url, profile_url, platform_user_id, connected, connected_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, NOW())
+         (platform_id, username, oauth_token, refresh_token, token_expires_at, avatar_url, profile_url, platform_user_id, auth_method, connected, connected_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'oauth'), true, NOW())
        ON CONFLICT (platform_id, username) DO UPDATE
          SET connected         = true,
              connected_at      = NOW(),
@@ -256,7 +264,11 @@ export async function connectSocialAccount(
              token_expires_at  = COALESCE(EXCLUDED.token_expires_at,  social_accounts.token_expires_at),
              avatar_url        = COALESCE(EXCLUDED.avatar_url,        social_accounts.avatar_url),
              profile_url       = COALESCE(EXCLUDED.profile_url,       social_accounts.profile_url),
-             platform_user_id  = COALESCE(EXCLUDED.platform_user_id,  social_accounts.platform_user_id)
+             platform_user_id  = COALESCE(EXCLUDED.platform_user_id,  social_accounts.platform_user_id),
+             -- Menyambung ulang dengan cara yang berbeda MENGGANTI metodenya,
+             -- bukan mempertahankan yang lama: token yang baru saja disimpan di
+             -- baris yang sama memang milik cara yang baru.
+             auth_method       = EXCLUDED.auth_method
        RETURNING id, username, avatar_url, profile_url, connected, connected_at, (xmax = 0) AS is_new`,
       [
         pRows[0].id,
@@ -267,6 +279,7 @@ export async function connectSocialAccount(
         extra?.avatarUrl       ?? null,
         extra?.profileUrl      ?? null,
         extra?.platformUserId  ?? null,
+        extra?.authMethod      ?? null,
       ]
     )
     const sa = saRows[0]

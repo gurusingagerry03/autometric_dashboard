@@ -13,6 +13,7 @@ import { CSV_PLATFORMS, isCsvPlatform } from '@/lib/csv/types'
 import { checkAccountExists } from '@/lib/accounts/verifyAccount'
 import { initialIgSync } from '@/lib/instagram/sync'
 import { initialTtSync } from '@/lib/tiktok/sync'
+import { initialTtBusinessSync } from '@/lib/tiktok/business/sync'
 import { initialFbSync } from '@/lib/facebook/sync'
 import { logSyncEntries, logInitialScrape, summarizeScrapeResult } from '@/lib/monitoring/logger'
 
@@ -125,6 +126,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     const profileUrl      = typeof body?.profileUrl     === 'string' ? body.profileUrl     : null
     const platformUserId  = typeof body?.platformUserId === 'string' ? body.platformUserId : null
     const skipInitialSync = body?.skipInitialSync === true
+    // Hanya dua nilai yang diterima; apa pun selain 'tiktok_business' jatuh ke
+    // 'oauth', jadi badan permintaan tidak bisa menyelundupkan metode ketiga.
+    const authMethod      = body?.authMethod === 'tiktok_business' ? 'tiktok_business' : 'oauth'
     const dataSource      = body?.dataSource === 'csv' ? 'csv' : 'api'
 
     if (!platform || !PLATFORM_LIST.includes(platform as never)) {
@@ -187,7 +191,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     const { is_new, ...account } = await connectSocialAccount(brandId, platform, username, {
-      oauthToken, refreshToken, tokenExpiresAt, avatarUrl: finalAvatarUrl, profileUrl, platformUserId,
+      oauthToken, refreshToken, tokenExpiresAt, avatarUrl: finalAvatarUrl, profileUrl, platformUserId, authMethod,
     })
 
     const meta = { platform, socialAccountId: account.id, brandId, orgId }
@@ -197,7 +201,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     }
 
     if (!skipInitialSync && platform === 'tiktok' && oauthToken) {
-      runInitialSync(() => initialTtSync(account.id, oauthToken, brandId), meta)
+      // business_id disimpan di platform_user_id oleh callback Business; tanpa
+      // itu jalur Business tidak punya apa-apa untuk ditanyakan, jadi jatuh ke
+      // Login Kit alih-alih menjalankan sync yang pasti gagal.
+      runInitialSync(
+        () => (authMethod === 'tiktok_business' && platformUserId
+          ? initialTtBusinessSync(account.id, oauthToken, platformUserId, brandId)
+          : initialTtSync(account.id, oauthToken, brandId)),
+        meta,
+      )
     }
 
     if (!skipInitialSync && platform === 'facebook' && platformUserId && oauthToken) {
