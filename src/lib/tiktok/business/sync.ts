@@ -25,6 +25,34 @@ export type TtSyncResult = {
 const COMMENT_VIDEO_CAP = 20
 
 /**
+ * Jendela tarik AWAL, dalam hari. Dipakai saat akun baru disambungkan dan saat
+ * initial-sync dipanggil manual.
+ *
+ * Naikkan lewat TIKTOK_BUSINESS_BACKFILL_DAYS kalau butuh menarik mundur lebih
+ * jauh — 686, misalnya, mundur sampai 1 November 2024. Perlu diingat kalau
+ * dinaikkan: jendela ini hanya menyentuh VIDEO. Metrik profil tetap dipatok
+ * PROFILE_METRIC_DAYS, karena tabelnya memang tidak bisa menyimpan riwayat
+ * harian (lihat alasannya di bawah).
+ */
+export const BACKFILL_DAYS = Number(process.env.TIKTOK_BUSINESS_BACKFILL_DAYS ?? 30)
+
+/** Jendela sync rutin — cukup untuk menjaga yang baru tetap segar. */
+export const NIGHTLY_DAYS = 30
+
+/**
+ * Rentang tanggal untuk metrik PROFIL, sengaja dipatok pendek dan TIDAK ikut
+ * `days`.
+ *
+ * Alasannya bukan kuota, tapi bentuk tabelnya: tt_profile_snapshots berkunci
+ * (social_account_id, DATE(fetched_at)), jadi satu penarikan hanya bisa
+ * menghasilkan SATU baris apa pun panjang rentangnya — yang disimpan hari
+ * terakhir (lihat latestDaily). Meminta 686 hari di sini tidak menambah satu
+ * baris pun, hanya memperbesar respons dan menambah risiko ditolak TikTok
+ * karena rentangnya melebihi batas mereka.
+ */
+const PROFILE_METRIC_DAYS = 30
+
+/**
  * Sync TikTok lewat API for Business — menulis ke TIGA tabel l0_raw yang sudah
  * ada (tt_profile_snapshots, tt_video_snapshots, tt_comments), hanya mengisi
  * lebih banyak kolomnya daripada jalur Login Kit.
@@ -51,15 +79,15 @@ export async function initialTtBusinessSync(
   accessToken:     string,
   businessId:      string,
   brandId:         string,
-  days = 30,
+  days = BACKFILL_DAYS,
 ): Promise<TtSyncResult> {
-  console.log(`[initialTtBusinessSync] START brandId=${brandId} socialAccountId=${socialAccountId} businessId=${businessId}`)
+  console.log(`[initialTtBusinessSync] START brandId=${brandId} socialAccountId=${socialAccountId} businessId=${businessId} videoDays=${days} profileDays=${PROFILE_METRIC_DAYS}`)
 
   const results = await Promise.allSettled([
     (async () => {
-      const raw = await fetchBusinessProfile(accessToken, businessId, days)
+      const raw = await fetchBusinessProfile(accessToken, businessId, PROFILE_METRIC_DAYS)
       console.log('[initialTtBusinessSync] profil field diterima:', Object.keys(raw ?? {}).join(', '))
-      await saveTtProfileSnapshot(profilePayload(socialAccountId, raw))
+      await saveTtProfileSnapshot(profilePayload(socialAccountId, raw, businessId))
       return 1
     })(),
 
@@ -142,11 +170,6 @@ export function commentPayload(
   // di-upsert dan hanya akan menumpuk duplikat tiap sync.
   if (!commentId) return null
 
-  const created = pick(o, 'create_time', 'created_at')
-  const createdMs = typeof created === 'number'
-    ? (created < 1e11 ? created * 1000 : created)
-    : created ? Date.parse(String(created)) : NaN
-
   return {
     socialAccountId,
     videoId:         video.videoId,
@@ -155,11 +178,11 @@ export function commentPayload(
     // dari videonya sendiri, jadi dipakai ulang alih-alih dibiarkan kosong.
     linkPost:        video.shareUrl,
     linkComment:     strOrNull(pick(o, 'comment_url', 'link')),
-    commentTime:     Number.isFinite(createdMs) ? new Date(createdMs).toISOString() : null,
+    commentTime:     epochToIso(pick(o, 'create_time', 'created_at')),
     commentText:     strOrNull(pick(o, 'text', 'comment_text', 'content')),
     commentUsername: strOrNull(pick(o, 'username', 'owner', 'user_name', 'nickname')),
-    likesCount:      numOrNull(pick(o, 'like_count', 'likes_count', 'digg_count')),
-    repliesCount:    numOrNull(pick(o, 'reply_count', 'replies_count')),
+    likesCount:      intOrNull(pick(o, 'like_count', 'likes_count', 'digg_count')),
+    repliesCount:    intOrNull(pick(o, 'reply_count', 'replies_count')),
     // 'public' = tampil; status lain (hidden/deleted) dianggap disembunyikan.
     hidden:          (() => {
       const st = strOrNull(pick(o, 'status'))
@@ -194,60 +217,114 @@ const strOrNull = (v: unknown): string | null =>
   v === null || v === undefined ? null : String(v)
 
 /**
- * Metrik harian datang sebagai deret per tanggal, bukan satu angka. Snapshot ini
- * satu baris per hari, jadi yang disimpan adalah nilai HARI TERAKHIR — bukan
- * jumlah seluruh rentang, yang akan menghitung ganda setiap kali sync jalan.
+ * Untuk kolom INTEGER di l0_raw. TikTok mengirim pecahan di beberapa field —
+ * `video_duration` datang sebagai 15.7 — dan Postgres MENOLAK itu mentah-mentah
+ * ("invalid input syntax for type integer: 15.7"), menggagalkan seluruh insert
+ * video, bukan hanya kolom itu.
  */
-const latestOf = (v: unknown): unknown => {
-  if (Array.isArray(v)) {
-    const last = v[v.length - 1]
-    if (last && typeof last === 'object') {
-      const o = last as Record<string, unknown>
-      return pick(o, 'value', 'count', 'metric_value')
-    }
-    return last ?? null
-  }
-  if (v && typeof v === 'object') {
-    const o = v as Record<string, unknown>
-    // Bentuk { metrics: [...] } atau { value: n }
-    if (Array.isArray(o.metrics)) return latestOf(o.metrics)
-    return pick(o, 'value', 'count', 'metric_value')
-  }
-  return v ?? null
+const intOrNull = (v: unknown): number | null => {
+  const n = numOrNull(v)
+  return n === null ? null : Math.round(n)
 }
 
-const metric = (o: Record<string, unknown>, ...keys: string[]): number | null =>
-  numOrNull(latestOf(pick(o, ...keys)))
+/**
+ * Epoch TikTok → ISO. `create_time` dikirim sebagai STRING berisi detik
+ * ("1784974952"), bukan number — jadi pemeriksaan typeof saja membuat setiap
+ * tanggal post jatuh ke null tanpa error.
+ */
+function epochToIso(v: unknown): string | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  if (!Number.isFinite(n)) {
+    const t = Date.parse(String(v))
+    return Number.isFinite(t) ? new Date(t).toISOString() : null
+  }
+  // Detik atau milidetik: apa pun di bawah 1e11 dalam milidetik berarti sebelum
+  // tahun 1973 — jauh lebih masuk akal dibaca sebagai detik.
+  return new Date(n < 1e11 ? n * 1000 : n).toISOString()
+}
 
-export function profilePayload(socialAccountId: string, raw: BusinessProfile): TtProfileSnapshotPayload {
+/**
+ * Baris metrik HARI TERAKHIR dari `data.metrics`.
+ *
+ * Bentuk yang dikembalikan TikTok (diverifikasi 17 Sep 2026):
+ *   data.metrics = [ { date: '2026-08-21', video_views: 0, profile_views: 0, … },
+ *                    { date: '2026-09-11', … }, … ]
+ *
+ * DUA JEBAKAN, DAN KEDUANYA SENYAP
+ *   1. Array ini TIDAK TERURUT. Contoh nyata dari API: 21 Ags, 11 Sep, 17 Ags,
+ *      14 Sep, 9 Sep. Mengambil elemen terakhir berarti mengambil tanggal acak,
+ *      dan tidak ada apa pun yang akan memberitahu bahwa angkanya salah hari.
+ *   2. Yang diambil satu hari, BUKAN jumlah seluruh rentang. Snapshot ini satu
+ *      baris per hari; menjumlahkan 30 hari lalu menyimpannya sebagai nilai
+ *      harian akan melipatgandakan angka di dashboard setiap kali sync jalan.
+ */
+function latestDaily(metrics: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(metrics) || !metrics.length) return null
+  let best: Record<string, unknown> | null = null
+  let bestKey = ''
+  for (const row of metrics) {
+    if (!row || typeof row !== 'object') continue
+    const o = row as Record<string, unknown>
+    const key = String(o.date ?? '')
+    // Tanggal 'YYYY-MM-DD' bisa dibandingkan sebagai teks — tanpa Date, jadi
+    // tidak ada zona waktu yang bisa menggeser pilihannya.
+    if (!best || key > bestKey) { best = o; bestKey = key }
+  }
+  return best
+}
+
+/** Demografi kosong (`[]`) berarti TikTok tidak punya datanya — disimpan null,
+ *  bukan array kosong, supaya hilir tidak membacanya sebagai demografi yang sah. */
+const demo = (v: unknown) => (Array.isArray(v) && v.length === 0 ? null : v ?? null)
+
+export function profilePayload(
+  socialAccountId: string, raw: BusinessProfile, businessId?: string,
+): TtProfileSnapshotPayload {
   const o = (raw ?? {}) as Record<string, unknown>
+  // Metrik harian TIDAK ada di level atas — semuanya bersarang di data.metrics[].
+  // Membacanya dari `o` menghasilkan null untuk sembilan kolom sekaligus, tanpa
+  // error apa pun; itu yang terjadi sebelum bentuk ini diverifikasi.
+  const m = latestDaily(o.metrics) ?? {}
+  const newF  = intOrNull(m.daily_new_followers)
+  const lostF = intOrNull(m.daily_lost_followers)
   return {
     socialAccountId,
     // `open_id` Login Kit dan `business_id` Business API sama-sama identitas akun
     // di produknya masing-masing; kolomnya satu, jadi mana pun yang ada dipakai.
-    openId:         strOrNull(pick(o, 'business_id', 'open_id', 'core_user_id')),
+    // /business/get/ TIDAK mengembalikan business_id — identitas akunnya hanya
+    // ada di token, jadi diteruskan dari pemanggil.
+    openId:         businessId ?? strOrNull(pick(o, 'business_id', 'open_id')),
     displayName:    strOrNull(pick(o, 'display_name', 'username')),
-    bioDescription: strOrNull(pick(o, 'bio_description', 'signature', 'bio')),
-    avatarUrl:      strOrNull(pick(o, 'profile_image', 'avatar_url')),
+    bioDescription: strOrNull(pick(o, 'bio_description')),
+    avatarUrl:      strOrNull(pick(o, 'profile_image')),
     isVerified:     (pick(o, 'is_verified') as boolean | null) ?? null,
-    followerCount:  metric(o, 'followers_count', 'follower_count'),
-    followingCount: metric(o, 'following_count'),
-    likesCount:     metric(o, 'likes', 'likes_count', 'total_likes'),
-    videoCount:     metric(o, 'video_count', 'videos_count'),
+    // followers_count ada di dua tempat: total di level atas, dan per hari di
+    // metrics. Yang dipakai level atas — itu jumlah terkini, bukan potret satu hari.
+    followerCount:  intOrNull(o.followers_count) ?? intOrNull(m.followers_count),
+    followingCount: intOrNull(o.following_count),
+    // `total_likes` itu akumulasi seumur akun — yang dimaksud kolom likes_count.
+    // `likes` juga sah tapi artinya like DALAM rentang tanggal, bukan total.
+    likesCount:     intOrNull(o.total_likes),
+    videoCount:     intOrNull(o.videos_count),
 
-    demographicsAge:     pick(o, 'audience_ages', 'audience_age'),
-    demographicsCity:    pick(o, 'audience_cities', 'audience_city'),
-    demographicsCountry: pick(o, 'audience_countries', 'audience_country'),
-    demographicsGender:  pick(o, 'audience_genders', 'audience_gender'),
+    demographicsAge:     demo(o.audience_ages),
+    demographicsCity:    demo(o.audience_cities),
+    demographicsCountry: demo(o.audience_countries),
+    demographicsGender:  demo(o.audience_genders),
 
-    videoViews:    metric(o, 'video_views'),
-    profileReach:  metric(o, 'reach', 'profile_reach'),
-    profileViews:  metric(o, 'profile_views'),
-    comments:      metric(o, 'comments'),
-    shares:        metric(o, 'shares'),
-    netGrowth:     metric(o, 'net_follower_growth', 'net_growth'),
-    newFollowers:  metric(o, 'new_followers', 'followers_gained'),
-    lostFollowers: metric(o, 'lost_followers', 'followers_lost'),
+    videoViews:    intOrNull(m.video_views),
+    // TikTok tidak menyediakan reach tingkat profil; unique_video_views padanan terdekat.
+    profileReach:  intOrNull(m.unique_video_views),
+    profileViews:  intOrNull(m.profile_views),
+    comments:      intOrNull(m.comments),
+    shares:        intOrNull(m.shares),
+    newFollowers:  newF,
+    lostFollowers: lostF,
+    // Diturunkan, bukan diminta: TikTok hanya memberi dua angka harian terpisah.
+    // Tetap null kalau salah satunya tidak ada — 0 akan terbaca sebagai
+    // "pertumbuhannya datar", padahal yang benar "tidak diketahui".
+    netGrowth:     newF === null || lostF === null ? null : newF - lostF,
   }
 }
 
@@ -258,30 +335,26 @@ export function videoPayload(socialAccountId: string, v: BusinessVideo): TtVideo
   // dengan id kosong yang akan bertabrakan dengan baris lain yang sama-sama kosong.
   if (!videoId) return null
 
-  const created = pick(o, 'create_time', 'created_at')
-  const createdMs = typeof created === 'number'
-    // Detik atau milidetik: apa pun sebelum tahun 2001 dalam milidetik jelas detik.
-    ? (created < 1e11 ? created * 1000 : created)
-    : created ? Date.parse(String(created)) : NaN
-
   const rate = numOrNull(pick(o, 'full_video_watched_rate'))
   const totalWatched = numOrNull(pick(o, 'total_time_watched'))
-  const views = metric(o, 'video_views', 'views')
+  const views = intOrNull(pick(o, 'video_views'))
 
   return {
     socialAccountId,
     videoId,
-    postedAt:      Number.isFinite(createdMs) ? new Date(createdMs).toISOString() : null,
-    title:         strOrNull(pick(o, 'caption', 'title')),
-    description:   strOrNull(pick(o, 'caption', 'description')),
-    duration:      numOrNull(pick(o, 'video_duration', 'duration')),
-    coverImageUrl: strOrNull(pick(o, 'thumbnail_url', 'cover_image_url')),
+    postedAt:      epochToIso(pick(o, 'create_time', 'created_at')),
+    // TikTok hanya mengirim satu teks (`caption`); kolom title & description di
+    // l0_raw sama-sama diisi darinya, seperti yang dilakukan jalur Login Kit.
+    title:         strOrNull(pick(o, 'caption')),
+    description:   strOrNull(pick(o, 'caption')),
+    duration:      intOrNull(pick(o, 'video_duration')),
+    coverImageUrl: strOrNull(pick(o, 'thumbnail_url')),
     shareUrl:      strOrNull(pick(o, 'share_url', 'embed_url')),
-    likeCount:     metric(o, 'likes', 'like_count'),
-    commentCount:  metric(o, 'comments', 'comment_count'),
-    shareCount:    metric(o, 'shares', 'share_count'),
+    likeCount:     intOrNull(pick(o, 'likes')),
+    commentCount:  intOrNull(pick(o, 'comments')),
+    shareCount:    intOrNull(pick(o, 'shares')),
     viewCount:     views,
-    reachPost:     metric(o, 'reach'),
+    reachPost:     intOrNull(pick(o, 'reach')),
     // Rata-rata tonton: dipakai kalau disediakan; kalau tidak, diturunkan dari
     // total waktu tonton dibagi jumlah view — pembagian hanya dilakukan kalau
     // view-nya benar-benar > 0, supaya tidak menghasilkan Infinity.
@@ -290,7 +363,10 @@ export function videoPayload(socialAccountId: string, v: BusinessVideo): TtVideo
     // Kolomnya bertipe teks di l0_raw dan dashboard membersihkannya dengan
     // regex; TikTok mengirim pecahan 0..1, jadi dijadikan persen di sini.
     completionRate: rate === null ? null : `${(rate <= 1 ? rate * 100 : rate).toFixed(2)}%`,
-    saves:          metric(o, 'saves', 'favorites'),
-    engagementRate: numOrNull(pick(o, 'engagement_rate')),
+    // `favorites` adalah nama TikTok untuk simpan/bookmark — kolomnya `saves`.
+    saves:          intOrNull(pick(o, 'favorites')),
+    // engagement_rate BUKAN field video yang sah di API ini, jadi tidak diminta;
+    // saveTtVideoSnapshots menghitungnya sendiri dari like+comment+share / view.
+    engagementRate: null,
   }
 }

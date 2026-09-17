@@ -73,34 +73,57 @@ export const BUSINESS_SECRET = process.env.TIKTOK_BUSINESS_SECRET ?? ''
 export const businessConfigured = () => !!BUSINESS_APP_ID && !!BUSINESS_SECRET
 
 /* ── katalog field ───────────────────────────────────────────────────────────
- * Diambil SEMUA yang memetakan ke kolom l0_raw. Field yang tidak dikembalikan
- * akun ini (karena produknya tidak di-approve) cukup absen dari respons —
- * pemetaan di sync.ts menuliskannya sebagai null, bukan nol, supaya "tidak
- * tersedia" tidak pernah terbaca sebagai "nilainya nol".
+ * DIVERIFIKASI 17 Sep 2026 langsung ke API, bukan dari dokumentasi.
+ *
+ * Mengirim satu nama field yang tidak dikenal membuat SELURUH panggilan gagal
+ * dengan code 40002 — bukan mengabaikan yang satu itu saja. Tapi pesan errornya
+ * menyertakan daftar lengkap field yang sah, jadi cara termurah memastikannya
+ * adalah mengirim satu field karangan lalu membaca balasannya. Itu yang dipakai
+ * untuk menyusun dua daftar di bawah.
+ *
+ * Konsekuensinya: JANGAN menambah nama di sini berdasarkan tebakan. Satu nama
+ * yang salah mematikan seluruh sync profil atau seluruh sync video.
  */
 
-/** Profil statis — tidak butuh rentang tanggal. */
+/** Profil statis. Nama yang sempat salah: `video_count` — yang benar `videos_count`. */
 export const PROFILE_FIELDS = [
-  'username', 'display_name', 'profile_image', 'is_business_account',
-  'followers_count', 'following_count', 'likes', 'video_count',
+  'username', 'display_name', 'profile_image', 'bio_description',
+  'is_business_account', 'is_verified',
+  'followers_count', 'following_count', 'total_likes', 'videos_count',
 ] as const
 
-/** Metrik harian + demografi — butuh start_date/end_date. */
+/**
+ * Metrik harian + demografi — butuh start_date/end_date.
+ *
+ * TikTok tidak menyediakan `reach` di tingkat profil (itu hanya ada per video),
+ * jadi `unique_video_views` yang mengisi kolom profile_reach — padanan terdekat
+ * yang ada. Pertumbuhan follower datang sebagai dua angka harian terpisah;
+ * net_growth dihitung dari keduanya, bukan diminta sebagai field.
+ */
 export const PROFILE_METRIC_FIELDS = [
-  'video_views', 'profile_views', 'reach', 'comments', 'shares', 'likes',
-  'followers_count', 'net_follower_growth', 'new_followers', 'lost_followers',
+  'video_views', 'unique_video_views', 'profile_views', 'comments', 'shares', 'likes',
+  'daily_new_followers', 'daily_lost_followers', 'daily_total_followers',
   'audience_ages', 'audience_genders', 'audience_countries', 'audience_cities',
 ] as const
 
+/** Video. `favorites` yang mengisi kolom `saves`, dan `reach` di sini memang ada. */
+export const VIDEO_FIELDS = [
+  'item_id', 'create_time', 'thumbnail_url', 'share_url', 'embed_url', 'caption',
+  'video_duration', 'media_type',
+  'video_views', 'likes', 'comments', 'shares', 'favorites',
+  'reach', 'full_video_watched_rate', 'total_time_watched', 'average_time_watched',
+  'new_followers',
+] as const
+
+/**
+ * BELUM DIVERIFIKASI. Endpoint-nya terbukti ada (ia memvalidasi video_id), tapi
+ * daftar field sahnya baru bisa dipancing dengan video_id yang nyata — dan akun
+ * uji belum punya video. Kalau panggilan komentar gagal dengan code 40002,
+ * pesannya akan memuat daftar yang benar; salin dari situ, jangan menebak.
+ */
 export const COMMENT_FIELDS = [
   'comment_id', 'video_id', 'create_time', 'text', 'username',
   'like_count', 'reply_count', 'parent_comment_id', 'status', 'owner',
-] as const
-
-export const VIDEO_FIELDS = [
-  'item_id', 'create_time', 'thumbnail_url', 'share_url', 'embed_url', 'caption',
-  'video_duration', 'video_views', 'likes', 'comments', 'shares',
-  'reach', 'full_video_watched_rate', 'total_time_watched', 'average_time_watched',
 ] as const
 
 export interface BusinessToken {
@@ -133,7 +156,8 @@ async function call<T>(url: string, init: RequestInit, what: string): Promise<T>
 }
 
 const authed = (accessToken: string): RequestInit => ({
-  // Bukan `Authorization: Bearer` — Business API memakai header sendiri.
+  // Diverifikasi 17 Sep 2026: `Authorization: Bearer` ditolak dengan 40104
+  // "The access_token is empty" — Business API hanya membaca header ini.
   headers: { 'Access-Token': accessToken },
 })
 
@@ -227,15 +251,18 @@ export type BusinessProfile = Record<string, unknown>
 /**
  * Profil + metrik harian dalam satu panggilan.
  *
- * `days` mundur dari hari ini. TikTok membatasi seberapa jauh rentang ini boleh
- * mundur dan batasnya pernah berubah; permintaan yang terlalu panjang ditolak
- * dengan code bukan-nol, bukan dipotong diam-diam — jadi kegagalannya terlihat.
+ * `days` mundur dari KEMARIN, bukan dari hari ini (lihat komentar di bawah).
+ * TikTok membatasi seberapa jauh rentang ini boleh mundur; permintaan yang
+ * terlalu panjang ditolak dengan code bukan-nol, bukan dipotong diam-diam.
  */
 export async function fetchBusinessProfile(
   accessToken: string, businessId: string, days = 30,
 ): Promise<BusinessProfile> {
-  const end   = new Date()
-  const start = new Date(Date.now() - days * 86400_000)
+  // end_date TIDAK BOLEH hari ini — TikTok menolaknya dengan code 40002
+  // "end_date should be earlier than today's date". Metrik hari berjalan memang
+  // belum final di pihak mereka, jadi rentangnya berhenti di kemarin.
+  const end   = new Date(Date.now() - 86400_000)
+  const start = new Date(end.getTime() - days * 86400_000)
   const params = new URLSearchParams({
     business_id: businessId,
     fields:      fieldsParam([...PROFILE_FIELDS, ...PROFILE_METRIC_FIELDS]),
@@ -254,9 +281,16 @@ export async function fetchAllBusinessVideos(
   const cutoffSec = Math.floor((Date.now() - days * 86400_000) / 1000)
   const out: BusinessVideo[] = []
   let cursor: number | undefined
-  // Pagar keras: cursor yang tidak pernah berubah (pernah terjadi saat kuota
-  // habis) akan memutar loop ini selamanya tanpa pagar.
-  for (let page = 0; page < 50; page++) {
+  // Pagar keras terhadap loop tak berujung. Penjaga SEBENARNYA ada di bawah
+  // (`next === cursor` → berhenti); angka ini hanya jaring terakhir kalau TikTok
+  // mengirim cursor yang terus berubah tapi tidak pernah kehabisan data.
+  //
+  // 200 halaman × 20 = 4.000 video. Jendela default cuma 30 hari, jadi angka ini
+  // longgar dengan sengaja: TIKTOK_BUSINESS_BACKFILL_DAYS bisa dinaikkan kapan
+  // saja, dan pemotongan di sini TIDAK memunculkan error — video tertua hanya
+  // diam-diam tidak ikut tertarik. Satu brand di warehouse ini saja sudah punya
+  // 1.079 post TikTok, jadi batas 1.000 yang sempat dipakai terlalu rapat.
+  for (let page = 0; page < 200; page++) {
     const params = new URLSearchParams({
       business_id: businessId,
       fields:      fieldsParam(VIDEO_FIELDS),

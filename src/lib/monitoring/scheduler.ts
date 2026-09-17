@@ -4,7 +4,7 @@ import { initialIgSync } from '@/lib/instagram/sync'
 import { initialTtSync } from '@/lib/tiktok/sync'
 import { initialFbSync } from '@/lib/facebook/sync'
 import { refreshTiktokToken, refreshTiktokBusinessToken } from '@/lib/tiktok/refresh'
-import { initialTtBusinessSync } from '@/lib/tiktok/business/sync'
+import { initialTtBusinessSync, NIGHTLY_DAYS } from '@/lib/tiktok/business/sync'
 import { refreshInstagramToken } from '@/lib/instagram/refresh'
 import { logSyncEntries, SyncEntry } from '@/lib/monitoring/logger'
 
@@ -157,7 +157,9 @@ export async function runScheduler(
         if (!acct.platformUserId) {
           throw new Error('TikTok Business account has no business_id stored — reconnect required')
         }
-        result = await initialTtBusinessSync(acct.socialAccountId, token, acct.platformUserId, acct.brandId)
+        // Jendela pendek, BUKAN BACKFILL_DAYS: upsert-nya idempoten, jadi
+        // menyisir dua tahun tiap malam hanya membuang kuota untuk video lama.
+        result = await initialTtBusinessSync(acct.socialAccountId, token, acct.platformUserId, acct.brandId, NIGHTLY_DAYS)
       } else if (acct.platform === 'tiktok') {
         result = await initialTtSync(acct.socialAccountId, token, acct.brandId)
       } else if (acct.platform === 'facebook' && acct.platformUserId) {
