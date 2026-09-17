@@ -116,14 +116,25 @@ export const VIDEO_FIELDS = [
 ] as const
 
 /**
- * BELUM DIVERIFIKASI. Endpoint-nya terbukti ada (ia memvalidasi video_id), tapi
- * daftar field sahnya baru bisa dipancing dengan video_id yang nyata — dan akun
- * uji belum punya video. Kalau panggilan komentar gagal dengan code 40002,
- * pesannya akan memuat daftar yang benar; salin dari situ, jangan menebak.
+ * DIVERIFIKASI 17 Sep 2026 terhadap komentar nyata.
+ *
+ * BERBEDA DARI DUA ENDPOINT LAIN: /business/comment/list/ TIDAK menolak nama
+ * field yang tidak dikenal — mengirim field karangan tetap dibalas code 0 dan
+ * ia mengembalikan kumpulan field bawaannya. Akibatnya nama yang salah di sini
+ * GAGAL SENYAP: panggilannya sukses, kolomnya diam-diam null. Itu yang terjadi
+ * dengan tebakan awal `like_count` / `reply_count` / `parent_comment_id`.
+ *
+ * Nama yang benar: `likes`, `replies`. `parent_comment_id` tidak ada sama sekali
+ * — yang ada `replies` (jumlah balasan), jadi kolom parent_id tetap null.
+ *
+ * Awas `owner`: itu BOOLEAN (apakah komentar dari pemilik akun), bukan nama
+ * pengguna. Memakainya sebagai cadangan username akan menulis "false" ke kolom
+ * comment_username.
  */
 export const COMMENT_FIELDS = [
-  'comment_id', 'video_id', 'create_time', 'text', 'username',
-  'like_count', 'reply_count', 'parent_comment_id', 'status', 'owner',
+  'comment_id', 'video_id', 'create_time', 'text',
+  'username', 'display_name', 'user_id',
+  'likes', 'replies', 'status', 'pinned', 'owner', 'liked',
 ] as const
 
 export interface BusinessToken {
@@ -324,22 +335,26 @@ export type BusinessComment = Record<string, unknown>
  * se-akun — jadi pemanggilnya harus mengulang per video, dan itu sebabnya sync
  * membatasi berapa video yang disisir (lihat COMMENT_VIDEO_CAP di sync.ts).
  */
-export async function fetchBusinessComments(
-  accessToken: string, businessId: string, videoId: string,
+/** Batas keras TikTok untuk max_count di endpoint komentar. Mengirim 50 ditolak
+ *  dengan code 40002 "max_count: number must be most 30" — dan karena komentar
+ *  diminta per video, satu angka salah menggagalkan SEMUA video sekaligus. */
+const COMMENT_PAGE = '30'
+
+/** Halaman maksimum per video: 300 × 30 = 9.000 komentar. Penjaga sebenarnya
+ *  tetap `has_more`/cursor di bawah; angka ini cuma jaring terakhir. */
+const COMMENT_MAX_PAGES = 300
+
+async function pagedComments(
+  url: string, accessToken: string, base: Record<string, string>, what: string,
 ): Promise<BusinessComment[]> {
   const out: BusinessComment[] = []
   let cursor: number | undefined
-  for (let page = 0; page < 20; page++) {
-    const params = new URLSearchParams({
-      business_id: businessId,
-      video_id:    videoId,
-      fields:      fieldsParam(COMMENT_FIELDS),
-      max_count:   '50',
-    })
+  for (let page = 0; page < COMMENT_MAX_PAGES; page++) {
+    const params = new URLSearchParams({ ...base, fields: fieldsParam(COMMENT_FIELDS), max_count: COMMENT_PAGE })
     if (cursor !== undefined) params.set('cursor', String(cursor))
 
     const data = await call<{ comments?: BusinessComment[]; has_more?: boolean; cursor?: number }>(
-      `${BASE}/business/comment/list/?${params}`, authed(accessToken), 'fetchBusinessComments',
+      `${url}?${params}`, authed(accessToken), what,
     )
     out.push(...(data?.comments ?? []))
 
@@ -348,4 +363,29 @@ export async function fetchBusinessComments(
     cursor = next
   }
   return out
+}
+
+export async function fetchBusinessComments(
+  accessToken: string, businessId: string, videoId: string,
+): Promise<BusinessComment[]> {
+  return pagedComments(`${BASE}/business/comment/list/`, accessToken,
+    { business_id: businessId, video_id: videoId }, 'fetchBusinessComments')
+}
+
+/**
+ * Balasan untuk SATU komentar induk.
+ *
+ * /business/comment/list/ hanya mengembalikan komentar tingkat atas; balasannya
+ * cuma tercatat sebagai angka di field `replies`. Tanpa panggilan ini, seluruh
+ * balasan hilang dari l0_raw — dan di konten yang ramai, balasan sering justru
+ * bagian percakapan yang paling banyak.
+ *
+ * Bedanya dari komentar induk: responsnya membawa `parent_comment_id`, yang
+ * mengisi kolom parent_id yang selama ini selalu null.
+ */
+export async function fetchBusinessCommentReplies(
+  accessToken: string, businessId: string, videoId: string, commentId: string,
+): Promise<BusinessComment[]> {
+  return pagedComments(`${BASE}/business/comment/reply/list/`, accessToken,
+    { business_id: businessId, video_id: videoId, comment_id: commentId }, 'fetchBusinessCommentReplies')
 }

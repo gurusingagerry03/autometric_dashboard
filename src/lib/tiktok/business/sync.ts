@@ -1,5 +1,5 @@
 import {
-  fetchBusinessProfile, fetchAllBusinessVideos, fetchBusinessComments,
+  fetchBusinessProfile, fetchAllBusinessVideos, fetchBusinessComments, fetchBusinessCommentReplies,
   type BusinessProfile, type BusinessVideo, type BusinessComment,
 } from './api'
 import {
@@ -14,15 +14,20 @@ export type TtSyncResult = {
 }
 
 /**
- * Berapa video yang disisir komentarnya per sync.
+ * Berapa video yang disisir komentarnya.
  *
  * TikTok tidak punya endpoint "semua komentar akun ini" — komentar hanya bisa
- * diminta PER VIDEO, jadi biayanya satu panggilan (atau lebih, kalau berhalaman)
- * untuk tiap video. Jendela 30 hari sebuah brand aktif bisa berisi puluhan video,
- * dan menyisir semuanya tiap malam menghabiskan kuota untuk komentar lama yang
- * jarang berubah. 20 video terbaru menutup bagian yang benar-benar hidup.
+ * diminta PER VIDEO, jadi biayanya minimal satu panggilan untuk tiap video.
+ *
+ * 0 = SEMUA video yang ditarik. Itu default untuk sync awal: tujuannya memang
+ * mengambil seluruh riwayat komentar sekali jalan.
+ *
+ * Sync malam memakai angka kecil (NIGHTLY_COMMENT_VIDEO_CAP): komentar di video
+ * lama praktis tidak berubah, dan menyisir seluruh katalog setiap malam berarti
+ * ribuan panggilan untuk data yang sama.
  */
-const COMMENT_VIDEO_CAP = 20
+export const COMMENT_VIDEOS_ALL = 0
+export const NIGHTLY_COMMENT_VIDEO_CAP = 20
 
 /**
  * Jendela tarik AWAL, dalam hari. Dipakai saat akun baru disambungkan dan saat
@@ -80,6 +85,8 @@ export async function initialTtBusinessSync(
   businessId:      string,
   brandId:         string,
   days = BACKFILL_DAYS,
+  /** Berapa video yang disisir komentarnya; 0 = semua. */
+  commentVideoCap = COMMENT_VIDEOS_ALL,
 ): Promise<TtSyncResult> {
   console.log(`[initialTtBusinessSync] START brandId=${brandId} socialAccountId=${socialAccountId} businessId=${businessId} videoDays=${days} profileDays=${PROFILE_METRIC_DAYS}`)
 
@@ -100,7 +107,7 @@ export async function initialTtBusinessSync(
       // Komentar menumpang hasil tarikan video yang sama — daftar video sudah ada
       // di tangan, jadi tidak perlu memintanya dua kali. Dikembalikan bersama
       // supaya `tt_comments` ikut terlaporkan di log sync.
-      const comments = await collectComments(accessToken, businessId, socialAccountId, items)
+      const comments = await collectComments(accessToken, businessId, socialAccountId, items, commentVideoCap)
       return { videos: items.length, comments }
     })(),
   ])
@@ -132,11 +139,11 @@ export async function initialTtBusinessSync(
  * satu ringkasan, bukan ditelan diam-diam.
  */
 async function collectComments(
-  accessToken: string, businessId: string, socialAccountId: string, videos: TtVideoSnapshotItem[],
+  accessToken: string, businessId: string, socialAccountId: string,
+  videos: TtVideoSnapshotItem[], cap: number,
 ): Promise<{ saved: number; error: string | null }> {
-  const targets = [...videos]
-    .sort((a, b) => Date.parse(b.postedAt ?? '') - Date.parse(a.postedAt ?? ''))
-    .slice(0, COMMENT_VIDEO_CAP)
+  const sorted = [...videos].sort((a, b) => Date.parse(b.postedAt ?? '') - Date.parse(a.postedAt ?? ''))
+  const targets = cap > 0 ? sorted.slice(0, cap) : sorted
 
   const all: TtCommentItem[] = []
   const failures: string[] = []
@@ -144,10 +151,28 @@ async function collectComments(
   for (const v of targets) {
     try {
       const raw = await fetchBusinessComments(accessToken, businessId, v.videoId)
-      if (raw[0]) console.log('[initialTtBusinessSync] komentar field:', Object.keys(raw[0]).join(', '))
       for (const c of raw) {
         const item = commentPayload(socialAccountId, v, c)
         if (item) all.push(item)
+
+        // Balasan tidak ikut di daftar komentar induk — hanya tercatat sebagai
+        // angka di `replies`. Diambil hanya kalau angkanya > 0, jadi video biasa
+        // tidak membayar satu panggilan tambahan per komentar.
+        const replies = Number((c as Record<string, unknown>).replies ?? 0)
+        if (!Number.isFinite(replies) || replies <= 0) continue
+        const parentId = String((c as Record<string, unknown>).comment_id ?? '')
+        if (!parentId) continue
+        try {
+          const kids = await fetchBusinessCommentReplies(accessToken, businessId, v.videoId, parentId)
+          for (const k of kids) {
+            const item = commentPayload(socialAccountId, v, k)
+            if (item) all.push(item)
+          }
+        } catch (e) {
+          // Balasan yang gagal tidak membatalkan komentar induknya yang sudah
+          // terkumpul — dicatat sebagai kegagalan terpisah.
+          failures.push(`reply ${parentId}: ${(e as Error).message}`)
+        }
       }
     } catch (e) {
       failures.push(`${v.videoId}: ${(e as Error).message}`)
@@ -155,9 +180,10 @@ async function collectComments(
   }
 
   await saveTtComments(all)
+  console.log(`[initialTtBusinessSync] komentar: ${all.length} dari ${targets.length} video (cap=${cap || 'semua'})`)
   return {
     saved: all.length,
-    error: failures.length ? `${failures.length}/${targets.length} video gagal — ${failures[0]}` : null,
+    error: failures.length ? `${failures.length} gagal dari ${targets.length} video — ${failures[0]}` : null,
   }
 }
 
@@ -177,18 +203,22 @@ export function commentPayload(
     // TikTok tidak mengirim tautan komentar; tautan post-nya kita sudah punya
     // dari videonya sendiri, jadi dipakai ulang alih-alih dibiarkan kosong.
     linkPost:        video.shareUrl,
-    linkComment:     strOrNull(pick(o, 'comment_url', 'link')),
+    // Tidak ada tautan komentar di respons; kolomnya dibiarkan null.
+    linkComment:     null,
     commentTime:     epochToIso(pick(o, 'create_time', 'created_at')),
-    commentText:     strOrNull(pick(o, 'text', 'comment_text', 'content')),
-    commentUsername: strOrNull(pick(o, 'username', 'owner', 'user_name', 'nickname')),
-    likesCount:      intOrNull(pick(o, 'like_count', 'likes_count', 'digg_count')),
-    repliesCount:    intOrNull(pick(o, 'reply_count', 'replies_count')),
+    commentText:     strOrNull(pick(o, 'text')),
+    // JANGAN pakai `owner` sebagai cadangan — itu boolean, bukan nama.
+    commentUsername: strOrNull(pick(o, 'username', 'display_name')),
+    likesCount:      intOrNull(pick(o, 'likes')),
+    repliesCount:    intOrNull(pick(o, 'replies')),
     // 'public' = tampil; status lain (hidden/deleted) dianggap disembunyikan.
     hidden:          (() => {
       const st = strOrNull(pick(o, 'status'))
       return st === null ? null : st.toLowerCase() !== 'public'
     })(),
-    parentId:        strOrNull(pick(o, 'parent_comment_id', 'parent_id')),
+    // Hanya ada di respons /comment/reply/list/, tidak di daftar komentar induk —
+    // jadi ini yang membedakan balasan dari komentar tingkat atas di l0_raw.
+    parentId:        strOrNull(pick(o, 'parent_comment_id')),
   }
 }
 
@@ -245,33 +275,77 @@ function epochToIso(v: unknown): string | null {
 }
 
 /**
- * Baris metrik HARI TERAKHIR dari `data.metrics`.
+ * Baris metrik hari terakhir dari `data.metrics` YANG BENAR-BENAR BERISI.
  *
  * Bentuk yang dikembalikan TikTok (diverifikasi 17 Sep 2026):
  *   data.metrics = [ { date: '2026-08-21', video_views: 0, profile_views: 0, … },
  *                    { date: '2026-09-11', … }, … ]
  *
- * DUA JEBAKAN, DAN KEDUANYA SENYAP
+ * TIGA JEBAKAN, DAN KETIGANYA SENYAP
  *   1. Array ini TIDAK TERURUT. Contoh nyata dari API: 21 Ags, 11 Sep, 17 Ags,
  *      14 Sep, 9 Sep. Mengambil elemen terakhir berarti mengambil tanggal acak,
- *      dan tidak ada apa pun yang akan memberitahu bahwa angkanya salah hari.
- *   2. Yang diambil satu hari, BUKAN jumlah seluruh rentang. Snapshot ini satu
+ *      dan tidak ada apa pun yang memberitahu bahwa angkanya salah hari.
+ *   2. HARI TERAKHIR BIASANYA MASIH NOL. end_date sudah dipatok kemarin, tapi
+ *      hari itu pun belum difinalisasi TikTok. Contoh nyata untuk akun 90rb
+ *      follower: 15 Sep views 1.192.161, lalu 16 Sep semuanya 0. Memilih
+ *      tanggal terbesar berarti menyimpan nol setiap kali sync jalan — dan itu
+ *      terbaca sebagai "harinya memang sepi", bukan "datanya belum ada".
+ *      Karena itu yang dicari tanggal terakhir yang ADA ISINYA.
+ *   3. Yang diambil satu hari, BUKAN jumlah seluruh rentang. Snapshot ini satu
  *      baris per hari; menjumlahkan 30 hari lalu menyimpannya sebagai nilai
  *      harian akan melipatgandakan angka di dashboard setiap kali sync jalan.
  */
+const DAILY_METRIC_KEYS = [
+  'video_views', 'unique_video_views', 'profile_views', 'comments', 'shares', 'likes',
+  'daily_new_followers', 'daily_lost_followers',
+] as const
+
+const hasAnyMetric = (o: Record<string, unknown>) =>
+  DAILY_METRIC_KEYS.some(k => (numOrNull(o[k]) ?? 0) !== 0)
+
 function latestDaily(metrics: unknown): Record<string, unknown> | null {
   if (!Array.isArray(metrics) || !metrics.length) return null
   let best: Record<string, unknown> | null = null
   let bestKey = ''
+  let fallback: Record<string, unknown> | null = null
+  let fallbackKey = ''
   for (const row of metrics) {
     if (!row || typeof row !== 'object') continue
     const o = row as Record<string, unknown>
     const key = String(o.date ?? '')
-    // Tanggal 'YYYY-MM-DD' bisa dibandingkan sebagai teks — tanpa Date, jadi
-    // tidak ada zona waktu yang bisa menggeser pilihannya.
-    if (!best || key > bestKey) { best = o; bestKey = key }
+    // Tanggal 'YYYY-MM-DD' dibandingkan sebagai teks — tanpa Date, jadi tidak
+    // ada zona waktu yang bisa menggeser pilihannya.
+    if (!fallback || key > fallbackKey) { fallback = o; fallbackKey = key }
+    if (hasAnyMetric(o) && (!best || key > bestKey)) { best = o; bestKey = key }
   }
-  return best
+  // Semua baris nol (akun yang memang sepi) — pakai tanggal terakhir apa adanya,
+  // supaya nol yang JUJUR tetap tersimpan alih-alih baris ini dilewati.
+  return best ?? fallback
+}
+
+/**
+ * Tiga metrik yang dilaporkan TikTok MINGGUAN, bukan harian.
+ *
+ * Diverifikasi 17 Sep 2026 pada akun 90rb follower, jendela 31 hari:
+ *   video_views          30/31 hari terisi   -> harian
+ *   profile_views        30/31 hari terisi   -> harian
+ *   unique_video_views    5/31 hari terisi   -> tiap SENIN
+ *   daily_new_followers   5/31 hari terisi   -> tiap SENIN
+ *   daily_lost_followers  5/31 hari terisi   -> tiap SENIN
+ *
+ * Nama fieldnya menyesatkan: `daily_new_followers` sebenarnya agregat 7 hari.
+ * Di hari non-Senin TikTok mengirim 0 sebagai penanda "tidak dilaporkan", bukan
+ * sebagai angka. Menyimpannya apa adanya membuat dashboard membaca reach nol di
+ * enam dari tujuh hari dan menarik rata-ratanya ke bawah — padahal yang benar
+ * adalah "tidak diketahui". Karena itu 0 di ketiga kolom ini disimpan null.
+ *
+ * Konsekuensi yang harus diterima: akun yang benar-benar mati juga tersimpan
+ * null, bukan 0. Untuk akun mati, beda antara "nol" dan "tidak diketahui" tidak
+ * mengubah kesimpulan apa pun — sementara untuk akun hidup, bedanya besar.
+ */
+const weeklyOrNull = (v: unknown): number | null => {
+  const n = intOrNull(v)
+  return n === 0 ? null : n
 }
 
 /** Demografi kosong (`[]`) berarti TikTok tidak punya datanya — disimpan null,
@@ -286,8 +360,8 @@ export function profilePayload(
   // Membacanya dari `o` menghasilkan null untuk sembilan kolom sekaligus, tanpa
   // error apa pun; itu yang terjadi sebelum bentuk ini diverifikasi.
   const m = latestDaily(o.metrics) ?? {}
-  const newF  = intOrNull(m.daily_new_followers)
-  const lostF = intOrNull(m.daily_lost_followers)
+  const newF  = weeklyOrNull(m.daily_new_followers)
+  const lostF = weeklyOrNull(m.daily_lost_followers)
   return {
     socialAccountId,
     // `open_id` Login Kit dan `business_id` Business API sama-sama identitas akun
@@ -314,8 +388,9 @@ export function profilePayload(
     demographicsGender:  demo(o.audience_genders),
 
     videoViews:    intOrNull(m.video_views),
-    // TikTok tidak menyediakan reach tingkat profil; unique_video_views padanan terdekat.
-    profileReach:  intOrNull(m.unique_video_views),
+    // TikTok tidak menyediakan reach tingkat profil; unique_video_views padanan
+    // terdekat — dan ia mingguan, lihat weeklyOrNull.
+    profileReach:  weeklyOrNull(m.unique_video_views),
     profileViews:  intOrNull(m.profile_views),
     comments:      intOrNull(m.comments),
     shares:        intOrNull(m.shares),
