@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     let username = ''
     let avatarUrl: string | null = null
     try {
-      const p = await fetchBusinessProfile(token.accessToken, token.businessId, 1)
+      const p = await fetchBusinessProfile(token.accessToken, token.businessId)
       username  = String(p.username ?? p.display_name ?? '')
       avatarUrl = (p.profile_image as string) ?? null
     } catch (e) {

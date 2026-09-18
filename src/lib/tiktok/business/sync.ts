@@ -1,10 +1,13 @@
 import {
-  fetchBusinessProfile, fetchAllBusinessVideos, fetchBusinessComments, fetchBusinessCommentReplies,
-  type BusinessProfile, type BusinessVideo, type BusinessComment,
+  fetchBusinessProfile, fetchBusinessDailyMetrics, fetchAllBusinessVideos,
+  fetchBusinessComments, fetchBusinessCommentReplies,
+  lastRequestableDate, shiftDate, DAILY_WINDOW_DAYS,
+  type BusinessProfile, type BusinessDailyRow, type BusinessVideo, type BusinessComment,
 } from './api'
 import {
-  saveTtProfileSnapshot, saveTtVideoSnapshots, saveTtComments,
-  TtProfileSnapshotPayload, TtVideoSnapshotItem, TtCommentItem,
+  saveTtProfileSnapshot, saveTtProfileDailyMetrics, earliestTtProfileSnapshotDate,
+  saveTtVideoSnapshots, saveTtComments,
+  TtProfileSnapshotPayload, TtDailyMetrics, TtVideoSnapshotItem, TtCommentItem,
 } from '../queries'
 
 export type TtSyncResult = {
@@ -34,28 +37,18 @@ export const NIGHTLY_COMMENT_VIDEO_CAP = 20
  * initial-sync dipanggil manual.
  *
  * Naikkan lewat TIKTOK_BUSINESS_BACKFILL_DAYS kalau butuh menarik mundur lebih
- * jauh — 686, misalnya, mundur sampai 1 November 2024. Perlu diingat kalau
- * dinaikkan: jendela ini hanya menyentuh VIDEO. Metrik profil tetap dipatok
- * PROFILE_METRIC_DAYS, karena tabelnya memang tidak bisa menyimpan riwayat
- * harian (lihat alasannya di bawah).
+ * jauh — 686, misalnya, mundur sampai 1 November 2024. Jendela yang sama dipakai
+ * untuk mundur mengisi metrik harian profil, per blok 7 hari, tapi tidak lebih
+ * jauh dari baris snapshot tertua akunnya (lihat syncTtBusinessDailyMetrics).
  */
 export const BACKFILL_DAYS = Number(process.env.TIKTOK_BUSINESS_BACKFILL_DAYS ?? 30)
 
-/** Jendela sync rutin — cukup untuk menjaga yang baru tetap segar. */
-export const NIGHTLY_DAYS = 30
-
 /**
- * Rentang tanggal untuk metrik PROFIL, sengaja dipatok pendek dan TIDAK ikut
- * `days`.
- *
- * Alasannya bukan kuota, tapi bentuk tabelnya: tt_profile_snapshots berkunci
- * (social_account_id, DATE(fetched_at)), jadi satu penarikan hanya bisa
- * menghasilkan SATU baris apa pun panjang rentangnya — yang disimpan hari
- * terakhir (lihat latestDaily). Meminta 686 hari di sini tidak menambah satu
- * baris pun, hanya memperbesar respons dan menambah risiko ditolak TikTok
- * karena rentangnya melebihi batas mereka.
+ * Jendela sync rutin — cukup untuk menjaga yang baru tetap segar. Untuk metrik
+ * harian profil artinya lima panggilan per akun, dan itu yang menutup hari-hari
+ * yang saat sync sebelumnya belum difinalisasi TikTok.
  */
-const PROFILE_METRIC_DAYS = 30
+export const NIGHTLY_DAYS = 30
 
 /**
  * Sync TikTok lewat API for Business — menulis ke TIGA tabel l0_raw yang sudah
@@ -88,14 +81,17 @@ export async function initialTtBusinessSync(
   /** Berapa video yang disisir komentarnya; 0 = semua. */
   commentVideoCap = COMMENT_VIDEOS_ALL,
 ): Promise<TtSyncResult> {
-  console.log(`[initialTtBusinessSync] START brandId=${brandId} socialAccountId=${socialAccountId} businessId=${businessId} videoDays=${days} profileDays=${PROFILE_METRIC_DAYS}`)
+  console.log(`[initialTtBusinessSync] START brandId=${brandId} socialAccountId=${socialAccountId} businessId=${businessId} days=${days}`)
 
   const results = await Promise.allSettled([
     (async () => {
-      const raw = await fetchBusinessProfile(accessToken, businessId, PROFILE_METRIC_DAYS)
+      const end = lastRequestableDate()
+      const raw = await fetchBusinessProfile(accessToken, businessId, end)
       console.log('[initialTtBusinessSync] profil field diterima:', Object.keys(raw ?? {}).join(', '))
+      // Snapshot dulu: metrik harian hanya mengisi baris yang sudah ada, dan
+      // untuk akun baru baris inilah satu-satunya, sekaligus batas bawah backfill.
       await saveTtProfileSnapshot(profilePayload(socialAccountId, raw, businessId))
-      return 1
+      return syncTtBusinessDailyMetrics(socialAccountId, accessToken, businessId, raw?.metrics, end, days)
     })(),
 
     (async () => {
@@ -119,8 +115,10 @@ export async function initialTtBusinessSync(
   console.log(`[initialTtBusinessSync] DONE brandId=${brandId}`)
   const v = videosResult.status === 'fulfilled' ? videosResult.value : null
   return {
+    // count tetap jumlah SNAPSHOT (satuan yang ditampilkan halaman monitoring);
+    // backfill metrik harian yang gagal sebagian ikut dilaporkan sebagai error.
     tt_profile: profileResult.status === 'fulfilled'
-      ? { count: 1, error: null } : { count: 0, error: errMsg(profileResult) },
+      ? { count: 1, error: profileResult.value.error } : { count: 0, error: errMsg(profileResult) },
     tt_videos: v ? { count: v.videos, error: null } : { count: 0, error: errMsg(videosResult) },
     // Komentar berbagi nasib dengan video: kalau tarikan videonya gagal, daftar
     // videonya tidak pernah ada, jadi komentarnya memang tidak sempat dicoba.
@@ -128,6 +126,47 @@ export async function initialTtBusinessSync(
       ? { count: v.comments.saved, error: v.comments.error }
       : { count: 0, error: errMsg(videosResult) },
   }
+}
+
+/**
+ * Metrik harian profil untuk `days` hari yang berakhir di `end`, mundur per blok
+ * DAILY_WINDOW_DAYS, lalu ditulis ke baris snapshot bertanggal sama (lihat
+ * saveTtProfileDailyMetrics).
+ *
+ * Blok terbaru sudah ada di tangan karena ikut respons fetchBusinessProfile,
+ * jadi yang diminta ulang hanya blok-blok sebelumnya. Mundurnya berhenti di
+ * baris snapshot tertua akun ini. Tanggal sebelum itu tidak punya baris untuk
+ * diisi, jadi menariknya hanya membuang kuota.
+ *
+ * Blok yang gagal menghentikan backfill ke belakangnya, tapi yang sudah
+ * terkumpul tetap ditulis, dan errornya dilaporkan, bukan ditelan.
+ */
+export async function syncTtBusinessDailyMetrics(
+  socialAccountId: string, accessToken: string, businessId: string,
+  latest: unknown, end: string, days: number,
+): Promise<{ written: number; error: string | null }> {
+  const earliest = await earliestTtProfileSnapshotDate(socialAccountId)
+  const windowStart = shiftDate(end, -(Math.max(days, DAILY_WINDOW_DAYS) - 1))
+  // Tanggal 'YYYY-MM-DD' dibandingkan sebagai teks, tanpa Date, jadi tidak ada
+  // zona waktu yang bisa menggesernya.
+  const floor = earliest && earliest > windowStart ? earliest : windowStart
+
+  const collected: BusinessDailyRow[] = Array.isArray(latest) ? [...latest as BusinessDailyRow[]] : []
+  let error: string | null = null
+  for (let blockEnd = shiftDate(end, -DAILY_WINDOW_DAYS); blockEnd >= floor; blockEnd = shiftDate(blockEnd, -DAILY_WINDOW_DAYS)) {
+    try {
+      collected.push(...await fetchBusinessDailyMetrics(accessToken, businessId, blockEnd))
+    } catch (e) {
+      error = `metrik harian s.d. ${blockEnd}: ${(e as Error).message}`
+      break
+    }
+  }
+
+  const payload = dailyMetricsPayload(collected).filter(d => d.date >= floor)
+  const written = await saveTtProfileDailyMetrics(socialAccountId, payload)
+  const pending = payload.filter(d => d.videoViews === null).length
+  console.log(`[initialTtBusinessSync] metrik harian: ${written.length} hari tertulis (${floor}..${end}, ${pending} belum final)`)
+  return { written: written.length, error }
 }
 
 /**
@@ -275,93 +314,99 @@ function epochToIso(v: unknown): string | null {
 }
 
 /**
- * Baris metrik hari terakhir dari `data.metrics` YANG BENAR-BENAR BERISI.
+ * data.metrics → satu TtDailyMetrics per tanggal, urut naik.
  *
- * Bentuk yang dikembalikan TikTok (diverifikasi 17 Sep 2026):
- *   data.metrics = [ { date: '2026-08-21', video_views: 0, profile_views: 0, … },
+ * Bentuk yang dikembalikan TikTok (diverifikasi 17–18 Sep 2026):
+ *   data.metrics = [ { date: '2026-09-16', video_views: 179, profile_views: 21, … },
  *                    { date: '2026-09-11', … }, … ]
  *
- * TIGA JEBAKAN, DAN KETIGANYA SENYAP
- *   1. Array ini TIDAK TERURUT. Contoh nyata dari API: 21 Ags, 11 Sep, 17 Ags,
- *      14 Sep, 9 Sep. Mengambil elemen terakhir berarti mengambil tanggal acak,
- *      dan tidak ada apa pun yang memberitahu bahwa angkanya salah hari.
- *   2. HARI TERAKHIR BIASANYA MASIH NOL. end_date sudah dipatok kemarin, tapi
- *      hari itu pun belum difinalisasi TikTok. Contoh nyata untuk akun 90rb
- *      follower: 15 Sep views 1.192.161, lalu 16 Sep semuanya 0. Memilih
- *      tanggal terbesar berarti menyimpan nol setiap kali sync jalan — dan itu
- *      terbaca sebagai "harinya memang sepi", bukan "datanya belum ada".
- *      Karena itu yang dicari tanggal terakhir yang ADA ISINYA.
- *   3. Yang diambil satu hari, BUKAN jumlah seluruh rentang. Snapshot ini satu
- *      baris per hari; menjumlahkan 30 hari lalu menyimpannya sebagai nilai
- *      harian akan melipatgandakan angka di dashboard setiap kali sync jalan.
+ * ARRAY-NYA TIDAK TERURUT
+ *   Contoh nyata dari API: 16 Sep, 17 Sep, 11 Sep, 12 Sep. Diurutkan di sini,
+ *   dan tiap baris membawa tanggalnya sendiri, jadi urutan tidak pernah
+ *   dipakai untuk menebak tanggal.
+ *
+ * HARI YANG BELUM FINAL DITULIS null, BUKAN 0
+ *   Hari-hari terakhir biasanya masih nol semua karena TikTok belum
+ *   memfinalisasinya. Contoh nyata akun 90rb follower: 15 Sep views 1.192.161,
+ *   16 Sep semuanya 0 pukul 02.00, lalu mulai terisi siang harinya. Nol di situ
+ *   artinya "belum ada", bukan "harinya sepi". Karena itu hari-hari di UJUNG
+ *   deret yang semua metriknya nol (sesudah hari terakhir yang ada isinya)
+ *   ditulis null, dan sync berikutnya mengisinya begitu angkanya keluar. Angka
+ *   yang baru sebagian terisi juga ikut ditimpa sync berikutnya, karena
+ *   saveTtProfileDailyMetrics menulis langsung, bukan COALESCE.
+ *
+ *   Nol di TENGAH deret tetap 0: sesudahnya ada hari yang berisi, jadi hari itu
+ *   sudah final dan memang sepi. Konsekuensinya, akun yang berhenti total
+ *   tersimpan null di ujungnya, bukan 0. Untuk akun mati, bedanya tidak
+ *   mengubah kesimpulan apa pun.
  */
 const DAILY_METRIC_KEYS = [
-  'video_views', 'unique_video_views', 'profile_views', 'comments', 'shares', 'likes',
+  'video_views', 'unique_video_views', 'profile_views', 'comments', 'shares',
   'daily_new_followers', 'daily_lost_followers',
 ] as const
 
 const hasAnyMetric = (o: Record<string, unknown>) =>
   DAILY_METRIC_KEYS.some(k => (numOrNull(o[k]) ?? 0) !== 0)
 
-function latestDaily(metrics: unknown): Record<string, unknown> | null {
-  if (!Array.isArray(metrics) || !metrics.length) return null
-  let best: Record<string, unknown> | null = null
-  let bestKey = ''
-  let fallback: Record<string, unknown> | null = null
-  let fallbackKey = ''
-  for (const row of metrics) {
-    if (!row || typeof row !== 'object') continue
-    const o = row as Record<string, unknown>
-    const key = String(o.date ?? '')
-    // Tanggal 'YYYY-MM-DD' dibandingkan sebagai teks — tanpa Date, jadi tidak
-    // ada zona waktu yang bisa menggeser pilihannya.
-    if (!fallback || key > fallbackKey) { fallback = o; fallbackKey = key }
-    if (hasAnyMetric(o) && (!best || key > bestKey)) { best = o; bestKey = key }
+export function dailyMetricsPayload(rows: unknown): TtDailyMetrics[] {
+  const byDate = new Map<string, Record<string, unknown>>()
+  if (Array.isArray(rows)) {
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue
+      const o = row as Record<string, unknown>
+      const date = strOrNull(o.date)
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) byDate.set(date, o)
+    }
   }
-  // Semua baris nol (akun yang memang sepi) — pakai tanggal terakhir apa adanya,
-  // supaya nol yang JUJUR tetap tersimpan alih-alih baris ini dilewati.
-  return best ?? fallback
-}
+  // Tanggal 'YYYY-MM-DD' diurutkan sebagai teks, tanpa Date, jadi tidak ada
+  // zona waktu yang bisa menggeser urutannya.
+  const dates = [...byDate.keys()].sort()
+  const lastFinal = dates.filter(d => hasAnyMetric(byDate.get(d)!)).at(-1) ?? ''
 
-/**
- * Tiga metrik yang dilaporkan TikTok MINGGUAN, bukan harian.
- *
- * Diverifikasi 17 Sep 2026 pada akun 90rb follower, jendela 31 hari:
- *   video_views          30/31 hari terisi   -> harian
- *   profile_views        30/31 hari terisi   -> harian
- *   unique_video_views    5/31 hari terisi   -> tiap SENIN
- *   daily_new_followers   5/31 hari terisi   -> tiap SENIN
- *   daily_lost_followers  5/31 hari terisi   -> tiap SENIN
- *
- * Nama fieldnya menyesatkan: `daily_new_followers` sebenarnya agregat 7 hari.
- * Di hari non-Senin TikTok mengirim 0 sebagai penanda "tidak dilaporkan", bukan
- * sebagai angka. Menyimpannya apa adanya membuat dashboard membaca reach nol di
- * enam dari tujuh hari dan menarik rata-ratanya ke bawah — padahal yang benar
- * adalah "tidak diketahui". Karena itu 0 di ketiga kolom ini disimpan null.
- *
- * Konsekuensi yang harus diterima: akun yang benar-benar mati juga tersimpan
- * null, bukan 0. Untuk akun mati, beda antara "nol" dan "tidak diketahui" tidak
- * mengubah kesimpulan apa pun — sementara untuk akun hidup, bedanya besar.
- */
-const weeklyOrNull = (v: unknown): number | null => {
-  const n = intOrNull(v)
-  return n === 0 ? null : n
+  return dates.map((date): TtDailyMetrics => {
+    if (date > lastFinal) {
+      return {
+        date, videoViews: null, profileReach: null, profileViews: null, comments: null,
+        shares: null, netGrowth: null, newFollowers: null, lostFollowers: null,
+      }
+    }
+    const m = byDate.get(date)!
+    const newF  = intOrNull(m.daily_new_followers)
+    const lostF = intOrNull(m.daily_lost_followers)
+    return {
+      date,
+      videoViews:    intOrNull(m.video_views),
+      // TikTok tidak menyediakan reach tingkat profil; unique_video_views padanan
+      // terdekat yang ada.
+      profileReach:  intOrNull(m.unique_video_views),
+      profileViews:  intOrNull(m.profile_views),
+      comments:      intOrNull(m.comments),
+      shares:        intOrNull(m.shares),
+      newFollowers:  newF,
+      lostFollowers: lostF,
+      // Diturunkan, bukan diminta: TikTok hanya memberi dua angka terpisah.
+      // (daily_total_followers ternyata bukan total follower, melainkan selisih
+      // yang sama ini.)
+      netGrowth:     newF === null || lostF === null ? null : newF - lostF,
+    }
+  })
 }
 
 /** Demografi kosong (`[]`) berarti TikTok tidak punya datanya — disimpan null,
  *  bukan array kosong, supaya hilir tidak membacanya sebagai demografi yang sah. */
 const demo = (v: unknown) => (Array.isArray(v) && v.length === 0 ? null : v ?? null)
 
+/**
+ * Potret profil untuk baris HARI INI: identitas, total, dan demografi.
+ *
+ * Metrik harian tidak ikut di sini. Angka hari ini belum ada di TikTok, dan
+ * angka hari-hari sebelumnya milik baris bertanggal sama; lihat
+ * dailyMetricsPayload dan saveTtProfileDailyMetrics.
+ */
 export function profilePayload(
   socialAccountId: string, raw: BusinessProfile, businessId?: string,
 ): TtProfileSnapshotPayload {
   const o = (raw ?? {}) as Record<string, unknown>
-  // Metrik harian TIDAK ada di level atas — semuanya bersarang di data.metrics[].
-  // Membacanya dari `o` menghasilkan null untuk sembilan kolom sekaligus, tanpa
-  // error apa pun; itu yang terjadi sebelum bentuk ini diverifikasi.
-  const m = latestDaily(o.metrics) ?? {}
-  const newF  = weeklyOrNull(m.daily_new_followers)
-  const lostF = weeklyOrNull(m.daily_lost_followers)
   return {
     socialAccountId,
     // `open_id` Login Kit dan `business_id` Business API sama-sama identitas akun
@@ -373,9 +418,7 @@ export function profilePayload(
     bioDescription: strOrNull(pick(o, 'bio_description')),
     avatarUrl:      strOrNull(pick(o, 'profile_image')),
     isVerified:     (pick(o, 'is_verified') as boolean | null) ?? null,
-    // followers_count ada di dua tempat: total di level atas, dan per hari di
-    // metrics. Yang dipakai level atas — itu jumlah terkini, bukan potret satu hari.
-    followerCount:  intOrNull(o.followers_count) ?? intOrNull(m.followers_count),
+    followerCount:  intOrNull(o.followers_count),
     followingCount: intOrNull(o.following_count),
     // `total_likes` itu akumulasi seumur akun — yang dimaksud kolom likes_count.
     // `likes` juga sah tapi artinya like DALAM rentang tanggal, bukan total.
@@ -386,20 +429,6 @@ export function profilePayload(
     demographicsCity:    demo(o.audience_cities),
     demographicsCountry: demo(o.audience_countries),
     demographicsGender:  demo(o.audience_genders),
-
-    videoViews:    intOrNull(m.video_views),
-    // TikTok tidak menyediakan reach tingkat profil; unique_video_views padanan
-    // terdekat — dan ia mingguan, lihat weeklyOrNull.
-    profileReach:  weeklyOrNull(m.unique_video_views),
-    profileViews:  intOrNull(m.profile_views),
-    comments:      intOrNull(m.comments),
-    shares:        intOrNull(m.shares),
-    newFollowers:  newF,
-    lostFollowers: lostF,
-    // Diturunkan, bukan diminta: TikTok hanya memberi dua angka harian terpisah.
-    // Tetap null kalau salah satunya tidak ada — 0 akan terbaca sebagai
-    // "pertumbuhannya datar", padahal yang benar "tidak diketahui".
-    netGrowth:     newF === null || lostF === null ? null : newF - lostF,
   }
 }
 

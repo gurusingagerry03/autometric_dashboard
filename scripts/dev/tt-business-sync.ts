@@ -9,7 +9,8 @@
  *   token-nya — hanya dengan lingkup satu brand dan batas yang disebut pemanggil.
  *
  * AMAN DIULANG
- *   Profil di-upsert per (akun, tanggal tarik), video per (video_id, tanggal
+ *   Profil di-upsert per (akun, tanggal tarik), metrik harian profil ditulis ke
+ *   baris bertanggal sama dengan tanggal metriknya, video per (video_id, tanggal
  *   tarik), komentar per comment_id. Menjalankan ini dua kali memperbarui baris
  *   yang sama, tidak menggandakannya.
  *

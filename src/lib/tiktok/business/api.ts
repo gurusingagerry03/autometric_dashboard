@@ -79,7 +79,7 @@ export const businessConfigured = () => !!BUSINESS_APP_ID && !!BUSINESS_SECRET
  * dengan code 40002 — bukan mengabaikan yang satu itu saja. Tapi pesan errornya
  * menyertakan daftar lengkap field yang sah, jadi cara termurah memastikannya
  * adalah mengirim satu field karangan lalu membaca balasannya. Itu yang dipakai
- * untuk menyusun dua daftar di bawah.
+ * untuk menyusun daftar-daftar di bawah.
  *
  * Konsekuensinya: JANGAN menambah nama di sini berdasarkan tebakan. Satu nama
  * yang salah mematikan seluruh sync profil atau seluruh sync video.
@@ -93,16 +93,24 @@ export const PROFILE_FIELDS = [
 ] as const
 
 /**
- * Metrik harian + demografi — butuh start_date/end_date.
+ * Metrik harian — butuh start_date/end_date, dan datang di data.metrics[], satu
+ * baris per tanggal. Hanya yang punya kolom di l0_raw yang diminta.
  *
  * TikTok tidak menyediakan `reach` di tingkat profil (itu hanya ada per video),
  * jadi `unique_video_views` yang mengisi kolom profile_reach — padanan terdekat
  * yang ada. Pertumbuhan follower datang sebagai dua angka harian terpisah;
  * net_growth dihitung dari keduanya, bukan diminta sebagai field.
+ *
+ * Tiga di antaranya HARIAN HANYA SELAMA RENTANGNYA ≤ 7 HARI — lihat
+ * DAILY_WINDOW_DAYS.
  */
-export const PROFILE_METRIC_FIELDS = [
-  'video_views', 'unique_video_views', 'profile_views', 'comments', 'shares', 'likes',
-  'daily_new_followers', 'daily_lost_followers', 'daily_total_followers',
+export const DAILY_METRIC_FIELDS = [
+  'video_views', 'unique_video_views', 'profile_views', 'comments', 'shares',
+  'daily_new_followers', 'daily_lost_followers',
+] as const
+
+/** Demografi audiens — potret saat ini, bukan per hari, meski ikut butuh rentang tanggal. */
+export const DEMOGRAPHIC_FIELDS = [
   'audience_ages', 'audience_genders', 'audience_countries', 'audience_cities',
 ] as const
 
@@ -258,29 +266,76 @@ const yyyymmdd = (d: Date) => d.toISOString().slice(0, 10)
 const fieldsParam = (fields: readonly string[]) => JSON.stringify(fields)
 
 export type BusinessProfile = Record<string, unknown>
+export type BusinessDailyRow = Record<string, unknown>
 
 /**
- * Profil + metrik harian dalam satu panggilan.
+ * Rentang terpanjang yang masih dibalas HARIAN. Diverifikasi 18 Sep 2026.
  *
- * `days` mundur dari KEMARIN, bukan dari hari ini (lihat komentar di bawah).
- * TikTok membatasi seberapa jauh rentang ini boleh mundur; permintaan yang
- * terlalu panjang ditolak dengan code bukan-nol, bukan dipotong diam-diam.
+ * Di atas 7 hari, TikTok diam-diam mengganti bentuk unique_video_views,
+ * daily_new_followers, dan daily_lost_followers: bukan lagi per hari, tapi
+ * dijumlah per blok 7 hari yang dihitung MULAI DARI start_date. Angkanya
+ * ditaruh di hari pertama tiap blok, hari lainnya 0. video_views dan
+ * profile_views tetap harian. Tidak ada penanda apa pun di responsnya, dan
+ * jumlah barisnya tetap satu per tanggal.
+ *
+ *   rentang 7 hari → unique_video_views terisi 7 dari 7 baris
+ *   rentang 8 hari → terisi 2 dari 8 (hari ke-1 dan ke-8)
+ *
+ * Blok-nya ikut start_date, jadi hari tempat angka itu mendarat berpindah
+ * setiap kali sync jalan di hari yang berbeda. Itu sebabnya sempat dikira
+ * "dilaporkan tiap Senin", dan kenapa rentang 30 hari yang dulu dipakai
+ * membuat ketiga kolom itu kosong di setiap sync.
  */
-export async function fetchBusinessProfile(
-  accessToken: string, businessId: string, days = 30,
+export const DAILY_WINDOW_DAYS = 7
+
+const DAY_MS = 86400_000
+
+/** 'YYYY-MM-DD' digeser `n` hari. Dihitung di UTC supaya zona waktu mesin tidak ikut menggeser tanggalnya. */
+export const shiftDate = (date: string, n: number) =>
+  yyyymmdd(new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY_MS))
+
+/**
+ * Tanggal terakhir yang boleh diminta: kemarin. end_date = hari ini ditolak
+ * dengan code 40002 "end_date should be earlier than today's date".
+ */
+export const lastRequestableDate = () => yyyymmdd(new Date(Date.now() - DAY_MS))
+
+/** Satu panggilan /business/get/ untuk rentang DAILY_WINDOW_DAYS yang berakhir di `endDate`. */
+function getBusiness(
+  accessToken: string, businessId: string, fields: readonly string[], endDate: string, what: string,
 ): Promise<BusinessProfile> {
-  // end_date TIDAK BOLEH hari ini — TikTok menolaknya dengan code 40002
-  // "end_date should be earlier than today's date". Metrik hari berjalan memang
-  // belum final di pihak mereka, jadi rentangnya berhenti di kemarin.
-  const end   = new Date(Date.now() - 86400_000)
-  const start = new Date(end.getTime() - days * 86400_000)
   const params = new URLSearchParams({
     business_id: businessId,
-    fields:      fieldsParam([...PROFILE_FIELDS, ...PROFILE_METRIC_FIELDS]),
-    start_date:  yyyymmdd(start),
-    end_date:    yyyymmdd(end),
+    fields:      fieldsParam(fields),
+    start_date:  shiftDate(endDate, -(DAILY_WINDOW_DAYS - 1)),
+    end_date:    endDate,
   })
-  return call<BusinessProfile>(`${BASE}/business/get/?${params}`, authed(accessToken), 'fetchBusinessProfile')
+  return call<BusinessProfile>(`${BASE}/business/get/?${params}`, authed(accessToken), what)
+}
+
+/**
+ * Profil, demografi, dan metrik harian 7 hari yang berakhir di `endDate`
+ * (default kemarin), dalam satu panggilan.
+ *
+ * Rentangnya sengaja tidak bisa diatur panjangnya dari luar. Rentang lebih dari
+ * DAILY_WINDOW_DAYS mengubah arti tiga kolom tanpa ada error apa pun.
+ */
+export function fetchBusinessProfile(
+  accessToken: string, businessId: string, endDate = lastRequestableDate(),
+): Promise<BusinessProfile> {
+  return getBusiness(accessToken, businessId,
+    [...PROFILE_FIELDS, ...DAILY_METRIC_FIELDS, ...DEMOGRAPHIC_FIELDS], endDate, 'fetchBusinessProfile')
+}
+
+/**
+ * Hanya metrik harian 7 hari yang berakhir di `endDate`, tanpa profil dan
+ * demografi. Dipakai untuk mundur per blok 7 hari saat backfill.
+ */
+export async function fetchBusinessDailyMetrics(
+  accessToken: string, businessId: string, endDate: string,
+): Promise<BusinessDailyRow[]> {
+  const d = await getBusiness(accessToken, businessId, DAILY_METRIC_FIELDS, endDate, 'fetchBusinessDailyMetrics')
+  return Array.isArray(d?.metrics) ? d.metrics as BusinessDailyRow[] : []
 }
 
 export type BusinessVideo = Record<string, unknown>

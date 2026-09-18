@@ -3,7 +3,7 @@ import pool from '@/lib/db'
 import { auth } from '@/auth'
 import { verifyBrandAccess } from '@/lib/brands/queries'
 import { fetchBusinessProfile, fetchAllBusinessVideos, fetchBusinessComments } from '@/lib/tiktok/business/api'
-import { profilePayload, videoPayload, commentPayload } from '@/lib/tiktok/business/sync'
+import { profilePayload, dailyMetricsPayload, videoPayload, commentPayload } from '@/lib/tiktok/business/sync'
 
 /**
  * Menampilkan apa yang BENAR-BENAR dikembalikan TikTok untuk akun ini, beserta
@@ -29,6 +29,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ bran
     const orgId = await verifyBrandAccess(brandId, userId)
     if (!orgId) return NextResponse.json({ error: 'Brand not found.' }, { status: 404 })
 
+    // Hanya untuk video. Metrik profil selalu 7 hari terakhir: rentang yang lebih
+    // panjang mengubah bentuk datanya (lihat DAILY_WINDOW_DAYS).
     const days = Math.min(90, Math.max(1, Number(req.nextUrl.searchParams.get('days') ?? 7)))
 
     const { rows } = await pool.query<{
@@ -57,7 +59,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ bran
     const out: Record<string, unknown> = { days, businessId: acct.platform_user_id }
 
     try {
-      const raw = await fetchBusinessProfile(acct.oauth_token, acct.platform_user_id, days)
+      const raw = await fetchBusinessProfile(acct.oauth_token, acct.platform_user_id)
       const mapped = profilePayload(acct.id, raw)
       out.profile = {
         fieldsReturned: Object.keys(raw ?? {}),
@@ -68,6 +70,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ bran
           .filter(([k, v]) => k !== 'socialAccountId' && (v === null || v === undefined))
           .map(([k]) => k),
         mapped,
+        // Per tanggal metrik, persis yang akan ditulis ke baris bertanggal sama.
+        // Baris null di ujung = hari yang belum difinalisasi TikTok.
+        daily: dailyMetricsPayload(raw?.metrics),
       }
     } catch (e) {
       out.profile = { error: (e as Error).message }

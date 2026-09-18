@@ -15,25 +15,16 @@ export interface TtProfileSnapshotPayload {
   videoCount:      number | null
 
   /* ── hanya terisi lewat TikTok API for Business ──────────────────────────
-   * Login Kit tidak menyediakan satu pun dari ini. Semuanya OPSIONAL dan
-   * ditulis dengan COALESCE di SQL: sync Login Kit mengirimnya undefined dan
-   * baris yang sudah punya nilai tidak ikut dikosongkan.
+   * Login Kit tidak menyediakan demografi. OPSIONAL dan ditulis dengan
+   * COALESCE di SQL: sync Login Kit mengirimnya undefined dan baris yang sudah
+   * punya nilai tidak ikut dikosongkan.
    *
-   * Dibedakan null vs 0 dengan sengaja — 'produknya tidak di-approve' dan
-   * 'angkanya memang nol' adalah dua hal yang berbeda, dan dashboard
-   * menjumlahkan kolom ini. */
+   * Metrik harian (video_views, profile_reach, new_followers, dst.) sengaja
+   * TIDAK lewat sini — lihat saveTtProfileDailyMetrics. */
   demographicsAge?:     unknown
   demographicsCity?:    unknown
   demographicsCountry?: unknown
   demographicsGender?:  unknown
-  videoViews?:    number | null
-  profileReach?:  number | null
-  profileViews?:  number | null
-  comments?:      number | null
-  shares?:        number | null
-  netGrowth?:     number | null
-  newFollowers?:  number | null
-  lostFollowers?: number | null
 }
 
 const asJson = (v: unknown) => (v === undefined || v === null ? null : JSON.stringify(v))
@@ -44,12 +35,9 @@ export async function saveTtProfileSnapshot(payload: TtProfileSnapshotPayload): 
       social_account_id,
       open_id, display_name, bio_description, avatar_url, is_verified,
       follower_count, following_count, likes_count, video_count,
-      demographics_age, demographics_city, demographics_country, demographics_gender,
-      video_views, profile_reach, profile_views, comments, shares,
-      net_growth, new_followers, lost_followers
+      demographics_age, demographics_city, demographics_country, demographics_gender
     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-              $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb,
-              $15, $16, $17, $18, $19, $20, $21, $22)
+              $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb)
     ON CONFLICT (social_account_id, DATE(fetched_at AT TIME ZONE 'Asia/Jakarta'))
     -- DO NOTHING diganti DO UPDATE karena satu akun Business kini menulis dua
     -- kali sehari lewat jalur berbeda kalau metodenya baru saja ditukar. COALESCE
@@ -68,15 +56,7 @@ export async function saveTtProfileSnapshot(payload: TtProfileSnapshotPayload): 
       demographics_age     = COALESCE(EXCLUDED.demographics_age,     tt_profile_snapshots.demographics_age),
       demographics_city    = COALESCE(EXCLUDED.demographics_city,    tt_profile_snapshots.demographics_city),
       demographics_country = COALESCE(EXCLUDED.demographics_country, tt_profile_snapshots.demographics_country),
-      demographics_gender  = COALESCE(EXCLUDED.demographics_gender,  tt_profile_snapshots.demographics_gender),
-      video_views          = COALESCE(EXCLUDED.video_views,          tt_profile_snapshots.video_views),
-      profile_reach        = COALESCE(EXCLUDED.profile_reach,        tt_profile_snapshots.profile_reach),
-      profile_views        = COALESCE(EXCLUDED.profile_views,        tt_profile_snapshots.profile_views),
-      comments             = COALESCE(EXCLUDED.comments,             tt_profile_snapshots.comments),
-      shares               = COALESCE(EXCLUDED.shares,               tt_profile_snapshots.shares),
-      net_growth           = COALESCE(EXCLUDED.net_growth,           tt_profile_snapshots.net_growth),
-      new_followers        = COALESCE(EXCLUDED.new_followers,        tt_profile_snapshots.new_followers),
-      lost_followers       = COALESCE(EXCLUDED.lost_followers,       tt_profile_snapshots.lost_followers)`,
+      demographics_gender  = COALESCE(EXCLUDED.demographics_gender,  tt_profile_snapshots.demographics_gender)`,
     [
       payload.socialAccountId,
       payload.openId,
@@ -92,16 +72,94 @@ export async function saveTtProfileSnapshot(payload: TtProfileSnapshotPayload): 
       asJson(payload.demographicsCity),
       asJson(payload.demographicsCountry),
       asJson(payload.demographicsGender),
-      payload.videoViews    ?? null,
-      payload.profileReach  ?? null,
-      payload.profileViews  ?? null,
-      payload.comments      ?? null,
-      payload.shares        ?? null,
-      payload.netGrowth     ?? null,
-      payload.newFollowers  ?? null,
-      payload.lostFollowers ?? null,
     ]
   )
+}
+
+/** Metrik satu tanggal. null = belum diketahui (TikTok belum memfinalisasi hari itu). */
+export interface TtDailyMetrics {
+  /** 'YYYY-MM-DD' — tanggal METRIKNYA, bukan tanggal penarikan. */
+  date:          string
+  videoViews:    number | null
+  profileReach:  number | null
+  profileViews:  number | null
+  comments:      number | null
+  shares:        number | null
+  netGrowth:     number | null
+  newFollowers:  number | null
+  lostFollowers: number | null
+}
+
+/**
+ * Metrik harian TikTok Business, ditulis ke baris snapshot yang TANGGALNYA SAMA
+ * dengan tanggal metriknya.
+ *
+ * KENAPA BUKAN KE BARIS HARI INI
+ *   Harmonization (sp_sync_tiktok_profile_from_raw) mengambil tanggal baris ini
+ *   dari fetched_at (WIB) dan membaca video_views dkk. sebagai angka HARI ITU,
+ *   lalu gold menjumlahkannya per hari. Metrik TikTok baru final 1–2 hari
+ *   kemudian. Kalau ditaruh di baris hari penarikan, angka 15 Sep terbaca
+ *   sebagai 18 Sep, dan terhitung dua kali kalau 15 Sep masih hari terbaru
+ *   yang berisi di sync berikutnya. Keduanya sempat terjadi.
+ *
+ * HANYA UPDATE, TIDAK PERNAH INSERT
+ *   Tanggal tanpa baris snapshot (sebelum akun disambungkan, atau hari sync-nya
+ *   gagal) dilewati. Baris baru dari sini tidak punya follower_count dkk., dan
+ *   harmonization mengubah null itu jadi 0, sehingga follower terbaca anjlok ke
+ *   nol lalu melonjak lagi keesokan harinya.
+ *
+ * DITIMPA LANGSUNG, BUKAN COALESCE
+ *   Berbeda dari saveTtProfileSnapshot, null di sini disengaja: artinya "belum
+ *   difinalisasi TikTok", dan ia harus bisa menghapus angka salah-tanggal yang
+ *   ditulis versi sync sebelumnya. Kolom-kolom ini hanya ditulis jalur Business
+ *   (CSV hanya mengisi follower_count), jadi tidak ada sumber lain yang ikut
+ *   terhapus.
+ *
+ * Mengembalikan tanggal yang benar-benar tertulis.
+ */
+export async function saveTtProfileDailyMetrics(
+  socialAccountId: string, days: TtDailyMetrics[],
+): Promise<string[]> {
+  if (!days.length) return []
+  const { rows } = await pool.query<{ date: string }>(
+    `UPDATE l0_raw.tt_profile_snapshots p
+        SET video_views    = d.video_views,
+            profile_reach  = d.profile_reach,
+            profile_views  = d.profile_views,
+            comments       = d.comments,
+            shares         = d.shares,
+            net_growth     = d.net_growth,
+            new_followers  = d.new_followers,
+            lost_followers = d.lost_followers
+       FROM jsonb_to_recordset($2::jsonb) AS d(
+              date date, video_views int, profile_reach int, profile_views int,
+              comments int, shares int, net_growth int, new_followers int, lost_followers int)
+      WHERE p.social_account_id = $1
+        AND DATE(p.fetched_at AT TIME ZONE 'Asia/Jakarta') = d.date
+      RETURNING to_char(d.date, 'YYYY-MM-DD') AS date`,
+    [socialAccountId, JSON.stringify(days.map(d => ({
+      date:           d.date,
+      video_views:    d.videoViews,
+      profile_reach:  d.profileReach,
+      profile_views:  d.profileViews,
+      comments:       d.comments,
+      shares:         d.shares,
+      net_growth:     d.netGrowth,
+      new_followers:  d.newFollowers,
+      lost_followers: d.lostFollowers,
+    })))],
+  )
+  return rows.map(r => r.date)
+}
+
+/** Tanggal (WIB) baris snapshot tertua akun ini — batas bawah backfill metrik harian. */
+export async function earliestTtProfileSnapshotDate(socialAccountId: string): Promise<string | null> {
+  const { rows } = await pool.query<{ d: string | null }>(
+    `SELECT to_char(MIN(DATE(fetched_at AT TIME ZONE 'Asia/Jakarta')), 'YYYY-MM-DD') AS d
+       FROM l0_raw.tt_profile_snapshots WHERE social_account_id = $1`,
+    [socialAccountId],
+  )
+  return rows[0]?.d ?? null
 }
 
 export interface TtVideoSnapshotItem {
