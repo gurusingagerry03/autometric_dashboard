@@ -6,6 +6,8 @@ export interface CustomMetricPayload {
   format: MetricFormat
   terms: Term[]
   multiply100: boolean
+  ytdSince: string | null   // null → not a YTD metric
+  ytdUntil: string | null   // null → up to the end of the report period
 }
 
 const base = (orgId: string) => `/api/organizations/${encodeURIComponent(orgId)}/custom-metrics`

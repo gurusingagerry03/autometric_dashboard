@@ -47,6 +47,11 @@ function eachDate(startISO: string, endExclISO: string): string[] {
   return out
 }
 
+const nextDay = (iso: string) => {
+  const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
 interface GoldRow {
   platform: string; metric_date: string
   foll: number | null; pv: number | null; pr: number | null; ng: number | null
@@ -262,6 +267,20 @@ function bucketFieldResolver(
   }
 }
 
+// The dates a custom metric aggregates for one bucket: the bucket itself, or — for a
+// YTD metric — every day from its `ytdSince` through the bucket's last day, so each
+// point is the running YTD value at that day/month (cumulative line). Past `ytdUntil`
+// the window stops growing, so the line flattens at the end-date total.
+function customBucketDates(def: CustomMetricDef, dates: string[]): string[] {
+  if (!def.ytdSince || !dates.length) return dates
+  const bucketLast = dates[dates.length - 1]
+  const last = def.ytdUntil && def.ytdUntil < bucketLast ? def.ytdUntil : bucketLast
+  return def.ytdSince > last ? [] : eachDate(def.ytdSince, nextDay(last))
+}
+const customResolver = (
+  def: CustomMetricDef, dates: string[], p: DashPlatform, gold: Map<string, GoldVals>, post: Map<string, PostVals>,
+) => bucketFieldResolver(customBucketDates(def, dates), p, gold, post)
+
 // A custom metric's 3-dimension line series: per-day (daymonth), per-month (last3months —
 // aggregate-then-combine, matching the table), and weekday-average of the per-day values
 // (days). null when the expression yields nothing all month → omit (empty state).
@@ -270,11 +289,11 @@ function buildCustomDimSeries(
   monthDates: string[], monthGroups: string[][],
   gold: Map<string, GoldVals>, post: Map<string, PostVals>,
 ): ChartDimSeries | null {
-  const perDay = monthDates.map(d => evaluateExpression(def.terms, def.multiply100, bucketFieldResolver([d], p, gold, post)))
+  const perDay = monthDates.map(d => evaluateExpression(def.terms, def.multiply100, customResolver(def, [d], p, gold, post)))
   if (!perDay.some(v => v != null && Number.isFinite(v))) return null
   const daymonth = perDay.map(v => (v != null && Number.isFinite(v) ? v : 0))
   const last3months = monthGroups.map(dates => {
-    const v = evaluateExpression(def.terms, def.multiply100, bucketFieldResolver(dates, p, gold, post))
+    const v = evaluateExpression(def.terms, def.multiply100, customResolver(def, dates, p, gold, post))
     return v != null && Number.isFinite(v) ? v : 0
   })
   const byWeekday: number[][] = Array.from({ length: 7 }, () => [])
@@ -317,7 +336,7 @@ function buildBars(
     put(m, 'net_followers_growth', byWd(d => num(gold.get(d)?.ng)))
     // custom metrics — weekday average of per-day custom values (matches the line 'days' dim)
     for (const def of customDefs) {
-      const perDay = monthDates.map(d => evaluateExpression(def.terms, def.multiply100, bucketFieldResolver([d], p, gold, post)))
+      const perDay = monthDates.map(d => evaluateExpression(def.terms, def.multiply100, customResolver(def, [d], p, gold, post)))
       put(m, def.id, WD_ORDER.map(wd => {
         let s = 0, c = 0
         monthDates.forEach((d, i) => { if (weekday(d) === wd) { const v = perDay[i]; if (v != null && Number.isFinite(v)) { s += v; c++ } } })
@@ -345,7 +364,7 @@ function buildBars(
     // custom metrics — per-month value (aggregate-then-combine, matches table + line last3months)
     for (const def of customDefs) {
       put(m, def.id, monthGroups.map(dates => {
-        const v = evaluateExpression(def.terms, def.multiply100, bucketFieldResolver(dates, p, gold, post))
+        const v = evaluateExpression(def.terms, def.multiply100, customResolver(def, dates, p, gold, post))
         return v != null && Number.isFinite(v) ? v : 0
       }))
     }
@@ -411,6 +430,12 @@ export async function getReportChartMetrics(
   const curYm = ymKey(year, month)
   const prevYm = ymKey(pillarPrev.y, pillarPrev.m)
 
+  // Org custom metrics (free expressions) — evaluated per channel as extra line series.
+  // A YTD metric needs daily rows back to its own start, so gold + posts are read from
+  // the earliest of that and the 3-month window (the extra days only feed YTD buckets).
+  const customDefs = await getOrgCustomMetrics(orgId)
+  const dataStart = customDefs.reduce((min, d) => (d.ytdSince && d.ytdSince < min ? d.ytdSince : min), windowStart)
+
   const [gold, posts, pillars, sentiment, words, compProfile] = await Promise.all([
     pool.query<GoldRow>(
       `SELECT bmd.platform, to_char(bmd.metric_date, 'YYYY-MM-DD') metric_date,
@@ -422,7 +447,7 @@ export async function getReportChartMetrics(
         WHERE b.organization_id = $1 AND bmd.brand_id = $2
           AND bmd.metric_date >= $3 AND bmd.metric_date < $4
           AND bmd.platform IN ('instagram','facebook','tiktok')`,
-      [orgId, brandId, windowStart, windowEnd],
+      [orgId, brandId, dataStart, windowEnd],
     ),
     pool.query<PostRow>(
       `SELECT p.platform, to_char(p.post_date, 'YYYY-MM-DD') post_date,
@@ -438,7 +463,7 @@ export async function getReportChartMetrics(
           AND p.post_date >= $3 AND p.post_date < $4
           AND p.platform IN ('instagram','facebook','tiktok')
         GROUP BY p.platform, p.post_date`,
-      [orgId, brandId, windowStart, windowEnd],
+      [orgId, brandId, dataStart, windowEnd],
     ),
     // Content-pillar rollup (gold) — report month AND the month before, bucketed by
     // month so the chart can compare the two periods. NULL pillars excluded upstream.
@@ -525,9 +550,6 @@ export async function getReportChartMetrics(
       [brandId, monthStart(year, month), windowEnd],
     ),
   ])
-
-  // Org custom metrics (free expressions) — evaluated per channel as extra line series.
-  const customDefs = await getOrgCustomMetrics(orgId)
 
   const channels: Partial<Record<DashPlatform, ChannelChartMetrics>> = {}
   const bars: Partial<Record<DashPlatform, ChannelBarMetrics>> = {}

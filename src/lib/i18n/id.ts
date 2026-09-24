@@ -1029,6 +1029,15 @@ export const ID: Record<string, string> = {
   'Use a number': 'Pakai angka',
   'Live preview': 'Pratinjau langsung',
   'sample data': 'data contoh',
+  'Year to date (YTD)': 'Year to date (YTD)',
+  'Accumulate every field from a start date up to the end of the report period, instead of the report period alone.':
+    'Akumulasikan setiap field dari tanggal mulai sampai akhir periode laporan, bukan hanya periode laporan.',
+  'Count since': 'Hitung sejak',
+  'Until': 'Sampai',
+  'Clear end date': 'Hapus tanggal akhir',
+  'Leave the end date empty to count up to the end of the report period.':
+    'Kosongkan tanggal akhir untuk menghitung sampai akhir periode laporan.',
+  'The end date must be on or after the start date.': 'Tanggal akhir harus sama atau setelah tanggal mulai.',
   'Select metric': 'Pilih metrik',
   'Template name': 'Nama template',
   'e.g. Monthly performance report': 'misalnya Laporan performa bulanan',

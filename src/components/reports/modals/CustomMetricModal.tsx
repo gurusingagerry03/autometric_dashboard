@@ -5,6 +5,7 @@ import {
   CustomMetricDef, MetricFormat, MetricField, Term, Op, OPS,
   METRIC_FIELDS, LAYER_LABEL, FieldLayer,
   previewValue, formatMetric, formulaText, isDefinitionValid, hasMixedPrecedence,
+  defaultYtdSince, normalizeYtdSince, normalizeYtdUntil, ytdLabel,
 } from '@/lib/reports/data/customMetrics'
 import { createCustomMetric, updateCustomMetric, deleteCustomMetric } from '@/lib/reports/data/customMetricsApi'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -29,16 +30,24 @@ type Draft = {
   terms: Term[]
   multiply100: boolean
   format: MetricFormat
+  ytd: boolean
+  ytdSince: string   // kept while unticked so re-ticking restores the chosen date
+  ytdUntil: string   // '' → up to the end of the report period
 }
 
 const blankDraft = (): Draft => ({
   id: null, name: '', terms: [{ op: '+', kind: 'field', field: '', value: 0 }], multiply100: false, format: 'number',
+  ytd: false, ytdSince: defaultYtdSince(), ytdUntil: '',
 })
 
 const draftFrom = (m: CustomMetricDef): Draft => ({
   id: m.id, name: m.name, terms: m.terms.map(t => ({ ...t })),
   multiply100: m.multiply100 ?? false, format: m.format,
+  ytd: !!m.ytdSince, ytdSince: m.ytdSince ?? defaultYtdSince(), ytdUntil: m.ytdUntil ?? '',
 })
+
+// An empty end date is fine (open-ended); a filled one must be a date on/after the start.
+const ytdUntilOk = (d: Draft) => !d.ytdUntil || normalizeYtdUntil(normalizeYtdSince(d.ytdSince), d.ytdUntil) != null
 
 /**
  * Custom Metric library + free-expression builder (UI). Two views:
@@ -69,6 +78,7 @@ export default function CustomMetricModal({
   if (!open) return null
 
   const valid = draft.name.trim().length > 0 && isDefinitionValid(draft)
+    && (!draft.ytd || (normalizeYtdSince(draft.ytdSince) != null && ytdUntilOk(draft)))
 
   const startCreate = () => { setError(null); setDraft(blankDraft()); setView('edit') }
   const startEdit = (m: CustomMetricDef) => { setError(null); setDraft(draftFrom(m)); setView('edit') }
@@ -85,6 +95,8 @@ export default function CustomMetricModal({
     const payload = {
       name: draft.name.trim(), format: draft.format,
       terms: draft.terms.map(t => ({ ...t })), multiply100: draft.multiply100,
+      ytdSince: draft.ytd ? draft.ytdSince : null,
+      ytdUntil: draft.ytd && draft.ytdUntil ? draft.ytdUntil : null,
     }
     setBusy(true); setError(null)
     try {
@@ -170,8 +182,11 @@ function ListView({
                   <div className="flex items-center gap-2">
                     <span style={PJ} className="text-[13px] font-bold text-[#334155] truncate">{m.name}</span>
                     <span className="text-[9.5px] font-semibold uppercase tracking-wide text-[#94a3b8] bg-[#f1f5f9] rounded px-1.5 py-0.5">{m.format}</span>
+                    {m.ytdSince && <span className="text-[9.5px] font-semibold uppercase tracking-wide text-[#2C3079] bg-[#F1F2FB] rounded px-1.5 py-0.5">YTD</span>}
                   </div>
-                  <p className="text-[11px] text-[#94a3b8] truncate font-mono mt-0.5">{formulaText(m)}</p>
+                  <p className="text-[11px] text-[#94a3b8] truncate font-mono mt-0.5">
+                    {formulaText(m)}{m.ytdSince && <span className="font-sans"> · {ytdLabel(m)}</span>}
+                  </p>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => onEdit(m)} disabled={busy} className="w-7 h-7 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#2C3079] hover:bg-[#F1F2FB] disabled:opacity-40">
@@ -333,6 +348,62 @@ function EditView({
           )}
         </div>
 
+        {/* Period: report window (default) or YTD from a chosen start date */}
+        <div className="rounded-xl border border-[#e5e7eb] p-3.5">
+          <label className="flex items-start gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={draft.ytd}
+              onChange={e => setDraft(d => ({ ...d, ytd: e.target.checked }))}
+              className="mt-0.5 w-4 h-4 accent-[#2C3079] cursor-pointer"
+            />
+            <span>
+              <span style={PJ} className="block text-[12.5px] font-bold text-[#334155]">{t('Year to date (YTD)')}</span>
+              <span className="block text-[11px] text-[#94a3b8] leading-snug mt-0.5">
+                {t('Accumulate every field from a start date up to the end of the report period, instead of the report period alone.')}
+              </span>
+            </span>
+          </label>
+          {draft.ytd && (
+            <div className="mt-3 ml-[26px]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Count since')}</span>
+                <input
+                  type="date"
+                  value={draft.ytdSince}
+                  max={draft.ytdUntil || undefined}
+                  onChange={e => setDraft(d => ({ ...d, ytdSince: e.target.value }))}
+                  style={PJ}
+                  className="px-3 py-2 rounded-lg border border-[#e5e7eb] bg-white text-[12.5px] text-[#334155] outline-none focus:border-[#2C3079] focus:ring-1 focus:ring-[#2C3079]"
+                />
+                <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] ml-1">{t('Until')}</span>
+                <input
+                  type="date"
+                  value={draft.ytdUntil}
+                  min={draft.ytdSince || undefined}
+                  onChange={e => setDraft(d => ({ ...d, ytdUntil: e.target.value }))}
+                  style={PJ}
+                  className="px-3 py-2 rounded-lg border border-[#e5e7eb] bg-white text-[12.5px] text-[#334155] outline-none focus:border-[#2C3079] focus:ring-1 focus:ring-[#2C3079]"
+                />
+                {draft.ytdUntil && (
+                  <button
+                    onClick={() => setDraft(d => ({ ...d, ytdUntil: '' }))}
+                    title={t('Clear end date')}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-[#b6bcc4] hover:text-[#dc2626] hover:bg-[#fef2f2] transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                )}
+              </div>
+              <p className={`text-[10.5px] mt-1.5 leading-snug ${ytdUntilOk(draft) ? 'text-[#94a3b8]' : 'text-[#dc2626]'}`}>
+                {ytdUntilOk(draft)
+                  ? t('Leave the end date empty to count up to the end of the report period.')
+                  : t('The end date must be on or after the start date.')}
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Format */}
         <div>
           <label style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-1.5">{t('Format')}</label>
@@ -356,6 +427,9 @@ function EditView({
             <span className="text-[10px] text-[#b0b8c1]">{t('sample data')}</span>
           </div>
           <p className="text-[12.5px] font-mono text-[#475569]">{formulaText(draft)}</p>
+          {draft.ytd && normalizeYtdSince(draft.ytdSince) && (
+            <p className="text-[11px] text-[#94a3b8] mt-0.5">{ytdLabel({ ytdSince: draft.ytdSince, ytdUntil: ytdUntilOk(draft) && draft.ytdUntil ? draft.ytdUntil : undefined })}</p>
+          )}
           <p style={PJ} className="text-[26px] font-extrabold text-[#2C3079] mt-1 leading-none">
             {formatMetric(draft.format, preview)}
           </p>

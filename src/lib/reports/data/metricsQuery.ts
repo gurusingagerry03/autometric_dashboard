@@ -26,6 +26,10 @@ const PLATFORMS: DashPlatform[] = ['instagram', 'facebook', 'tiktok']
 const pad = (n: number) => String(n).padStart(2, '0')
 const monthStart = (y: number, m: number) => `${y}-${pad(m)}-01`
 const monthEndExcl = (y: number, m: number) => (m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`)
+const nextDay = (iso: string) => {
+  const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
 const prevMonth = (y: number, m: number) => (m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 })
 
 interface PostRow {
@@ -485,19 +489,10 @@ function competitorRowValues(r: CompRow): Record<string, number | null> {
   }
 }
 
-/**
- * Compute Content Level + Channel Level metric values for a brand's month
- * (current) vs the month before (previous), for Instagram / Facebook / TikTok.
- */
-export async function getReportTableMetrics(
-  orgId: string, brandId: string, year: number, month: number,
-): Promise<ReportTableMetrics> {
-  const pv = prevMonth(year, month)
-  const rangeStart = monthStart(pv.y, pv.m)      // previous month start
-  const rangeEnd = monthEndExcl(year, month)     // current month end (exclusive)
-  const curStart = monthStart(year, month)       // boundary: >= curStart = current
-
-  const posts = await pool.query<PostRow>(
+// Silver posts + gold daily rows for one brand over [start, end). Shared by the report
+// window and the (longer) YTD window of YTD custom metrics.
+async function fetchPosts(orgId: string, brandId: string, start: string, end: string): Promise<PostRow[]> {
+  const res = await pool.query<PostRow>(
     `SELECT p.platform, to_char(p.post_date, 'YYYY-MM-DD') post_date, p.post_type,
             p.likes, p.reactions, p.comments, p.shares, p.saves, p.repost_count,
             p.engagement, p.engagement_public, p.reach, p.views, p.impressions, p.follows,
@@ -510,10 +505,13 @@ export async function getReportTableMetrics(
       WHERE b.organization_id = $1 AND bsa.brand_id = $2
         AND p.post_date >= $3 AND p.post_date < $4
         AND p.platform IN ('instagram','facebook','tiktok')`,
-    [orgId, brandId, rangeStart, rangeEnd],
+    [orgId, brandId, start, end],
   )
+  return res.rows
+}
 
-  const gold = await pool.query<GoldRow>(
+async function fetchGold(orgId: string, brandId: string, start: string, end: string): Promise<GoldRow[]> {
+  const res = await pool.query<GoldRow>(
     `SELECT bmd.platform, to_char(bmd.metric_date, 'YYYY-MM-DD') metric_date,
             bmd.net_growth_sum, bmd.new_followers_sum, bmd.lost_followers_sum,
             bmd.profile_visit_sum, bmd.profile_reach_sum, bmd.follower_count_eod,
@@ -523,12 +521,74 @@ export async function getReportTableMetrics(
       WHERE b.organization_id = $1 AND bmd.brand_id = $2
         AND bmd.metric_date >= $3 AND bmd.metric_date < $4
         AND bmd.platform IN ('instagram','facebook','tiktok')`,
-    [orgId, brandId, rangeStart, rangeEnd],
+    [orgId, brandId, start, end],
   )
+  return res.rows
+}
 
-  // Sentiments table (per channel): posts per dominant sentiment for the REPORT
-  // month. Undated sentiment posts are included (gold leaves post_date NULL for
-  // some posts — see chartQuery.ts), matching the word cloud's scoping rule.
+// YTD custom metrics: each field is aggregated from the metric's own `ytdSince` up to
+// the end of the report period (curr), and up to the end of the previous period (prev —
+// "YTD as of last month", so the Gap column still reads period-over-period). An optional
+// `ytdUntil` caps both windows: past it the value stays frozen at the end-date total. The window
+// is independent of the report month, so the rows are fetched separately, once, from the
+// earliest start among the YTD metrics. Returns pairs per channel (+ 'all'), keyed by id.
+async function ytdCustomSections(
+  defs: CustomMetricDef[], orgId: string, brandId: string, curStart: string, rangeEnd: string,
+): Promise<Partial<Record<TableChannel, SectionMetrics>>> {
+  const out: Partial<Record<TableChannel, SectionMetrics>> = {}
+  if (!defs.length) return out
+  const from = defs.map(d => d.ytdSince!).sort()[0]
+  const [posts, gold] = from < rangeEnd
+    ? await Promise.all([fetchPosts(orgId, brandId, from, rangeEnd), fetchGold(orgId, brandId, from, rangeEnd)])
+    : [[], []]
+
+  for (const def of defs) {
+    const since = def.ytdSince!
+    const cap = def.ytdUntil ? nextDay(def.ytdUntil) : null   // exclusive
+    // Every channel's value (+ 'all') over [since, end); null for all when the window is empty.
+    const evalUpTo = (periodEnd: string): Partial<Record<TableChannel, number | null>> => {
+      const end = cap && cap < periodEnd ? cap : periodEnd
+      if (since >= end) return {}
+      const pRows = posts.filter(r => r.post_date >= since && r.post_date < end)
+      const gRows = gold.filter(r => r.metric_date >= since && r.metric_date < end)
+      const res: Partial<Record<TableChannel, number | null>> = {}
+      let foll = 0, hasFoll = false
+      for (const ch of PLATFORMS) {
+        const a = aggPosts(pRows.filter(r => r.platform === ch))
+        const g = aggGold(gRows.filter(r => r.platform === ch))
+        if (g.followers != null) { foll += g.followers; hasFoll = true }
+        res[ch] = evaluateExpression(def.terms, def.multiply100, fid => fieldValue(ch, fid, a, g))
+      }
+      const allG = aggGold(gRows)
+      allG.followers = hasFoll ? foll : null   // same rule as the report: sum of each channel's EOD
+      const allA = aggPostsAll(pRows)
+      res.all = evaluateExpression(def.terms, def.multiply100, fid => fieldValue('all', fid, allA, allG))
+      return res
+    }
+    const curr = evalUpTo(rangeEnd)
+    const prev = evalUpTo(curStart)
+    for (const ch of [...PLATFORMS, 'all'] as TableChannel[]) {
+      (out[ch] ??= {})[def.id] = { prev: prev[ch] ?? null, curr: curr[ch] ?? null }
+    }
+  }
+  return out
+}
+
+/**
+ * Compute Content Level + Channel Level metric values for a brand's month
+ * (current) vs the month before (previous), for Instagram / Facebook / TikTok.
+ */
+export async function getReportTableMetrics(
+  orgId: string, brandId: string, year: number, month: number,
+): Promise<ReportTableMetrics> {
+  const pv = prevMonth(year, month)
+  const rangeStart = monthStart(pv.y, pv.m)      // previous month start
+  const rangeEnd = monthEndExcl(year, month)     // current month end (exclusive)
+  const curStart = monthStart(year, month)       // boundary: >= curStart = current
+
+  const posts = await fetchPosts(orgId, brandId, rangeStart, rangeEnd)
+  const gold = await fetchGold(orgId, brandId, rangeStart, rangeEnd)
+
   const sent = await pool.query<SentPostRow>(
     `SELECT csp.platform, csp.dominant_sentiment sentiment, count(*)::int posts
        FROM l2_gold.comment_sentiment_post csp
@@ -587,7 +647,10 @@ export async function getReportTableMetrics(
   )
 
   // Org custom metrics (free expressions over l1/l2 fields) — evaluated per channel below.
+  // Period metrics run over the report window; YTD metrics over their own longer window.
   const customDefs = await getOrgCustomMetrics(orgId)
+  const periodDefs = customDefs.filter(d => !d.ytdSince)
+  const ytdSections = await ytdCustomSections(customDefs.filter(d => d.ytdSince), orgId, brandId, curStart, rangeEnd)
 
   const content: ReportTableMetrics['content'] = {}
   const channel: ReportTableMetrics['channel'] = {}
@@ -601,8 +664,8 @@ export async function getReportTableMetrics(
   let allCurFoll = 0, allPrevFoll = 0, hasCurFoll = false, hasPrevFoll = false
 
   for (const ch of PLATFORMS) {
-    const pRows = posts.rows.filter(r => r.platform === ch)
-    const gRows = gold.rows.filter(r => r.platform === ch)
+    const pRows = posts.filter(r => r.platform === ch)
+    const gRows = gold.filter(r => r.platform === ch)
     const curPostRows = pRows.filter(r => r.post_date >= curStart)
     const curGoldRows = gRows.filter(r => r.metric_date >= curStart)
     const curPosts = aggPosts(curPostRows)
@@ -613,7 +676,8 @@ export async function getReportTableMetrics(
     if (prevGold.followers != null) { allPrevFoll += prevGold.followers; hasPrevFoll = true }
     content[ch] = buildSection('content_level', ch, curPosts, prevPosts, curGold, prevGold)
     channel[ch] = buildSection('channel_level', ch, curPosts, prevPosts, curGold, prevGold)
-    injectCustomMetrics(customDefs, ch, content[ch]!, channel[ch]!, curPosts, prevPosts, curGold, prevGold)
+    injectCustomMetrics(periodDefs, ch, content[ch]!, channel[ch]!, curPosts, prevPosts, curGold, prevGold)
+    Object.assign(content[ch]!, ytdSections[ch]); Object.assign(channel[ch]!, ytdSections[ch])
     // Per-platform comparison rows — only for platforms that actually have data this
     // period (a platform with no posts / no profile snapshots is left out).
     if (curPostRows.length > 0) contentByPlatform[ch] = allContentValues(curPostRows)
@@ -626,10 +690,10 @@ export async function getReportTableMetrics(
   // across every channel's posts, per-post & per-day averages, pooled + mean ER, and
   // total followers = sum of each channel's end-of-period count. Keyed by *.allColumns
   // ids (see tableTypes) so the all-channel tables read real values.
-  const allCurPostRows = posts.rows.filter(r => r.post_date >= curStart)
-  const allPrevPostRows = posts.rows.filter(r => r.post_date < curStart)
-  const allCurGoldRows = gold.rows.filter(r => r.metric_date >= curStart)
-  const allPrevGoldRows = gold.rows.filter(r => r.metric_date < curStart)
+  const allCurPostRows = posts.filter(r => r.post_date >= curStart)
+  const allPrevPostRows = posts.filter(r => r.post_date < curStart)
+  const allCurGoldRows = gold.filter(r => r.metric_date >= curStart)
+  const allPrevGoldRows = gold.filter(r => r.metric_date < curStart)
   const allCurPosts = aggPostsAll(allCurPostRows)    // retained for custom-metric evaluation
   const allPrevPosts = aggPostsAll(allPrevPostRows)
   const allCurGold = aggGold(allCurGoldRows)
@@ -642,7 +706,8 @@ export async function getReportTableMetrics(
     allChannelValues(allCurGold, allCurPosts, dayCount(allCurGoldRows)),
     allChannelValues(allPrevGold, allPrevPosts, dayCount(allPrevGoldRows)),
   )
-  injectCustomMetrics(customDefs, 'all', content['all']!, channel['all']!, allCurPosts, allPrevPosts, allCurGold, allPrevGold)
+  injectCustomMetrics(periodDefs, 'all', content['all']!, channel['all']!, allCurPosts, allPrevPosts, allCurGold, allPrevGold)
+  Object.assign(content['all']!, ytdSections['all']); Object.assign(channel['all']!, ytdSections['all'])
 
   const sentiment: Partial<Record<DashPlatform, SentimentTable>> = {}
   for (const ch of PLATFORMS) {
@@ -670,8 +735,8 @@ export async function getReportTableMetrics(
   for (const ch of PLATFORMS) {
     const rowsForCh = compRows.rows.filter(r => r.platform === ch)
     if (rowsForCh.length === 0) continue
-    const pRowsCur = posts.rows.filter(r => r.platform === ch && r.post_date >= curStart)
-    const gRowsCur = gold.rows.filter(r => r.platform === ch && r.metric_date >= curStart)
+    const pRowsCur = posts.filter(r => r.platform === ch && r.post_date >= curStart)
+    const gRowsCur = gold.filter(r => r.platform === ch && r.metric_date >= curStart)
     const brand: CompetitorEntity = { id: 'brand', label: brandName, values: brandCompetitorValues(pRowsCur, gRowsCur) }
     const comps: CompetitorEntity[] = rowsForCh.map(r => ({
       id: r.sid, label: '@' + r.username, values: competitorRowValues(r),

@@ -15,7 +15,7 @@ Status per **8 September 2026**. Seluruh temuan di bawah diverifikasi langsung k
 | 5 | Competitors Visual Content (6) | ✅ Selesai | ekspor PPTX diperbaiki 8 Sep — lihat di bawah |
 | 6 | Comparison mode (4a) | ⏸️ Tertahan | butuh screenshot slide 4 |
 | 7 | Setup KPI: Achievement & Run Rate (2) | ⏸️ Tertahan | butuh definisi Run Rate |
-| 8 | YTD custom metrics (7a) | ⏸️ Tertahan | perlu model periode pada custom metric |
+| 8 | YTD custom metrics (7a) | ✅ Selesai | 24 Sep — lihat di bawah |
 
 ---
 
@@ -147,7 +147,15 @@ Yang menahan bukan pekerjaannya, tapi definisinya: **Achievement Rate** jelas (`
 - proyeksi akhir periode ÷ target ("kalau kecepatan ini diteruskan, kita sampai 112%"), atau
 - capaian saat ini ÷ capaian yang seharusnya sampai hari ini ("kita sedang 94% dari jadwal")
 
-**YTD custom metrics (slide 7a).** Custom metric sekarang merangkai field dengan operator **di dalam satu window periode laporan**. Konsep "hitung sejak tanggal X, jumlahkan lintas bulan" belum ada — perlu dimensi periode pada definisi custom metric, lepas dari periode laporan.
+**YTD custom metrics (slide 7a) — selesai 24 September 2026.** Di *New Custom Metric* ada centang **Year to date (YTD)** plus tanggal **Hitung sejak** (default 1 Januari tahun berjalan). Tanggal disimpan sebagai `ytdSince` di JSONB `definition`, jadi tidak perlu migrasi.
+
+- **Tabel/KPI:** tiap field diagregasi dari `ytdSince` sampai akhir bulan laporan (Current), dan sampai akhir bulan sebelumnya (Previous) — jadi Gap tetap bermakna "YTD bulan ini vs YTD bulan lalu". Barisnya diambil terpisah (`ytdCustomSections` di `metricsQuery.ts`) karena jendelanya lepas dari bulan laporan.
+- **Chart:** tiap titik adalah nilai YTD berjalan sampai hari/bulan itu (garis kumulatif), bukan nilai per-bucket.
+- **Tanggal mulai setelah akhir periode** → nilai kosong ("—"), bukan nol.
+- **Sampai (opsional).** Kalau diisi, jendela berhenti di tanggal itu (inklusif): laporan setelahnya menampilkan total yang sama, dan garis chart mendatar. Kosong berarti sampai akhir periode laporan. Tanggal akhir sebelum tanggal mulai ditolak di UI dan diabaikan di server.
+- Tanggal mulai tetap (bukan "1 Jan tahun laporan"), jadi metrik yang dipakai lintas tahun perlu diubah tanggalnya di awal tahun.
+
+Terverifikasi MineralQUA, Juli 2026, Followers Net Growth YTD sejak 1 Jan: Instagram 173.989 (Current) / 158.900 (Previous) — sama persis dengan `SUM(net_growth_sum)` langsung di `l2_gold.brand_metric_daily`, dan selisihnya (15.089) sama dengan nilai metrik periode biasa bulan Juli.
 
 ---
 

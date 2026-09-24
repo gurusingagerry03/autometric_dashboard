@@ -94,7 +94,31 @@ export interface CustomMetricDef {
   terms: Term[]            // evaluated left-to-right; terms[0].op ignored
   multiply100?: boolean    // × 100 (→ percentage), applied last
   format: MetricFormat
+  /** YTD: when set, every field is aggregated from this date (YYYY-MM-DD) up to the end
+   *  of the report period instead of over the report period alone — e.g. Followers Net
+   *  Growth since 1 Jan. Absent → the metric runs over the report window as before. */
+  ytdSince?: string
+  /** Optional last day (YYYY-MM-DD, inclusive) of a YTD metric. The window then stops
+   *  here even when the report period runs later. Absent → up to the period's end. */
+  ytdUntil?: string
 }
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+/** A valid YYYY-MM-DD calendar date, else null. Shared by the API parser and the UI. */
+export function normalizeYtdSince(v: unknown): string | null {
+  if (typeof v !== 'string' || !ISO_DATE.test(v)) return null
+  const d = new Date(v + 'T00:00:00Z')
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : null
+}
+
+/** The end date to keep for a YTD window: a valid date on/after `since`, else null. */
+export function normalizeYtdUntil(since: string | null, v: unknown): string | null {
+  const until = normalizeYtdSince(v)
+  return since && until && until >= since ? until : null
+}
+
+/** 1 Jan of the current year — the default start of a new YTD metric. */
+export const defaultYtdSince = (): string => `${new Date().getFullYear()}-01-01`
 
 /** True when the expression mixes add/sub with mul/div — left-to-right then matters. */
 export function hasMixedPrecedence(terms: Term[]): boolean {
@@ -171,4 +195,14 @@ export function formulaText(def: { terms: Term[]; multiply100?: boolean }): stri
   let s = label(terms[0])
   for (let i = 1; i < terms.length; i++) s += ` ${OP_SYMBOL[terms[i].op]} ${label(terms[i])}`
   return def.multiply100 ? `${s} × 100` : s
+}
+
+/** "YTD since 1 Jan 2026" label for a YTD metric, else null. */
+export function ytdLabel(def: { ytdSince?: string; ytdUntil?: string }): string | null {
+  if (!def.ytdSince) return null
+  const fmt = (iso: string) => new Date(iso + 'T00:00:00Z')
+    .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+  return def.ytdUntil
+    ? `YTD ${fmt(def.ytdSince)} – ${fmt(def.ytdUntil)}`
+    : `YTD since ${fmt(def.ytdSince)}`
 }
