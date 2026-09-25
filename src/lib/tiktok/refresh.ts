@@ -48,9 +48,10 @@ export async function refreshTiktokBusinessToken(socialAccountId: string, refres
   const { refreshBusinessToken } = await import('./business/api')
   const t = await refreshBusinessToken(refreshToken)
 
+  //@TODO harus ada validasi apakah expires_at yang dikembalikan dari Tiktok Business API tidak < now()
   await pool.query(
     `UPDATE social_accounts
-     SET oauth_token = $1, refresh_token = $2, token_expires_at = $3
+     SET oauth_token = $1, refresh_token = $2, token_expires_at = $3, connected = true
      WHERE id = $4`,
     [t.accessToken, t.refreshToken ?? refreshToken, t.expiresAt, socialAccountId]
   )
