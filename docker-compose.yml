@@ -19,6 +19,12 @@ services:
     environment:
       # Reached over the compose bridge network by service name.
       MAPPING_ENGINE_URL: http://fpk-engine:8000
+      # Exported report .pptx files (see src/lib/reports/storage/files.ts).
+      REPORT_STORAGE_DIR: /data/reports
+    volumes:
+      # Named volume, not a bind mount: survives `up --build`, and keeps the
+      # files out of the git checkout on the server.
+      - report-files:/data/reports
     depends_on:
       - fpk-engine
     restart: unless-stopped
@@ -50,3 +56,7 @@ services:
     expose:
       - "8000"
     restart: unless-stopped
+
+volumes:
+  report-files:
+    name: autometric-report-files

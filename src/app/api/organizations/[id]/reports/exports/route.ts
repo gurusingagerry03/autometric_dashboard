@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireOrgMemberById } from '@/lib/reports/access'
-import { uploadToGCS } from '@/lib/reports/storage/gcs'
+import { saveReportFile } from '@/lib/reports/storage/files'
 import { uploadCoverImage, cloudinaryConfigured } from '@/lib/reports/storage/cloudinary'
 import { insertReportExport, nextCoverSequence, type ReportExportConfig } from '@/lib/reports/queries'
 
@@ -46,9 +46,9 @@ export async function POST(
   const objectName = `exports/${access.orgId}/${slug(meta.brandName)}_${slug(meta.period)}_${Date.now()}.pptx`
 
   try {
-    await uploadToGCS(buffer, objectName)
+    await saveReportFile(buffer, objectName)
   } catch (e) {
-    console.error('[reports/exports] GCS upload failed:', e)
+    console.error('[reports/exports] file save failed:', e)
     return NextResponse.json({ error: 'Storage upload failed.' }, { status: 502 })
   }
 

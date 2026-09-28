@@ -21,3 +21,6 @@ tsconfig.tsbuildinfo
 
 # Office lock/temp files
 ~$*
+
+# Report exports saved to local disk (dev); in Docker they live in a volume
+.data/

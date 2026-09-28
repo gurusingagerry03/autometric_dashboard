@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { getReportExportForAdmin } from '@/lib/admin/reports'
-import { downloadFromGCS } from '@/lib/reports/storage/gcs'
+import { readReportFile } from '@/lib/reports/storage/files'
 
 export const runtime = 'nodejs'
 
@@ -24,9 +24,9 @@ export async function GET(
 
   let buffer: Buffer
   try {
-    buffer = await downloadFromGCS(row.gcsObjectName)
+    buffer = await readReportFile(row.gcsObjectName)
   } catch (e) {
-    console.error('[admin/reports] GCS download failed:', e)
+    console.error('[admin/reports] file read failed:', e)
     return NextResponse.json({ error: 'File unavailable.' }, { status: 502 })
   }
 

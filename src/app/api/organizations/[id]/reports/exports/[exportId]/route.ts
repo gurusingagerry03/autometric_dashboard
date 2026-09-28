@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireOrgMemberById } from '@/lib/reports/access'
 import { deleteReportExport } from '@/lib/reports/queries'
-import { deleteFromGCS } from '@/lib/reports/storage/gcs'
+import { deleteReportFile } from '@/lib/reports/storage/files'
 import { deleteCoverImage } from '@/lib/reports/storage/cloudinary'
 
 export const runtime = 'nodejs'
@@ -18,7 +18,7 @@ export async function DELETE(
   if (!deleted) return NextResponse.json({ error: 'Not found.' }, { status: 404 })
 
   // Remove the stored files too; ignore storage errors so the row stays deleted.
-  await deleteFromGCS(deleted.gcsObjectName)
+  await deleteReportFile(deleted.gcsObjectName)
   if (deleted.coverPublicId) await deleteCoverImage(deleted.coverPublicId)
 
   return NextResponse.json({ ok: true })
