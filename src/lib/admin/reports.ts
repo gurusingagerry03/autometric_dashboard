@@ -16,6 +16,8 @@ export interface AdminReportRow {
   slideCount:    number
   sizeKb:        number
   coverImageUrl: string | null
+  /** true = "Export & save" (ada di library org); false = "Export only". */
+  inLibrary:     boolean
   exportedAt:    string
   org:           { id: string; name: string; slug: string }
   createdBy:     { name: string; email: string } | null
@@ -24,7 +26,7 @@ export interface AdminReportRow {
 export async function listAllReportExports(): Promise<AdminReportRow[]> {
   const { rows } = await pool.query(
     `SELECT re.id, re.name, re.title, re.brand_name, re.period, re.slide_count,
-            re.size_bytes, re.cover_image_url, re.exported_at,
+            re.size_bytes, re.cover_image_url, re.in_library, re.exported_at,
             o.id AS org_id, o.name AS org_name, o.slug AS org_slug,
             u.name AS user_name, u.email AS user_email
      FROM report_exports re
@@ -41,6 +43,7 @@ export async function listAllReportExports(): Promise<AdminReportRow[]> {
     slideCount:    r.slide_count,
     sizeKb:        Math.round(Number(r.size_bytes ?? 0) / 1024),
     coverImageUrl: r.cover_image_url,
+    inLibrary:     r.in_library,
     exportedAt:    new Date(r.exported_at).toISOString(),
     org:           { id: r.org_id, name: r.org_name, slug: r.org_slug },
     createdBy:     r.user_email ? { name: r.user_name, email: r.user_email } : null,

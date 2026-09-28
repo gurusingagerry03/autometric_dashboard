@@ -28,6 +28,8 @@ export interface InsertReportExportInput {
   config: ReportExportConfig
   coverImageUrl?: string | null
   coverPublicId?: string | null
+  /** false = "Export only": tersimpan untuk admin, tidak tampil di library org. */
+  inLibrary?: boolean
 }
 
 interface ReportExportRow {
@@ -63,12 +65,12 @@ function toRecord(row: ReportExportRow): ReportRecord {
   }
 }
 
-/** Lists a single org's report exports, newest first, mapped to UI records. */
+/** Lists a single org's library exports ("Export & save"), newest first, mapped to UI records. */
 export async function listReportExports(orgId: string): Promise<ReportRecord[]> {
   const { rows } = await pool.query<ReportExportRow>(
     `SELECT id, name, title, brand_name, period, slide_count, gcs_object_name, size_bytes, config, cover_image_url, exported_at
      FROM report_exports
-     WHERE organization_id = $1
+     WHERE organization_id = $1 AND in_library
      ORDER BY exported_at DESC`,
     [orgId],
   )
@@ -93,8 +95,8 @@ export async function insertReportExport(input: InsertReportExportInput): Promis
   const { rows } = await pool.query<{ id: string }>(
     `INSERT INTO report_exports
        (organization_id, created_by, name, title, brand_name, period, slide_count,
-        gcs_object_name, size_bytes, config, cover_image_url, cover_public_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        gcs_object_name, size_bytes, config, cover_image_url, cover_public_id, in_library)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING id`,
     [
       input.organizationId,
@@ -109,6 +111,7 @@ export async function insertReportExport(input: InsertReportExportInput): Promis
       JSON.stringify(input.config),
       input.coverImageUrl ?? null,
       input.coverPublicId ?? null,
+      input.inLibrary ?? true,
     ],
   )
   return rows[0].id
@@ -121,7 +124,7 @@ export async function getReportExport(
 ): Promise<{ gcsObjectName: string; title: string } | null> {
   const { rows } = await pool.query<{ gcs_object_name: string; title: string }>(
     `SELECT gcs_object_name, title FROM report_exports
-     WHERE id = $1 AND organization_id = $2`,
+     WHERE id = $1 AND organization_id = $2 AND in_library`,
     [id, orgId],
   )
   return rows[0] ? { gcsObjectName: rows[0].gcs_object_name, title: rows[0].title } : null
@@ -134,7 +137,7 @@ export async function deleteReportExport(
 ): Promise<{ gcsObjectName: string; coverPublicId: string | null } | null> {
   const { rows } = await pool.query<{ gcs_object_name: string; cover_public_id: string | null }>(
     `DELETE FROM report_exports
-     WHERE id = $1 AND organization_id = $2
+     WHERE id = $1 AND organization_id = $2 AND in_library
      RETURNING gcs_object_name, cover_public_id`,
     [id, orgId],
   )

@@ -97,7 +97,14 @@ export default function AdminReportsPage({ rows }: { rows: AdminReportRow[] }) {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className="text-[13.5px] font-bold text-[#0f172a] truncate max-w-[280px]" title={r.title}>{r.title}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13.5px] font-bold text-[#0f172a] truncate max-w-[220px]" title={r.title}>{r.title}</p>
+                          {r.inLibrary ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#f0f7f5] text-[#1B8A80] flex-shrink-0">Saved</span>
+                          ) : (
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#f1f5f9] text-[#94a3b8] flex-shrink-0">Export only</span>
+                          )}
+                        </div>
                         <p className="text-[11.5px] text-[#94a3b8] truncate max-w-[280px]">
                           {r.brandName ?? '—'} · {r.slideCount} slide · {fmtSize(r.sizeKb)}
                         </p>

@@ -23,6 +23,8 @@ export interface SaveExportMeta {
   config: ReportExportConfig
   /** Optional cover-preview image as a PNG data URI (uploaded to Cloudinary). */
   coverImage?: string | null
+  /** false = "Export only": stored for admins, hidden from the org library. */
+  inLibrary?: boolean
 }
 
 export interface SaveExportResult {

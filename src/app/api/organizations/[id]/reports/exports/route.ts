@@ -12,6 +12,8 @@ interface SaveMeta {
   period: string
   slideCount: number
   config: ReportExportConfig
+  /** false = "Export only": disimpan untuk admin, tanpa cover, tidak tampil di library org. */
+  inLibrary?: boolean
 }
 
 function slug(s: string): string {
@@ -58,10 +60,12 @@ export async function POST(
 
   // Cover preview → Cloudinary (best-effort; the export still saves if Cloudinary
   // is unset or the upload fails — the card falls back to a live render).
+  // "Export only" never gets a cover image — nobody browses those as cards.
+  const inLibrary = meta.inLibrary !== false
   let coverImageUrl: string | null = null
   let coverPublicId: string | null = null
   const coverImage = form.get('coverImage')
-  if (typeof coverImage === 'string' && coverImage && cloudinaryConfigured()) {
+  if (inLibrary && typeof coverImage === 'string' && coverImage && cloudinaryConfigured()) {
     try {
       const uploaded = await uploadCoverImage(coverImage, `reports/${access.orgId}/${name}`)
       coverImageUrl = uploaded.url
@@ -85,6 +89,7 @@ export async function POST(
       config: meta.config,
       coverImageUrl,
       coverPublicId,
+      inLibrary,
     })
     return NextResponse.json({ ok: true, id })
   } catch (e) {

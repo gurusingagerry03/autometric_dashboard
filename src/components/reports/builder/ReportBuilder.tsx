@@ -374,16 +374,23 @@ export default function ReportBuilder({
 
       downloadBlob(blob, fileName)
 
-      if (exportMode === 'export-save') {
+      const meta = {
+        title,
+        brandName,
+        period,
+        slideCount: slides.length + 1, // + cover
+        config: { subtitle, brandId, templateId, mode, colors, month, year },
+      }
+
+      if (exportMode === 'export') {
+        // Still recorded so admins can see every generated report, but hidden
+        // from the org library and without a cover image. Failure is silent:
+        // the user only asked for the download, and that already happened.
+        const result = await saveExportToLibrary(orgId, blob, fileName, { ...meta, inLibrary: false })
+        if (!result.ok) console.error('[export only] record failed:', result.error)
+      } else {
         const coverImage = await captureCover()
-        const result = await saveExportToLibrary(orgId, blob, fileName, {
-          title,
-          brandName,
-          period,
-          slideCount: slides.length + 1, // + cover
-          config: { subtitle, brandId, templateId, mode, colors, month, year },
-          coverImage,
-        })
+        const result = await saveExportToLibrary(orgId, blob, fileName, { ...meta, coverImage })
         if (result.ok) {
           router.refresh()
           showToast('success', t('Report saved to the organization reports library.'))
