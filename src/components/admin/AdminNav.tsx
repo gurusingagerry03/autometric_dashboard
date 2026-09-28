@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { href: '/admin/scheduler',            label: 'Scheduler',            icon: 'schedule'      },
   { href: '/admin/competitor-scheduler', label: 'Competitor Scheduler', icon: 'groups'        },
   { href: '/admin/org-limits',           label: 'Batas Organization',   icon: 'tune'          },
+  { href: '/admin/reports',              label: 'Reports',              icon: 'description'   },
+  { href: '/admin/tiktok-refresh',       label: 'Refresh TikTok',       icon: 'sync_lock'     },
 ] as const
 
 export default function AdminNav() {
