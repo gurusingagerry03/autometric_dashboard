@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { round2 } from './format'
 import type { DashPlatform } from '@/components/dashboard/data'
 import type { Translator } from '@/lib/i18n/translate'
 
@@ -79,7 +80,7 @@ export async function getCampaignPosts(
     date: fmtDate(r.post_date),
     likes: r.likes,
     comments: r.comments,
-    er: +(r.er ?? 0).toFixed(1),
+    er: round2(r.er ?? 0),
     hashtags: hashtagsOf(r.caption),
     link: r.link,
   }))

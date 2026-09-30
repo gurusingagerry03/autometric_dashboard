@@ -1,7 +1,7 @@
 ﻿import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi, TrendSeries, DashPlatform, ContributorRow } from '@/components/dashboard/data'
-import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import { fmtNum, fmtInt, compact, compactSigned, fmtSignedPct, pct2 } from './format'
 import type { Translator } from '@/lib/i18n/translate'
 
 /**
@@ -37,9 +37,9 @@ const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.spli
 
 const ratio = (num: number, den: number) => (den > 0 ? num / den : 0)
 function deltaStr(cur: number, prev: number): { delta: string; good: boolean } {
-  if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: cur >= 0 }
+  if (prev <= 0) return { delta: cur > 0 ? 'new' : '0.00%', good: cur >= 0 }
   const d = ((cur - prev) / prev) * 100
-  return { delta: `${d >= 0 ? '+' : ''}${d.toFixed(d >= 10 || d <= -10 ? 0 : 1)}%`, good: d >= 0 }
+  return { delta: fmtSignedPct(d), good: d >= 0 }
 }
 function initials(name: string): string {
   const parts = name.replace(/[@_.]/g, ' ').trim().split(/\s+/).filter(Boolean)
@@ -188,7 +188,7 @@ async function commentByHour(orgId: string, platform: PlatformParam, w: Window, 
   const pad = (h: number) => String(h).padStart(2, '0')
   const insight = total > 0
     ? t('Comments peak {from}:00–{to}:00 WIB ({pct}% of the total). Replying inside this window deepens the reply threads.',
-        { from: pad(primeFrom), to: pad(primeTo + 1), pct: Math.round((best.sum / total) * 100) })
+        { from: pad(primeFrom), to: pad(primeTo + 1), pct: pct2((best.sum / total) * 100) })
     : t('No hourly comment activity in this period yet.')
   return { commentByHour: hours, primeFrom, primeTo, primeInsight: insight }
 }

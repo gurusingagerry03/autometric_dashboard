@@ -1,4 +1,5 @@
 import pool from '@/lib/db'
+import { round2 } from './format'
 import { getLivePillarComparison, EXTRA_UNION, PILLAR, type PillarScope } from './pillarTags'
 
 /**
@@ -99,7 +100,7 @@ export async function getPillarsData(orgId: string, brandId: string | null, scop
   const comparison: PillarComparison[] = inChart.map(p => {
     const m = perfByName.get(p.name)
     const er = m && m.den > 0 ? (m.eng / m.den) * 100 : 0
-    return { name: p.name, color: p.color, er: +er.toFixed(1), posts: m?.posts ?? 0 }
+    return { name: p.name, color: p.color, er: round2(er), posts: m?.posts ?? 0 }
   }).sort((a, b) => b.er - a.er)
 
   return { pillars, comparison }

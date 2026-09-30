@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow, KpiGrid } from './ui'
 import { BarChart, HBars, SERIES } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
@@ -10,6 +10,7 @@ import { PLATFORM_META, fmtNum, fmtInt, type PlatformFilter, type Period, shownF
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { ContentOverviewPayload } from '@/lib/dashboard/content'
+import { fmtPct } from '@/lib/dashboard/format'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -117,9 +118,9 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     <>
       {/* Performance KPIs */}
       <SectionHeader icon="monitoring" first>{t('Performance')}</SectionHeader>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <KpiGrid>
         {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
-      </div>
+      </KpiGrid>
 
       {/* Post type performance + content volume.
           Post Type Performance menyaring `p.platform = 'instagram'` di SQL-nya
@@ -206,7 +207,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
                   {r.shares == null
                     ? <span className="text-[#374151] tabular-nums">—</span>
                     : <NumCell value={r.shares} className="text-[#374151] tabular-nums" />}
-                  <span className="font-semibold text-[#3d8a5f] tabular-nums">{r.er}%</span>
+                  <span className="font-semibold text-[#3d8a5f] tabular-nums">{fmtPct(r.er)}</span>
                   <span className={`inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${
                     r.tag === 'Boosted' ? 'text-[#b8915a] bg-[#fbf4e8]' : 'text-[#6b7280] bg-[#f3f4f6]'
                   }`}>{t(r.tag)}</span>
@@ -233,7 +234,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.completionDist.some(d => d.value > 0)
               ? <BarChart height={200} bars={data.completionDist.map(d => ({
-                  label: d.label, value: d.value, display: `${d.value}%`,
+                  label: d.label, value: d.value, display: fmtPct(d.value),
                 }))} />
               : <div className="w-full py-10 text-center text-[12px] text-[#9ca3af]">{t('No TikTok completion data.')}</div>}
           </div>
@@ -249,7 +250,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
           <div className="px-4 pb-4 pt-3 flex-1 flex items-end">
             {data.reelWatch.some(d => d.value > 0)
               ? <BarChart height={200} bars={data.reelWatch.map(d => ({
-                  label: d.label, value: d.value, display: `${d.value}%`,
+                  label: d.label, value: d.value, display: fmtPct(d.value),
                 }))} />
               : <div className="w-full py-10 text-center text-[12px] text-[#9ca3af]">{t('No reel watch-time data.')}</div>}
           </div>

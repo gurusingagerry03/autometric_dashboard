@@ -8,6 +8,7 @@ import { PILLAR_COLORS, type PlatformFilter } from './data'
 import PillarTagging from './PillarTagging'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import type { PillarsPayload, PillarRow } from '@/lib/dashboard/pillars'
+import { fmtPct } from '@/lib/dashboard/format'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -221,7 +222,7 @@ function PillarsBody({ orgId, brandId, platform, start, end }: {
               <div className="px-4 pb-5 pt-3 flex-1 flex flex-col justify-center">
                 {comparison.some(c => c.posts > 0) ? (
                   <HBars items={comparison.map(c => ({
-                    label: `${c.name} · ${t('{count} posts', { count: c.posts })}`, value: c.er, display: `${c.er.toFixed(1)}%`, color: c.color,
+                    label: `${c.name} · ${t('{count} posts', { count: c.posts })}`, value: c.er, display: fmtPct(c.er), color: c.color,
                   }))} />
                 ) : (
                   <p className="text-center text-[12.5px] text-[#9ca3af] py-10">{t("No performance data for this brand's pillars yet.")}</p>

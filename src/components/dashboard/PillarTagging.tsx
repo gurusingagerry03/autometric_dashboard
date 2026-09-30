@@ -6,6 +6,7 @@ import { Card } from './ui'
 import { PILLAR_COLORS } from './data'
 import { useT } from '@/lib/i18n/LanguageContext'
 import type { ActivityDetail, TaggedPost, TagPillar, TagFilter, PostAttributePatch } from '@/lib/dashboard/pillarTags'
+import { fmtPct } from '@/lib/dashboard/format'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 const PAGE_SIZE = 25
@@ -147,7 +148,7 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
   const byName  = useMemo(() => new Map(pillars.map(p => [p.name, p])), [pillars])
   const total   = data?.total ?? 0
   const matched = data?.matched ?? 0
-  const taggedPct = total ? Math.round(((total - (data?.untagged ?? 0)) / total) * 100) : 0
+  const taggedPct = total ? ((total - (data?.untagged ?? 0)) / total) * 100 : 0
   const pageCount = Math.max(1, Math.ceil(matched / PAGE_SIZE))
   const editing = rows?.find(r => r.key === editKey) ?? null
 
@@ -324,7 +325,7 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
             </p>
           </div>
           <div className="text-right flex-shrink-0">
-            <p style={PJ} className="text-[19px] font-bold text-[#111827] tabular-nums leading-none">{taggedPct}%</p>
+            <p style={PJ} className="text-[19px] font-bold text-[#111827] tabular-nums leading-none">{fmtPct(taggedPct)}</p>
             <p className="text-[11px] text-[#9ca3af] mt-1">{t('{done} of {total} tagged', { done: total - (data?.untagged ?? 0), total })}</p>
           </div>
         </div>
@@ -425,7 +426,7 @@ export default function PillarTagging({ orgId, brandId, platform, start, end, on
                   <span className="text-[11px] text-[#cbd1d8]">·</span>
                   <span className="text-[11px] text-[#9ca3af] tabular-nums">{t('Reach')} {post.reach.toLocaleString('id-ID')}</span>
                   <span className="text-[11px] text-[#cbd1d8]">·</span>
-                  <span className="text-[11px] text-[#9ca3af] tabular-nums">ER {post.er.toFixed(1)}%</span>
+                  <span className="text-[11px] text-[#9ca3af] tabular-nums">ER {fmtPct(post.er)}</span>
 
                   {post.pillar && (
                     <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold rounded-full pl-1.5 pr-2 py-0.5 border"
@@ -988,7 +989,7 @@ function EditModal({ post, pillars, busy, t, onClose, onPatch, onCreatePillar, o
               <span className="text-[#cbd1d8]">·</span>
               <span className="tabular-nums">{t('Reach')} {post.reach.toLocaleString('id-ID')}</span>
               <span className="text-[#cbd1d8]">·</span>
-              <span className="tabular-nums">ER {post.er.toFixed(1)}%</span>
+              <span className="tabular-nums">ER {fmtPct(post.er)}</span>
             </div>
             {post.link && (
               <a href={post.link} target="_blank" rel="noopener noreferrer"

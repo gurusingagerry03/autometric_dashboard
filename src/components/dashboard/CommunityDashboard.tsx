@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, TableHeadRow } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, TableHeadRow, KpiGrid } from './ui'
 import { MultiLineChart, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import { NumCell } from '@/components/ui/ExactValue'
@@ -130,9 +130,9 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
   return (
     <>
       <SectionHeader icon="diversity_3" first>{t('Performance')}</SectionHeader>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <KpiGrid>
         {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="comment_activity_daily" key={k.key} kpi={k} color={SERIES} />)}
-      </div>
+      </KpiGrid>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <Card area="comment_activity_daily" skeleton="chart" className="flex flex-col">

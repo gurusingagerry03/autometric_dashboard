@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, KpiGrid } from './ui'
 import { DivergingBars, ScatterPlot, HBars, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import ExactValue from '@/components/ui/ExactValue'
@@ -92,9 +92,9 @@ function TikTokBody({ orgId, brandId, platform, period, start, end }: { orgId: s
   return (
     <>
       <SectionHeader icon="music_note" first>{t('Performance')}</SectionHeader>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-3">
+      <KpiGrid>
         {data.kpis.map(k => <FlexKpiCard area="tiktok_churn_daily" key={k.key} kpi={k} color={SERIES} />)}
-      </div>
+      </KpiGrid>
 
       {/* Follower churn */}
       <SectionHeader icon="sync_alt">{t('Follower Churn Analysis')}</SectionHeader>

@@ -1,7 +1,7 @@
 import pool from '@/lib/db'
 import { windowsFromRange, type CustomRange } from './range'
 import type { OverviewKpi } from '@/components/dashboard/data'
-import { fmtNum, fmtInt, compact, compactSigned } from './format'
+import { fmtNum, fmtInt, compact, compactSigned, fmtPct, fmtSignedPct, fmtPts, round2, pct2 } from './format'
 import type { Translator } from '@/lib/i18n/translate'
 
 /**
@@ -36,14 +36,14 @@ const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.spli
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0)
 function deltaStr(cur: number, prev: number, lowerIsGood = false): { delta: string; good: boolean; dir: 'up' | 'down' } {
   const dir = (cur >= prev ? 'up' : 'down') as 'up' | 'down'
-  if (prev <= 0) return { delta: cur > 0 ? 'new' : '0%', good: lowerIsGood ? cur <= 0 : cur >= 0, dir }
+  if (prev <= 0) return { delta: cur > 0 ? 'new' : '0.00%', good: lowerIsGood ? cur <= 0 : cur >= 0, dir }
   const d = ((cur - prev) / prev) * 100
   const up = d >= 0
-  return { delta: `${up ? '+' : ''}${d.toFixed(d >= 10 || d <= -10 ? 0 : 1)}%`, good: lowerIsGood ? !up : up, dir }
+  return { delta: fmtSignedPct(d), good: lowerIsGood ? !up : up, dir }
 }
 function ptsStr(cur: number, prev: number): { delta: string; good: boolean; dir: 'up' | 'down' } {
   const d = cur - prev
-  return { delta: `${d >= 0 ? '+' : ''}${d.toFixed(1)}pts`, good: d >= 0, dir: (d >= 0 ? 'up' : 'down') }
+  return { delta: fmtPts(d), good: d >= 0, dir: (d >= 0 ? 'up' : 'down') }
 }
 
 interface Window { start: string; end: string }
@@ -124,13 +124,12 @@ async function dailySparks(orgId: string, w: Window, brandId: string | null) {
       GROUP BY p.post_date::date ORDER BY p.post_date::date`,
     [orgId, w.start, w.end, brandId],
   )
-  let cum = 0
   return {
     views: rows.map(r => Math.round(r.views)),
     gained: rows.map(r => Math.round(r.gained)),
     lost: rows.map(r => Math.round(r.lost)),
-    netCum: rows.map(r => (cum += r.net, Math.round(cum))),
-    completion: comp.map(r => +(r.c ?? 0).toFixed(1)),
+    net: rows.map(r => Math.round(r.net)),   // daily net change, not cumulative
+    completion: comp.map(r => round2(r.c ?? 0)),
   }
 }
 
@@ -139,8 +138,8 @@ function buildKpis(cur: ChurnTotals, prev: ChurnTotals, complCur: number, complP
     { key: 'tk-views', label: t('Total Video Views'), icon: 'play_circle', ...compact(cur.views), ...deltaStr(cur.views, prev.views), spark: s.views.length ? s.views : [0] },
     { key: 'tk-new', label: t('New Followers'), icon: 'person_add', ...compact(cur.gained), ...deltaStr(cur.gained, prev.gained), spark: s.gained.length ? s.gained : [0] },
     { key: 'tk-lost', label: t('Lost Followers'), icon: 'person_remove', ...compact(cur.lost), ...deltaStr(cur.lost, prev.lost, true), spark: s.lost.length ? s.lost : [0] },
-    { key: 'tk-net', label: t('Net Growth'), icon: 'trending_up', ...compactSigned(cur.net), ...deltaStr(cur.net, prev.net), spark: s.netCum.length ? s.netCum : [0] },
-    { key: 'tk-compl', label: t('Avg. Completion Rate'), icon: 'check_circle', value: `${Math.round(complCur)}%`, ...ptsStr(complCur, complPrev), spark: s.completion.length ? s.completion : [0] },
+    { key: 'tk-net', label: t('Net Growth'), icon: 'trending_up', ...compactSigned(cur.net), ...deltaStr(cur.net, prev.net), spark: s.net.length ? s.net : [0] },
+    { key: 'tk-compl', label: t('Avg. Completion Rate'), icon: 'check_circle', value: fmtPct(complCur), ...ptsStr(complCur, complPrev), spark: s.completion.length ? s.completion : [0] },
   ]
 }
 
@@ -170,7 +169,7 @@ async function churnWeekly(orgId: string, w: Window, brandId: string | null, t: 
   }
   const insight = worst.i >= 0 && worst.jump >= 0.2
     ? t('Lost-follower volume spiked +{pct}% in {week} — usually a posting gap. Keep at least 1 post a day on TikTok.',
-        { pct: Math.round(worst.jump * 100), week: churnWeeks[worst.i].label })
+        { pct: pct2(worst.jump * 100), week: churnWeeks[worst.i].label })
     : churnWeeks.length
       ? t('Follower churn is fairly steady week to week in this period.')
       : t('No churn data in this period yet.')

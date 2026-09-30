@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from 'react'
 import { ChartTooltip, useChartTooltip, formatTipValue } from '@/components/ui/ChartTooltip'
 import ExactValue from '@/components/ui/ExactValue'
+import { fmtPct } from '@/lib/dashboard/format'
 
 /* ---------- helpers ---------- */
 
@@ -260,7 +261,7 @@ export function ScatterPlot({ points, xMax, yMax, xTicks, yTicks, xLabel, yLabel
 
   const lines = (p: { x: number; y: number }) => [
     { label: xName, value: defaultFmt(Math.round(p.x * 10) / 10) },
-    { label: yName, value: `${Math.round(p.y)}%`, color },
+    { label: yName, value: fmtPct(p.y), color },
   ]
 
   return (
@@ -426,7 +427,7 @@ export function Donut({ segments, size = 140, thickness = 18, centerLabel, cente
 
   const lines = (s: { label: string; value: number; color: string }) => [
     { label: valueLabel, value: fmt(s.value), color: s.color },
-    { label: 'Share', value: `${Math.round((s.value / total) * 100)}%` },
+    { label: 'Share', value: fmtPct((s.value / total) * 100) },
   ]
 
   const ring = (
@@ -475,7 +476,7 @@ export function Donut({ segments, size = 140, thickness = 18, centerLabel, cente
             onMouseLeave={hide}>
             <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: s.color }} />
             <span className="text-[#374151] flex-1">{s.label}</span>
-            <span className="font-semibold text-[#111827]">{Math.round((s.value / total) * 100)}%</span>
+            <span className="font-semibold text-[#111827]">{fmtPct((s.value / total) * 100)}</span>
           </li>
         ))}
       </ul>
@@ -527,7 +528,7 @@ export function ShareBar({ value, color, track = '#f3f4f6', label, display }: {
   value: number; color: string; track?: string; label?: string; display?: string
 }) {
   const { tip, show, hide } = useChartTooltip()
-  const lines = [{ value: display ?? `${value}%`, color }]
+  const lines = [{ value: display ?? fmtPct(value), color }]
   return (
     <>
       <div
@@ -628,7 +629,7 @@ export function Heatmap({ rows, cols, grid, base = '#1B8A80', cellHeight = 34 }:
         <div key={r} className="flex items-center mb-1.5 last:mb-0">
           <div className="w-9 flex-shrink-0 text-[10.5px] font-semibold text-[#6b7280]">{r}</div>
           {grid[ri].map((v, ci) => {
-            const lines = [{ value: `${Math.round(v * 100)}%`, color: base }]
+            const lines = [{ value: fmtPct(v * 100), color: base }]
             return (
               <div key={ci} className="flex-1 px-0.5">
                 <div className="w-full rounded-[5px] cursor-pointer transition-transform hover:scale-[1.06]"

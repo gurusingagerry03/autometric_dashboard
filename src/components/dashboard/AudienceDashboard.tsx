@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow, KpiGrid } from './ui'
 import { HBars, MultiLineChart, SERIES } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
 import { ChartTooltip, useChartTooltip } from '@/components/ui/ChartTooltip'
@@ -9,7 +9,8 @@ import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import ExactValue, { NumCell } from '@/components/ui/ExactValue'
 import { PLATFORM_META, fmtInt, type PlatformFilter, type Period, shownFor, shownExcept } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
-import { TabSkeleton, useAnyBuilding } from './dataReadiness'
+import { fmtPct, pct2 } from '@/lib/dashboard/format'
+import { TabSkeleton, useAnyBuilding, useAreaState } from './dataReadiness'
 import type { AudiencePayload } from '@/lib/dashboard/audience'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -111,6 +112,13 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
   // own tooltip to answer the question the printed % can't: how many people.
   const genderTip = useChartTooltip()
 
+  // Final revision: a section with no data is removed rather than shown empty. While a
+  // new brand's table is still being built the card stays, so its skeleton can show.
+  const citiesBuilding = useAreaState('audience_geo_daily') === 'building'
+  const relevanceBuilding = useAreaState('comment_relevance_distribution') === 'building'
+  const contributorsBuilding = useAreaState('community_contributors') === 'building'
+  const [followerView, setFollowerView] = useState<'Followers' | 'Growth'>('Followers')
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -145,6 +153,10 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
   }
 
   const relevanceTotal = data.relevanceTiers.reduce((sum, tier) => sum + tier.count, 0)
+  const showCities = citiesBuilding || data.cities.length > 0
+  const showRelevance = relevanceBuilding || relevanceTotal > 0
+  const showContributors = contributorsBuilding || data.contributors.length > 0
+  const followerSeries = followerView === 'Followers' ? data.followerTrend : (data.followerGrowthTrend ?? [])
 
   // Dua keadaan berbeda, dua fungsi berbeda — keduanya tampil di 'All', yang
   // berbeda adalah topbar platform mana yang menyembunyikannya.
@@ -160,9 +172,9 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
     <>
       {/* Reach KPIs */}
       <SectionHeader icon="groups" first>{t('Audience')}</SectionHeader>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      <KpiGrid>
         {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
-      </div>
+      </KpiGrid>
 
       {/* Demographics
           UMUR & GENDER FACEBOOK SUDAH TIDAK ADA SUMBERNYA
@@ -192,7 +204,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
           <div className="px-4 pb-4 pt-3">
             {data.age.some(a => a.value > 0)
               ? <HBars showShare={false} items={data.age.map(a => ({
-                  label: a.bucket, value: a.value, display: `${a.value}%`,
+                  label: a.bucket, value: a.value, display: fmtPct(a.value),
                   exact: fmtInt(a.count), exactLabel: t('Followers'),
                 }))} />
               : <div className="py-10 text-center text-[12px] text-[#9ca3af]">{t('No audience age data.')}</div>}
@@ -222,7 +234,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   onMouseMove={e => genderTip.show(e, label, [{ label: name, value: fmtInt(count), color: bg }])}
                   onMouseLeave={genderTip.hide}
                 >
-                  <span className="text-[11.5px] font-bold text-white">{pctShare}%</span>
+                  <span className="text-[11.5px] font-bold text-white">{fmtPct(pctShare)}</span>
                 </div>
               )
               return (
@@ -254,29 +266,40 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {/* Geography + growth — kept next to the age/gender demographics above, so
           everything describing WHO the audience is reads as one block before the
           engagement-behaviour sections that follow. */}
-      <SectionHeader icon="public">{t('Geography & Growth')}</SectionHeader>
+      <SectionHeader icon="public">{showCities ? t('Geography & Growth') : t('Follower Growth')}</SectionHeader>
       <div className="grid grid-cols-12 gap-3 mb-3">
-        <Card area="audience_geo_daily" skeleton="table" span="col-span-12 lg:col-span-5">
-          <CardHead title={t('Top Audience Cities')} metricKey="audience_geo_daily.geo" sub={t('Share of followers by city')} />
-          <div className="px-4 pb-4 pt-3">
-            {data.cities.length
-              ? <HBars items={data.cities.map(c => ({
-                  label: c.city, value: c.value, display: `${c.value}%`,
-                  exact: fmtInt(c.count), exactLabel: t('Followers'),
-                }))} />
-              : <div className="py-10 text-center text-[12px] text-[#9ca3af]">{t('No audience city data.')}</div>}
-          </div>
-        </Card>
+        {showCities && (
+          <Card area="audience_geo_daily" skeleton="table" span="col-span-12 lg:col-span-5">
+            <CardHead title={t('Top Audience Cities')} metricKey="audience_geo_daily.geo" sub={t('Share of followers by city')} />
+            <div className="px-4 pb-4 pt-3">
+              <HBars items={data.cities.map(c => ({
+                label: c.city, value: c.value, display: fmtPct(c.value),
+                exact: fmtInt(c.count), exactLabel: t('Followers'),
+              }))} />
+            </div>
+          </Card>
+        )}
 
-        <Card area="brand_metric_daily" skeleton="chart" span="col-span-12 lg:col-span-7" className="flex flex-col">
-          <CardHead title={t('Follower Growth Trend')} metricKey="brand_metric_daily.follower_count_eod" sub={t('All brands · weekly')} />
+        <Card area="brand_metric_daily" skeleton="chart" span={showCities ? 'col-span-12 lg:col-span-7' : 'col-span-12'} className="flex flex-col">
+          <CardHead title={t('Followers Trend')} metricKey="brand_metric_daily.follower_count_eod"
+            sub={followerView === 'Followers' ? t('All brands · weekly follower count') : t('All brands · weekly net follower growth')}
+            action={
+              <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
+                {(['Followers', 'Growth'] as const).map(v => (
+                  <button key={v} onClick={() => setFollowerView(v)} style={PJ}
+                    className={`h-7 px-3 rounded-md text-[11.5px] font-semibold transition-colors ${
+                      followerView === v ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'
+                    }`}>{t(v)}</button>
+                ))}
+              </div>
+            } />
           <div className="px-4 pb-3 pt-3 flex-1">
-            {data.followerTrend.length
-              ? <MultiLineChart series={data.followerTrend} labels={data.followerLabels} height={220} />
+            {followerSeries.length
+              ? <MultiLineChart series={followerSeries} labels={data.followerLabels} height={220} />
               : <div className="h-[220px] flex items-center justify-center text-[12px] text-[#9ca3af]">{t('No follower data.')}</div>}
           </div>
           <div className="flex items-center gap-4 px-4 pb-4 flex-wrap">
-            {data.followerTrend.map(s => (
+            {followerSeries.map(s => (
               <span key={s.name} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[#6b7280]">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />{s.name}
               </span>
@@ -285,7 +308,8 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </Card>
       </div>
 
-      {/* Comment relevance */}
+      {/* Comment relevance — removed entirely when there are no scores */}
+      {showRelevance && (<>
       <SectionHeader icon="forum">{t('Comment Relevance Analysis')}</SectionHeader>
       <Card area="comment_relevance_distribution" skeleton="chart" className="mb-3">
         <div className="flex items-start justify-between px-4 pt-3.5 pb-2 flex-wrap gap-2">
@@ -311,7 +335,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   <div className="flex items-end gap-2">
                     <ExactValue value={tier.count} style={PJ}
                       className="text-[22px] font-bold text-[#111827] leading-none tabular-nums" />
-                    <span className="text-[11.5px] text-[#9ca3af] pb-0.5">{t('{pct}% of all comments', { pct: tier.pct })}</span>
+                    <span className="text-[11.5px] text-[#9ca3af] pb-0.5">{t('{pct}% of all comments', { pct: pct2(tier.pct) })}</span>
                   </div>
                 </div>
               ))}
@@ -323,7 +347,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   <div key={tier.tier}>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-[12.5px] font-semibold text-[#374151]">{t(tier.tier).replace(' Relevance', '')} ({tier.range})</span>
-                      <span style={PJ} className="text-[12.5px] font-bold text-[#111827]">{tier.pct}%</span>
+                      <span style={PJ} className="text-[12.5px] font-bold text-[#111827]">{fmtPct(tier.pct)}</span>
                     </div>
                     <div className="w-full h-2 rounded-full bg-[#f3f4f6] overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${tier.pct}%`, background: tier.color }} />
@@ -372,8 +396,10 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
           </div>
         </Card>
       )}
+      </>)}
 
-      {/* Top contributors */}
+      {/* Top contributors — removed entirely when the period has none */}
+      {showContributors && (<>
       <SectionHeader icon="workspace_premium">{t('Top Community Contributors')}</SectionHeader>
       <Card area="community_contributors" skeleton="table" className="overflow-hidden">
         <div className="flex items-start justify-between px-4 pt-3.5 pb-2 flex-wrap gap-2">
@@ -406,7 +432,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                 <NumCell value={c.comments} className="text-[#374151] tabular-nums" />
                 <NumCell value={c.likes} className="text-[#374151] tabular-nums" />
                 <span className="text-[#374151] tabular-nums">{c.daily}</span>
-                <span className="font-semibold text-[#3d8a5f] tabular-nums">{c.relevance}%</span>
+                <span className="font-semibold text-[#3d8a5f] tabular-nums">{fmtPct(c.relevance)}</span>
                 <span className={`inline-flex items-center justify-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${TIER_STYLE[c.tier]}`}>{t(c.tier)}</span>
               </div>
             ))}
@@ -419,6 +445,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
           <Callout tone="success" title={t('Super Fan Programme')}>{data.superFanNote}</Callout>
         </div>
       </Card>
+      </>)}
 
       {/* UGC — hanya Instagram. l2_gold.ugc_tagged_posts tidak punya baris
           platform lain sama sekali (diverifikasi 9 Sep 2026), jadi tabel ini

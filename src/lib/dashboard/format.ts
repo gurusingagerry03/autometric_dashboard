@@ -34,3 +34,34 @@ export function compactSigned(n: number): { value: string; exact: string } {
   const sign = n >= 0 ? '+' : ''
   return { value: `${sign}${fmtNum(n)}`, exact: `${sign}${fmtInt(n)}` }
 }
+
+/*
+ * Percentages — Final Dashboard Revision: every percentage carries exactly two
+ * decimals everywhere it appears (2.191% → 2.19%, 2.001% → 2.00%), so a scorecard,
+ * its delta, the chart beside it and the hover all read the same.
+ */
+const cleanPct = (n: number) => {
+  const v = Number.isFinite(n) ? n : 0
+  return Math.abs(v) < 0.005 ? 0 : v   // no "-0.00"
+}
+
+/** 5.0312 → "5.03" — for i18n templates that already carry the "%" sign. */
+export const pct2 = (n: number) => cleanPct(n).toFixed(2)
+
+/** 5.0312 → "5.03%" */
+export const fmtPct = (n: number) => `${pct2(n)}%`
+
+/** Signed percent change: 14.2 → "+14.20%". */
+export function fmtSignedPct(n: number): string {
+  const v = cleanPct(n)
+  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`
+}
+
+/** Signed percentage-point change: 0.5 → "+0.50pts". */
+export function fmtPts(n: number): string {
+  const v = cleanPct(n)
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}pts`
+}
+
+/** Round a percentage to 2 decimals, keeping it numeric (chart / spark data). */
+export const round2 = (n: number) => Math.round(cleanPct(n) * 100) / 100

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardHead, SectionHeader, FlexKpiCard, TableHeadRow } from './ui'
+import { Card, CardHead, SectionHeader, FlexKpiCard, TableHeadRow, KpiGrid } from './ui'
 import { MultiLineChart, Donut, SERIES } from './charts'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import MetricInfo from '@/components/ui/MetricInfo'
@@ -10,6 +10,7 @@ import { TREND_METRICS, HEATMAP_DAYS, HEATMAP_TIME_LABELS, PLATFORM_META, fmtNum
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { TabSkeleton, useAnyBuilding } from './dataReadiness'
 import type { OverviewPayload } from '@/lib/dashboard/overview'
+import { fmtPct } from '@/lib/dashboard/format'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -29,6 +30,21 @@ const TREND_COLOR = { up: '#3d8a5f', flat: '#9ca3af', down: '#c2553f' } as const
 
 const platformParam = (p: PlatformFilter) => (p === 'All' ? 'all' : p)
 
+/* Engagement / Reach / Followers switch — shared by Performance Over Time and Platform Share. */
+function MetricToggle({ value, onChange }: { value: TrendMetric; onChange: (m: TrendMetric) => void }) {
+  const t = useT()
+  return (
+    <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
+      {TREND_METRICS.map(m => (
+        <button key={m} onClick={() => onChange(m)} style={PJ}
+          className={`h-7 px-2.5 rounded-md text-[11.5px] font-semibold transition-colors ${
+            value === m ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'
+          }`}>{t(m)}</button>
+      ))}
+    </div>
+  )
+}
+
 export default function OverviewDashboard({ orgId }: { orgId: string }) {
   const t = useT()
   return (
@@ -42,6 +58,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
   const t = useT()
   const { lang } = useLanguage()
   const [metric, setMetric] = useState<TrendMetric>('Engagement')
+  const [shareMetric, setShareMetric] = useState<TrendMetric>('Reach')
   const [data, setData] = useState<OverviewPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Ada area data yang tabelnya masih dibangun pipeline. */
@@ -93,35 +110,29 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
   }
 
   const series = data.engagementOverTime[metric] ?? []
-  const totalReach = data.platformReachShare.reduce((s, p) => s + p.value, 0)
+  const shareRows = data.platformShare[shareMetric] ?? []
+  const shareTotal = shareRows.reduce((s, p) => s + p.value, 0)
 
   return (
     <>
       {/* Performance KPIs */}
       <SectionHeader icon="monitoring" first>{t('Performance')}</SectionHeader>
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-3">
+      <KpiGrid>
         {data.kpis.filter(k => shownFor(k.only, platform)).map(k => <FlexKpiCard area="brand_metric_daily" key={k.key} kpi={k} color={SERIES} />)}
-      </div>
+      </KpiGrid>
 
-      {/* Engagement over time + platform share */}
+      {/* Performance over time + platform share */}
       <div className="grid grid-cols-12 gap-3 mb-3">
         <Card area="brand_metric_daily" skeleton="chart" span="col-span-12 lg:col-span-8">
           <div className="flex items-start justify-between px-4 pt-3.5 pb-2 flex-wrap gap-2">
             <div>
               <h3 style={PJ} className="flex items-center gap-1 text-[12.5px] font-bold text-[#111827] tracking-[-0.01em]">
-                {t('Engagement Over Time')}
+                {t('Performance Over Time')}
                 <MetricInfo metricKey="derived.engagement_over_time" size={13} />
               </h3>
               <p className="text-[11px] text-[#9ca3af] mt-0.5">{t('{metric} by brand', { metric: t(metric) })}</p>
             </div>
-            <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
-              {TREND_METRICS.map(m => (
-                <button key={m} onClick={() => setMetric(m)} style={PJ}
-                  className={`h-7 px-3 rounded-md text-[11.5px] font-semibold transition-colors ${
-                    metric === m ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'
-                  }`}>{t(m)}</button>
-              ))}
-            </div>
+            <MetricToggle value={metric} onChange={setMetric} />
           </div>
           <div className="px-4 pb-3 pt-1">
             {series.length
@@ -138,15 +149,18 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </Card>
 
         <Card area="brand_metric_daily" skeleton="chart" span="col-span-12 lg:col-span-4" className="flex flex-col">
-          <CardHead title={t('Platform Share')} metricKey="derived.platform_share" sub={t('by reach')} />
+          <CardHead title={t('Platform Share')} metricKey="derived.platform_share"
+            sub={t('by {metric}', { metric: t(shareMetric).toLowerCase() })}
+            action={<MetricToggle value={shareMetric} onChange={setShareMetric} />} />
           <div className="px-4 pb-5 pt-3 flex-1 flex items-center">
-            {data.platformReachShare.length
-              ? <Donut size={152} valueLabel={t('Reach')}
-                  segments={data.platformReachShare.map(p => ({
+            {shareRows.length
+              ? <Donut size={152} valueLabel={t(shareMetric)}
+                  segments={shareRows.map(p => ({
                     label: PLATFORM_META[p.platform].label, value: p.value, color: PLATFORM_META[p.platform].color,
                   }))}
-                  centerLabel={fmtNum(totalReach)} centerExact={fmtInt(totalReach)} centerSub={t('total reach')} />
-              : <div className="w-full text-center text-[12px] text-[#9ca3af] py-8">{t('No reach data.')}</div>}
+                  centerLabel={fmtNum(shareTotal)} centerExact={fmtInt(shareTotal)}
+                  centerSub={t('total {metric}', { metric: t(shareMetric).toLowerCase() })} />
+              : <div className="w-full text-center text-[12px] text-[#9ca3af] py-8">{t('No {metric} data.', { metric: t(shareMetric).toLowerCase() })}</div>}
           </div>
         </Card>
       </div>
@@ -173,7 +187,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   <NumCell value={r.followers} className="font-semibold text-[#111827] tabular-nums" />
                   <NumCell value={r.reach} className="text-[#374151] tabular-nums" />
                   <NumCell value={r.engagement} className="text-[#374151] tabular-nums" />
-                  <span className="text-[#374151] tabular-nums">{r.er}%</span>
+                  <span className="text-[#374151] tabular-nums">{fmtPct(r.er)}</span>
                   <span className="text-[#374151] tabular-nums">{r.posts}</span>
                   <span className="material-symbols-outlined text-[17px]" style={{ color: TREND_COLOR[r.trend] }}>{TREND_ICON[r.trend]}</span>
                 </div>
@@ -201,7 +215,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
               <div key={a.label} className="bg-[#fafbfb] border border-[#eef0f2] rounded-xl px-3 py-4 flex flex-col items-center text-center gap-0.5">
                 <ExactValue value={a.count} style={PJ} className="text-[26px] font-bold leading-none tabular-nums text-[#111827]" />
                 <span className="text-[12px] font-medium text-[#6b7280] mt-1">{a.label}</span>
-                <span className="text-[12px] font-semibold mt-0.5 text-[#6b7280]">ER: {a.er}%</span>
+                <span className="text-[12px] font-semibold mt-0.5 text-[#6b7280]">ER: {fmtPct(a.er)}</span>
               </div>
             ))}
           </div>
@@ -228,7 +242,7 @@ function OverviewBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   {(data.postingHeatmap[ri] ?? new Array(6).fill(0)).map((v, ci) => (
                     <div key={ci} className="flex justify-center">
                       <span className="w-full h-8 rounded-md" style={{ background: SERIES, opacity: 0.14 + v * 0.86 }}
-                        title={`${day} ${HEATMAP_TIME_LABELS[ci]} · ${Math.round(v * 100)}%`} />
+                        title={`${day} ${HEATMAP_TIME_LABELS[ci]} · ${fmtPct(v * 100)}`} />
                     </div>
                   ))}
                 </div>
