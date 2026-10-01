@@ -19,11 +19,17 @@ const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
  *   Cloud → sentiment
  */
 export default function ChartSelectionModal({
-  open, orgId, allowWordCloud = false, availableCompetitors = [], onClose, onSelect, onCustomMetricsChanged,
+  open, orgId, allowWordCloud = false, monthlyOnly = false, availableCompetitors = [], onClose, onSelect, onCustomMetricsChanged,
 }: {
   open: boolean
   orgId: string
   allowWordCloud?: boolean
+  /**
+   * Slide Monthly Tracker: pilihannya hanya line chart berdimensi "Monthly", jadi
+   * modal langsung membuka langkah pemilihan metrik. Di slide lain dimensi
+   * "Monthly" tidak ditawarkan — ia milik slide ini saja.
+   */
+  monthlyOnly?: boolean
   availableCompetitors?: { id: string; label: string }[]
   onClose: () => void
   onSelect: (config: ChartConfig) => void
@@ -44,7 +50,11 @@ export default function ChartSelectionModal({
   const [customMetrics, setCustomMetrics] = useState<CustomMetricDef[]>([])
   const [cmOpen, setCmOpen] = useState(false)
   const loadCustom = () => { listCustomMetrics(orgId).then(setCustomMetrics).catch(() => setCustomMetrics([])) }
-  useEffect(() => { if (open) loadCustom() }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return
+    loadCustom()
+    if (monthlyOnly) { setCategory('line'); setDimension('monthly'); setStep(3) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
 
@@ -108,14 +118,14 @@ export default function ChartSelectionModal({
         {/* Header */}
         <div className="flex justify-between items-center mb-5">
           <div className="flex items-center gap-3">
-            {step > 1 && (
+            {step > 1 && !monthlyOnly && (
               <button onClick={back} className="p-1.5 rounded-lg hover:bg-[#f1f5f9] transition-colors">
                 <span className="material-symbols-outlined text-[18px] text-[#94a3b8]">arrow_back</span>
               </button>
             )}
             <div>
               <h3 style={PJ} className="font-bold text-[18px] text-[#0f172a]">{heading}</h3>
-              <p className="text-[12px] text-[#94a3b8]">Step {step} of {totalSteps}</p>
+              <p className="text-[12px] text-[#94a3b8]">{monthlyOnly ? t('Line chart · month by month, Jan → report month') : `Step ${step} of ${totalSteps}`}</p>
             </div>
           </div>
           <button onClick={close}>
@@ -180,7 +190,7 @@ export default function ChartSelectionModal({
         {/* Step 2: line dimension */}
         {step === 2 && category === 'line' && (
           <div className="grid grid-cols-2 gap-3">
-            {LINE_DIMENSIONS.map(dim => (
+            {LINE_DIMENSIONS.filter(dim => dim.id !== 'monthly').map(dim => (
               <button key={dim.id} onClick={() => { setDimension(dim.id as LineDimension); setStep(3) }} style={PJ} className={`${base} items-start text-left`}>
                 <div className="flex items-center gap-2 w-full">
                   <span className="material-symbols-outlined text-[18px] opacity-60">{dim.icon}</span>
@@ -221,7 +231,7 @@ export default function ChartSelectionModal({
           <div className="space-y-4">
             <p className="text-[12px] text-[#94a3b8]">Select up to {MAX_LINE_METRICS} metrics</p>
             <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto">
-              {LINE_METRICS.map(metric => {
+              {LINE_METRICS.filter(m => !monthlyOnly || m.id !== 'sentiments').map(metric => {
                 const isSel = lineMetrics.includes(metric.id)
                 const sentSel = lineMetrics.includes('sentiments')
                 const disabled = !isSel && (
@@ -248,8 +258,9 @@ export default function ChartSelectionModal({
                 )
               })}
             </div>
-            {/* Custom metrics (org library) — selectable like a line metric. */}
-            {customMetrics.length > 0 ? (
+            {/* Custom metrics (org library) — selectable like a line metric.
+                Tidak di mode Monthly: custom metric belum punya deret bulanan. */}
+            {monthlyOnly ? null : customMetrics.length > 0 ? (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Custom Metrics')}</span>

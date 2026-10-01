@@ -35,7 +35,10 @@ function groupColumns(cols: TableColumn[]): { group?: string; cols: TableColumn[
 
 // content_level now carries a proper all-channel layout (Content Performance spec),
 // so it's the sensible default on every channel including "all".
-const defaultTypeFor = (_channel: string) => 'content_level'
+const defaultTypeFor = (_channel: string, monthlyOnly = false) => (monthlyOnly ? 'monthly_tracker' : 'content_level')
+
+/** Tabel Monthly Tracker hanya untuk slide Monthly Tracker — dan slide itu hanya memakai tabel tersebut. */
+const typeAllowed = (id: string, monthlyOnly: boolean) => (id === 'monthly_tracker') === monthlyOnly
 
 /**
  * Two-pane table configurator: type list (left) + channel-scoped column picker
@@ -43,9 +46,11 @@ const defaultTypeFor = (_channel: string) => 'content_level'
  * columns are filtered by the slide's channel and they're disabled on "all".
  */
 export default function TableSelectionModal({
-  open, orgId, initial, channel, availableCompetitors = [], onClose, onConfirm, onCustomMetricsChanged,
+  open, orgId, initial, channel, monthlyOnly = false, availableCompetitors = [], onClose, onConfirm, onCustomMetricsChanged,
 }: {
   open: boolean
+  /** Slide Monthly Tracker — hanya tabel "Monthly Tracker" yang ditawarkan. */
+  monthlyOnly?: boolean
   orgId: string
   initial: TableConfig | null
   channel: string
@@ -55,9 +60,9 @@ export default function TableSelectionModal({
   onCustomMetricsChanged?: () => void
 }) {
   const t = useT()
-  const [type, setType] = useState(initial?.type ?? defaultTypeFor(channel))
+  const [type, setType] = useState(initial?.type ?? defaultTypeFor(channel, monthlyOnly))
   const [columns, setColumns] = useState<string[]>(
-    initial ? normalizeColumnIds(initial.columns) : defaultColumnsFor(defaultTypeFor(channel), channel),
+    initial ? normalizeColumnIds(initial.columns) : defaultColumnsFor(defaultTypeFor(channel, monthlyOnly), channel),
   )
   // Chosen competitors (Brand-vs-Competitor table only). Default = all available.
   const allCompIds = availableCompetitors.map(c => c.id)
@@ -73,8 +78,8 @@ export default function TableSelectionModal({
   useEffect(() => {
     if (!open) return
     loadCustom()
-    const valid = initial && TABLE_TYPES[initial.type] && isTypeEnabledForChannel(initial.type, channel) && !TABLE_TYPES[initial.type].disabled
-    const t = valid ? initial!.type : defaultTypeFor(channel)
+    const valid = initial && TABLE_TYPES[initial.type] && isTypeEnabledForChannel(initial.type, channel) && !TABLE_TYPES[initial.type].disabled && typeAllowed(initial.type, monthlyOnly)
+    const t = valid ? initial!.type : defaultTypeFor(channel, monthlyOnly)
     setType(t)
     setColumns(valid ? normalizeColumnIds(initial!.columns) : defaultColumnsFor(t, channel))
     // Default all competitors checked (or the saved selection intersected with what's available).
@@ -119,7 +124,7 @@ export default function TableSelectionModal({
         <div className="flex-1 flex min-h-0">
           {/* Type list */}
           <div className="w-[40%] border-r border-[#f0f1f2] bg-[#fafbfb] overflow-y-auto p-2 space-y-1.5">
-            {Object.values(TABLE_TYPES).map(t => {
+            {Object.values(TABLE_TYPES).filter(tt => typeAllowed(tt.id, monthlyOnly)).map(t => {
               const active = type === t.id
               const enabled = isTypeEnabledForChannel(t.id, channel) && !t.disabled
               return (

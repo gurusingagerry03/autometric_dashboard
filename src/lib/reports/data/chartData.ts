@@ -1,13 +1,14 @@
 // Chart configuration data + real-data resolvers, mirrored 1:1 from report_2's
 // ChartSelectionModal / SmartChartBlock so the metric-selection flow matches exactly.
 import { CoverColors, distinctSeriesColors } from '../cover/colors'
+import { trackerLineData } from './monthlyTracker'
 import {
   AxisScale, ReportChartMetrics, niceScale, chartSeriesFor, dimensionLabelsFor,
   barCategoryFor, barScale, sentimentSeriesFor, SentimentKey,
 } from './chartTypes'
 
 export type ChartCategory = 'line' | 'bar' | 'wordcloud'
-export type LineDimension = 'daymonth' | 'last3months' | 'days'
+export type LineDimension = 'daymonth' | 'last3months' | 'days' | 'monthly'
 export type BarOrientation = 'vertical' | 'horizontal'
 
 export interface ChartConfig {
@@ -15,6 +16,8 @@ export interface ChartConfig {
   // line
   dimension?: LineDimension
   metrics?: string[]
+  /** dimensi 'monthly' — bulan mulai (YYYY-MM); kosong = Januari tahun report. */
+  fromMonth?: string
   // bar
   barOrientation?: BarOrientation
   barCategory?: string
@@ -32,6 +35,7 @@ export const LINE_DIMENSIONS = [
   { id: 'daymonth', label: 'Day Month', icon: 'calendar_month', desc: 'Daily trends (1 Jun, 2 Jun, etc.)' },
   { id: 'last3months', label: 'Last 3 Months', icon: 'schedule', desc: 'Recent 3-month comparison' },
   { id: 'days', label: 'Daily', icon: 'show_chart', desc: 'Day of week analysis (Sun, Mon, etc.)' },
+  { id: 'monthly', label: 'Monthly', icon: 'date_range', desc: 'Month by month, Jan → report month' },
 ] as const
 
 export const LINE_METRICS = [
@@ -133,6 +137,7 @@ const monthShort = (offset: number) => {
 export function dimensionLabels(dim?: LineDimension): string[] {
   switch (dim) {
     case 'days': return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    case 'monthly': return [monthShort(-2), monthShort(-1), monthShort(0)]
     case 'last3months': return [monthShort(-2), monthShort(-1), monthShort(0)]
     case 'daymonth':
     default: {
@@ -173,6 +178,17 @@ export function resolveLineData(
   config: ChartConfig, ctx: ReportChartMetrics | null, channel: string, colors: CoverColors,
 ): { labels: string[]; series: LineSeries[] } {
   const dim = config.dimension ?? 'daymonth'
+  // Monthly (slide Monthly Tracker): deret per bulan mulai dari bulan pilihan slide.
+  // Sentimen & custom metric belum punya deret bulanan, jadi tidak ikut.
+  if (dim === 'monthly') {
+    const ids = (config.metrics ?? []).filter(id => id !== 'sentiments')
+    const m = trackerLineData(ctx?.monthly, channel, config.fromMonth, ids)
+    const palette = distinctSeriesColors([colors.primary, colors.accent, colors.secondary], Math.max(ids.length, 1))
+    return {
+      labels: m.labels.length ? m.labels : dimensionLabels(dim),
+      series: m.series.map(s => ({ name: METRIC_LABELS[s.id] ?? s.id, color: palette[ids.indexOf(s.id)], data: s.data, scale: niceScale(s.data) })),
+    }
+  }
   const labels = ctx ? dimensionLabelsFor(dim, ctx.meta) : dimensionLabels(dim)
 
   // Sentiments → 3 real daily-count series (Negative / Neutral / Positive) from

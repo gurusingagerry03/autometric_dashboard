@@ -10,6 +10,7 @@ import type { ReportYtdMetrics } from './ytdMetrics'
 import type { ReportPostMetrics } from './posts'
 import type { ReportCompetitorPosts } from './competitorPostsQuery'
 import type { ReportAudienceMetrics } from './audienceTypes'
+import type { ReportMonthlyTracker } from './monthlyTracker'
 
 /**
  * Real table-metric values for the current report (brand + period), provided by
@@ -86,6 +87,17 @@ export function useReportPosts(): ReportPostMetrics | null {
 export const ReportCompetitorPostContext = createContext<ReportCompetitorPosts | null>(null)
 export function useReportCompetitorPosts(): ReportCompetitorPosts | null {
   return useContext(ReportCompetitorPostContext)
+}
+
+/**
+ * Data slide Monthly Tracker Performance (12 bulan s.d. bulan report) plus bulan
+ * report itu sendiri — slide-nya memotong ke rentang pilihannya, dan butuh tahu
+ * di mana "sekarang" berhenti. `data` null selama memuat.
+ */
+export interface ReportMonthlyValue { data: ReportMonthlyTracker | null; year: number; month: number }
+export const ReportMonthlyContext = createContext<ReportMonthlyValue | null>(null)
+export function useReportMonthly(): ReportMonthlyValue | null {
+  return useContext(ReportMonthlyContext)
 }
 
 /** Report-level meta (org + brand + period) for the AI insight generator. */

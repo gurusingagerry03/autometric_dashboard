@@ -137,6 +137,20 @@ const round1 = (n: number) => Math.round(n * 10) / 10
 export const fmtYtdValue = (n: number | null | undefined, format?: KpiFmt): string =>
   n == null ? '—' : format ? formatKpiValue(format, n) : groupInt(n)
 
+/** Nilai tahun lalu satu baris (baris "Last Year" di matriks YTD). */
+export const fmtYtdPrior = (r: YtdRow): string => fmtYtdValue(r.priorYear, r.format)
+
+/**
+ * Baris "Growth" di matriks YTD: selisih terhadap tahun lalu, dua desimal.
+ * Memakai `percentage` apa adanya (indeks, 120 = +20%) — lihat ytdDelta.
+ */
+export const fmtYtdGrowth = (r: YtdRow): string => {
+  if (r.percentage == null) return '—'
+  const d = r.percentage - 100
+  const v = Math.abs(d) < 0.005 ? 0 : d
+  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`
+}
+
 /** Nilai satu baris, memakai format bawaannya. */
 export const fmtYtdRow = (r: YtdRow): string => fmtYtdValue(r.cumulative, r.format)
 

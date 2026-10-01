@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { SlideChrome, ContentSlide, usesKpiLayout } from '@/lib/reports/data/slideModel'
-import { useReportKpi, useReportKpiTargets, useReportYtd, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { useReportKpi, useReportKpiTargets, useReportYtd, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, useReportMonthly, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { trackerMonthsFor } from '@/lib/reports/data/monthlyTracker'
 import {
   AGE_BUCKETS, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
   demographicsFor, sentimentFor, type SourceFilter,
@@ -154,7 +155,7 @@ function chartToData(cfg: ChartConfig | null, chart: ReturnType<typeof useReport
 /** Build the AI payload from what THIS slide actually shows (its table/chart/kpi/posts). */
 function gatherSlideData(
   slide: ContentSlide,
-  ctx: { kpi: ReturnType<typeof useReportKpi>; kpiTargets: ReturnType<typeof useReportKpiTargets>; ytd: ReturnType<typeof useReportYtd>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience> },
+  ctx: { kpi: ReturnType<typeof useReportKpi>; kpiTargets: ReturnType<typeof useReportKpiTargets>; ytd: ReturnType<typeof useReportYtd>; table: ReturnType<typeof useReportMetrics>; chart: ReturnType<typeof useReportChart>; posts: ReturnType<typeof useReportPosts>; audience: ReturnType<typeof useReportAudience>; monthly?: ReturnType<typeof useReportMonthly> },
 ) {
   const ch = slide.channel
   const out: Record<string, unknown> = { channel: ch }
@@ -164,12 +165,13 @@ function gatherSlideData(
 
   // TABLE — dashboard always; overview only when it's showing the table.
   if (slide.table && (slide.type !== 'overview' || overviewMode === 'table')) {
-    const built = buildTable(slide.table, columnsForChannel(slide.table.type, ch), sectionMetricsFor(ctx.table, slide.table.type, ch), null, competitorSectionFor(ctx.table, ch), customColumnsFrom(ctx.table))
+    const built = buildTable(slide.table, columnsForChannel(slide.table.type, ch), sectionMetricsFor(ctx.table, slide.table.type, ch), null, competitorSectionFor(ctx.table, ch), customColumnsFrom(ctx.table), null, ctx.monthly?.data ? trackerMonthsFor(ctx.monthly.data, ch, ctx.monthly.year, ctx.monthly.month, slide.table.fromMonth) : null)
     out.table = {
       name: TABLE_TYPES[slide.table.type]?.label ?? 'Table',
       rows: built.rows.map(r => {
         const o: Record<string, string> = { row: r.label }
-        built.columns.forEach(c => { o[c.label] = r.cells[c.id]?.text ?? '—' })
+        // Tabel bulanan: perubahan MoM ikut dikirim apa adanya, supaya model tidak menghitung ulang.
+        built.columns.forEach(c => { const cell = r.cells[c.id]; o[c.label] = cell ? cell.text + (cell.sub ? ` (${cell.sub.text} MoM)` : '') : '—' })
         return o
       }),
     }
@@ -322,6 +324,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
   const chart = useReportChart()
   const posts = useReportPosts()
   const audience = useReportAudience()
+  const monthly = useReportMonthly()
   const ai = useReportAI()
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -332,7 +335,7 @@ export function AiInsightBlock({ slide, editable, onChange, label = 'AI Key Insi
     if (!ai || loading) return
     setLoading(true); setErr(null)
     try {
-      const data = gatherSlideData(slide, { kpi, kpiTargets, ytd, table, chart, posts, audience })
+      const data = gatherSlideData(slide, { kpi, kpiTargets, ytd, table, chart, posts, audience, monthly })
       const res = await fetch(`/api/organizations/${encodeURIComponent(ai.orgId)}/reports/ai-insight`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slideType: slide.type, channel: slide.channel, brandName: ai.brandName, period: ai.period, title: slide.title, data }),

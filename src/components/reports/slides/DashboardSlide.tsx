@@ -30,7 +30,7 @@ export default function DashboardSlide({
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        <TableBlock config={slide.table} colors={colors} channel={slide.channel} editable={editable} onConfigure={() => onConfigure?.('table')} />
+        <TableBlock config={slide.table} colors={colors} channel={slide.channel} editable={editable} onConfigure={() => onConfigure?.('table')} onChange={table => onChange?.({ ...slide, table })} />
       </div>
     </>
   )

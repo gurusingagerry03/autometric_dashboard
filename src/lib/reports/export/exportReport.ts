@@ -20,9 +20,10 @@ import {
   kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
 } from '../data/kpiTargets'
 import {
-  ReportYtdMetrics, fmtYtdPct, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow,
+  ReportYtdMetrics, fmtYtdGrowth, fmtYtdPct, fmtYtdPrior, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow,
   ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor,
 } from '../data/ytdMetrics'
+import { trackerMonthsFor, trackerTableSizes, type ReportMonthlyTracker } from '../data/monthlyTracker'
 import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics } from '../data/posts'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
@@ -34,6 +35,10 @@ type Slide = any
 
 const S = SLIDE_IN
 let PJ = 'Calibri'          // report font (set per export); MONO stays for table numbers
+// Data tabel "Monthly Tracker" untuk export ini (di-set per export, sama seperti PJ).
+// tableCard membacanya langsung supaya semua slide yang memasang tabel bulanan —
+// Dashboard, Overview, Monthly Tracker — tidak perlu parameter tambahan satu per satu.
+let MONTHLY: { data: ReportMonthlyTracker | null; year: number; month: number } | null = null
 const MONO = 'Consolas'
 
 // cq → inches / points (slide is 13.333in × 7.5in = 960pt × 540pt)
@@ -253,24 +258,50 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   const def = TABLE_TYPES[config.type]
   slide.addText((def?.label ?? 'Data table').toUpperCase(), { x: x + pad, y: y + H(1.4), w: w - 2 * pad, h: H(3), fontSize: FS(1.2), bold: true, color: '94A3B8', fontFace: PJ })
 
-  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), sm, sent, comp, customCols, platform)
-  const headOpt = { bold: true, color: '94A3B8', fontSize: FS(1.0), fill: { color: 'F8FAFB' }, valign: 'middle' as const }
+  const months = config.type === 'monthly_tracker' && MONTHLY?.data
+    ? trackerMonthsFor(MONTHLY.data, channel, MONTHLY.year, MONTHLY.month, config.fromMonth)
+    : null
+  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), sm, sent, comp, customCols, platform, months)
+  if (config.type === 'monthly_tracker' && rows.length === 0) { noDataText(slide, x + pad, y + H(4.8), w - 2 * pad, h - H(6)); return }
+  // Huruf tabel bulanan = ukuran preview (trackerTableSizes), selain itu ukuran tabel biasa.
+  const big = config.type === 'monthly_tracker'
+    ? trackerTableSizes(rows.length, (h / S.h) * 100, columns.filter(c => c.format !== 'text').length, columns.some(c => c.format === 'text'))
+    : null
+  const fsz = { head: FS(big?.head ?? 1.0), first: FS(big?.month ?? 1.05), value: FS(big?.value ?? 1.0), sub: FS(big?.sub ?? 0.75), note: FS(big?.note ?? 0.95) }
+  const headOpt = { bold: true, color: '94A3B8', fontSize: fsz.head, fill: { color: 'F8FAFB' }, valign: 'middle' as const }
   const headRow = [
     { text: header, options: { ...headOpt, align: 'left' as const } },
-    ...columns.map(c => ({ text: c.label, options: { ...headOpt, align: 'right' as const } })),
+    ...columns.map(c => ({ text: c.label, options: { ...headOpt, align: c.format === 'text' ? 'left' as const : 'right' as const } })),
   ]
   const bodyRows = rows.map(r => [
-    { text: r.label, options: { bold: true, color: '0F172A', align: 'left' as const, fontSize: FS(1.05), valign: 'middle' as const, fill: r.isGap ? { color: 'FAFBFC' } : undefined } },
+    { text: r.label, options: { bold: true, color: '0F172A', align: 'left' as const, fontSize: fsz.first, valign: 'middle' as const, fill: r.isGap ? { color: 'FAFBFC' } : undefined } },
     ...columns.map(c => {
       const cell = r.cells[c.id]
+      // Key Highlight — teks bebas, rata kiri, bukan font angka.
+      if (cell.note) return { text: cell.text || '—', options: { align: 'left' as const, color: '475569', fontSize: fsz.note, valign: 'middle' as const } }
       const color = cell.gap ? (cell.positive ? '16A34A' : 'DC2626') : '475569'
-      return { text: (cell.gap && cell.positive ? '+' : '') + cell.text, options: { align: 'right' as const, color, bold: !!cell.gap, fontSize: FS(1.0), fontFace: MONO, valign: 'middle' as const, fill: r.isGap ? { color: 'FAFBFC' } : undefined } }
+      const value = (cell.gap && cell.positive ? '+' : '') + cell.text
+      // Perubahan MoM (tabel bulanan) = baris kedua kecil di sel yang sama.
+      if (cell.sub) {
+        const subColor = cell.sub.flat ? '94A3B8' : cell.sub.positive ? '16A34A' : 'DC2626'
+        return {
+          text: [
+            { text: big?.inline ? `${value}  ` : value, options: { color: big ? '1E293B' : color, bold: !!big, fontSize: fsz.value, fontFace: MONO, breakLine: !big?.inline } },
+            { text: cell.sub.text, options: { color: subColor, bold: true, fontSize: fsz.sub } },
+          ],
+          options: { align: 'right' as const, valign: 'middle' as const },
+        }
+      }
+      return { text: value, options: { align: 'right' as const, color: big ? '1E293B' : color, bold: !!cell.gap || !!big, fontSize: fsz.value, fontFace: MONO, valign: 'middle' as const, fill: r.isGap ? { color: 'FAFBFC' } : undefined } }
     }),
   ])
 
   const tw = w - 2 * pad
-  const firstW = tw * 0.18
-  const colW = [firstW, ...columns.map(() => (tw - firstW) / columns.length)]
+  const firstW = tw * (big ? 0.12 : 0.18)
+  // Kolom teks (Key Highlight) 1.8× lebar kolom angka — sama dengan preview.
+  const weight = (c: TableColumn) => (c.format === 'text' ? 1.8 : 1)
+  const totalWeight = columns.reduce((a, c) => a + weight(c), 0) || 1
+  const colW = [firstW, ...columns.map(c => ((tw - firstW) * weight(c)) / totalWeight)]
   slide.addTable([headRow, ...bodyRows], {
     x: x + pad, y: y + H(4.8), w: tw, h: h - H(6),
     colW, fontFace: PJ, autoPage: false,
@@ -460,9 +491,12 @@ async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, 
   // ikut bergeser — persis seperti ROW_H di preview.
   const isTargets = slide.type === 'kpi'
   const isYtd = slide.type === 'ytd'
-  const ry = H(18), rh = isTargets || isYtd ? H(20) : H(17)
+  const ytdMatrix = isYtd && (slide.ytdView ?? 'matrix') === 'matrix'
+  const ry = H(18), rh = ytdMatrix ? H(30) : isTargets || isYtd ? H(20) : H(17)
 
-  if (isYtd) {
+  if (ytdMatrix) {
+    ytdMatrixTable(s, slide, ytdMetrics ?? null, colors, hx, ry, hw, rh)
+  } else if (isYtd) {
     const section = ytdChannelFor(ytdMetrics ?? null, slide.channel)
     if (!section || section.rows.length === 0) {
       placeholder(s, hx, ry, hw, rh, 'NO YTD PERIOD FOR THIS CHANNEL')
@@ -524,6 +558,46 @@ async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, 
   await chartCard(pptx, s, slide.chart, colors, hx, cy, chartW, ch, 'DEEP DIVE ANALYSIS', chartMetrics, slide.channel)
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx + chartW + W(2), cy, hw - chartW - W(2), ch, 'SUMMARY & ACTIONS')
   await footer(s, chrome, colors, hx, H(89), hw)
+}
+
+/**
+ * Matriks YTD (deck revisi, slide 10) sebagai tabel PowerPoint native — tetap
+ * bisa diedit. Cerminan YtdMatrix di KpiSlide.tsx: kolom label + N metrik,
+ * baris Last Year / This Year / Growth.
+ */
+function ytdMatrixTable(s: Slide, slide: ContentSlide, ytd: ReportYtdMetrics | null, colors: CoverColors, x: number, y: number, w: number, h: number) {
+  const section = ytdChannelFor(ytd, slide.channel)
+  if (!section) { placeholder(s, x, y, w, h, 'NO YTD PERIOD FOR THIS CHANNEL'); return }
+  const n = Math.max(1, slide.metricCount)
+  const rows = Array.from({ length: n }, (_, i) => ytdRowFor(ytd, slide.channel, slide.kpiMetrics[i] ?? null))
+  const valFs = FS(n <= 3 ? 2 : n <= 4 ? 1.8 : n === 5 ? 1.55 : 1.35)
+  const head = { bold: true, color: 'FFFFFF', fill: { color: noHash(colors.primary) }, fontSize: FS(1.0), align: 'center' as const, valign: 'middle' as const }
+  const labelCell = (label: string, sub: string) => ({
+    text: [
+      { text: label, options: { bold: true, color: '0F172A', fontSize: FS(1.15), breakLine: true } },
+      { text: sub, options: { color: '94A3B8', fontSize: FS(0.8) } },
+    ],
+    options: { fill: { color: 'F8FAFB' }, valign: 'middle' as const, align: 'left' as const },
+  })
+  const cell = (text: string, color: string) => ({ text, options: { bold: true, color, fontSize: valFs, align: 'center' as const, valign: 'middle' as const } })
+  const growthColor = (r: NonNullable<(typeof rows)[number]>) => {
+    const d = ytdDelta(r)
+    return d == null ? '94A3B8' : d >= 0 ? '16A34A' : 'DC2626'
+  }
+  const table = [
+    [{ text: '', options: head }, ...rows.map(r => ({ text: r ? ytdLabel(r.metric).toUpperCase() : 'ADD YTD METRIC', options: head }))],
+    [labelCell('Last Year', fmtYtdPriorRange(section.window)), ...rows.map(r => (r ? cell(fmtYtdPrior(r), '475569') : cell('—', 'CBD5E1')))],
+    [labelCell('This Year', fmtYtdRange(section.window)), ...rows.map(r => (r ? cell(fmtYtdRow(r), '0F172A') : cell('—', 'CBD5E1')))],
+    [labelCell('Growth', 'vs last year'), ...rows.map(r => (r ? cell(fmtYtdGrowth(r), growthColor(r)) : cell('—', 'CBD5E1')))],
+  ]
+  const firstW = W(14)
+  const headH = H(5.4)
+  s.addTable(table, {
+    x, y, w, colW: [firstW, ...rows.map(() => (w - firstW) / n)],
+    rowH: [headH, ...[0, 1, 2].map(() => (h - headH) / 3)],
+    fontFace: PJ, autoPage: false, fill: { color: 'FFFFFF' },
+    border: { type: 'solid', color: 'EEF0F2', pt: 0.75 },
+  })
 }
 
 function hslToHex(h: number, sat: number, lig: number): string {
@@ -892,6 +966,30 @@ async function addDemographicSlide(
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 
+/* ── Monthly Tracker Performance (deck revisi, slide 11 & 12) ─────────────
+ * Tabel native (bisa diedit) + — untuk layout Chart + Table — chart garis
+ * native dua sumbu dan kotak ringkasan. Cerminan MonthlyTrackerSlide.tsx.
+ */
+async function addMonthlyTrackerSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, metrics?: ReportTableMetrics, chartMetrics?: ReportChartMetrics) {
+  const s = pptx.addSlide()
+  s.background = { color: noHash(tint(colors.primary, 0.965)) }
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
+  await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
+
+  // Blok yang sama dengan Standard Dashboard (chartCard / insightsCard / tableCard);
+  // proporsinya mengikuti MonthlyTrackerSlide.tsx (chart 33cqh, lalu tabel).
+  let ty = H(18)
+  if ((slide.trackerLayout ?? 'chart_table') === 'chart_table') {
+    const rh = H(33), chartW = W(58.4)
+    await chartCard(pptx, s, slide.chart, colors, hx, ty, chartW, rh, 'MAIN CHART AREA', chartMetrics, slide.channel)
+    insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx + chartW + W(2), ty, hw - chartW - W(2), rh, 'SUMMARY')
+    ty += rh + H(2)
+  }
+  tableCard(s, slide.table, colors, slide.channel, hx, ty, hw, H(87) - ty, sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table))
+  await footer(s, chrome, colors, hx, H(89), hw)
+}
+
 export interface ReportExportOptions {
   cover: CoverConfig
   slides: ContentSlide[]
@@ -911,10 +1009,13 @@ export interface ReportExportOptions {
   competitorPosts?: CompetitorPostPool | null
   /** Sentimen + demografi audiens untuk slide Audience Sentiment / Demographics. */
   audienceMetrics?: ReportAudienceMetrics | null
+  /** 12 bulan s.d. bulan report + bulan report itu, untuk slide Monthly Tracker. */
+  monthlyTracker?: { data: ReportMonthlyTracker | null; year: number; month: number } | null
 }
 
-export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
+export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
   PJ = font
+  MONTHLY = monthlyTracker ?? null
   const { default: PptxGenJS } = await import('pptxgenjs')
   const pptx = new PptxGenJS()
   pptx.defineLayout({ name: 'AUTOMETRIC_16x9', width: S.w, height: S.h })
@@ -932,6 +1033,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)
     else if (slide.type === 'demographic') await addDemographicSlide(pptx, slide, chrome, colors, audienceMetrics)
+    else if (slide.type === 'monthly_tracker') await addMonthlyTrackerSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else await addDashboardSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
   }
 

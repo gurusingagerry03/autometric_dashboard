@@ -9,7 +9,7 @@ import type { SourceFilter } from './audienceTypes'
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic' | 'monthly_tracker'
 
 /**
  * Slide yang memakai layout kartu post (grid kartu + catatan di bawah).
@@ -66,6 +66,14 @@ export const KPI_COMPARE_LABEL: Record<KpiCompare, string> = {
   achievement: 'Achievement rate only',
   run: 'Run rate only',
 }
+/**
+ * Bentuk baris YTD Performance.
+ *   - 'matrix' → satu tabel: Last Year / This Year / Growth × metrik (deck revisi
+ *     Report Maker, slide 10). Bawaan — juga untuk slide lama yang belum punya field ini.
+ *   - 'cards'  → scorecard per metrik seperti Dashboard Overview.
+ */
+export type YtdView = 'matrix' | 'cards'
+export type TrackerLayout = 'chart_table' | 'table'
 /** Which half of the demographic slide is drawn — or both, side by side. */
 export type DemographicView = 'both' | 'age' | 'gender'
 
@@ -114,6 +122,17 @@ export interface ContentSlide {
   cloudSentiment: string
   /** demographic — 'age' | 'gender' | 'both'. */
   demographicView: DemographicView
+  /** ytd — matriks (bawaan) atau scorecard. Opsional: template lama tidak punya. */
+  ytdView?: YtdView
+  /**
+   * monthly_tracker — 'chart_table' (chart + ringkasan + tabel, deck slide 12) atau
+   * 'table' (tabel saja, slide 11). Chart & tabelnya sendiri memakai `chart` dan
+   * `table` biasa, dipilih lewat modal yang sama dengan slide lain.
+   */
+  trackerLayout?: TrackerLayout
+  /** monthly_tracker — bulan mulai (YYYY-MM), dipilih saat slide dibuat. Disalin ke
+   *  `chart.fromMonth` dan `table.fromMonth` lewat withTrackerFrom(). */
+  trackerFrom?: string
   aiInsight: AiInsight | null // AI analyst insight (analysis + typed recommendations)
 }
 
@@ -170,19 +189,44 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   overview: { title: 'Overview Slide' },
   sentiment: { title: 'Audience Sentiment' },
   demographic: { title: 'Audience Demographics' },
+  monthly_tracker: { title: 'Monthly Tracker Performance' },
 }
 
-export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): ContentSlide {
-  const d = SLIDE_DEFAULTS[type]
+/** Pilihan yang ditanyakan pemilih slide sebelum slide Monthly Tracker dibuat. */
+export interface MonthlyTrackerSetup { layout: TrackerLayout; from: string }
+
+/**
+ * Ganti bulan mulai slide Monthly Tracker. Chart & tabelnya menyimpan salinan
+ * sendiri (`fromMonth`) karena keduanya dirender blok umum yang tidak mengenal
+ * slide-nya — jadi ketiganya diperbarui bersama di satu tempat ini.
+ */
+export function withTrackerFrom(slide: ContentSlide, from: string): ContentSlide {
   return {
+    ...slide,
+    trackerFrom: from,
+    chart: slide.chart?.chartType === 'line' && slide.chart.dimension === 'monthly' ? { ...slide.chart, fromMonth: from } : slide.chart,
+    table: slide.table?.type === 'monthly_tracker' ? { ...slide.table, fromMonth: from } : slide.table,
+  }
+}
+
+export function makeSlide(type: SlideType, seq: number, channel = 'instagram', tracker?: MonthlyTrackerSetup): ContentSlide {
+  const d = SLIDE_DEFAULTS[type]
+  const slide: ContentSlide = {
     id: `s${seq}-${Date.now()}`,
     type,
     title: d.title ?? '',
     body: d.body ?? '',
     insights: '',
     channel,
-    chart: null,
-    table: null,
+    // Monthly Tracker lahir sudah terisi sesuai deck revisi (slide 12): garis
+    // Followers Growth vs Profile Reach per bulan, dan tabel bulanan. Keduanya tetap
+    // bisa diganti lewat ChartSelectionModal / TableSelectionModal seperti slide lain.
+    chart: type === 'monthly_tracker'
+      ? { chartType: 'line', dimension: 'monthly', metrics: ['net_followers_growth', 'profile_reach'] }
+      : null,
+    table: type === 'monthly_tracker'
+      ? { type: 'monthly_tracker', columns: ['followers', 'followers_growth', 'reach', 'profile_visit', 'total_posts', 'engagement', 'key_highlight'] }
+      : null,
     chartA: null,
     chartB: null,
     metricCount: 4,
@@ -202,6 +246,9 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram'): 
     sentimentSource: 'all',
     cloudSentiment: 'all',
     demographicView: 'both',
+    ytdView: 'matrix',
+    trackerLayout: tracker?.layout ?? 'chart_table',
     aiInsight: null,
   }
+  return type === 'monthly_tracker' && tracker ? withTrackerFrom(slide, tracker.from) : slide
 }

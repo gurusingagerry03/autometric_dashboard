@@ -54,6 +54,7 @@ const SLIDE_FOCUS: Record<SlideType, string> = {
   visual: 'Focus on the top/low performing posts shown: what the best performers share and what the weak ones lack, by the metrics provided.',
   sentiment: 'Focus on how the audience sounded: which sentiment moved most against the previous month and by how many percentage POINTS (never call a point move a percent change), whether the volume behind those shares rose or fell, and what the most frequent words suggest is driving it.',
   demographic: 'Focus on how the follower base shifted between the two months: which age buckets and which gender gained or lost share, on which platform, and in percentage POINTS. Shares only — say nothing about follower headcount, which this slide does not carry.',
+  monthly_tracker: 'Focus on the month-by-month trajectory: which metrics climbed or slipped over the months shown, the months with the sharpest month-over-month moves (use the MoM values given in parentheses in the table, never recompute them), whether the charted lines move together or diverge, and what the most recent month says about momentum going into the next one. Followers is a level (end-of-month count); every other metric is a monthly total. Where a value is an em dash the month has no data — say so rather than treating it as zero.',
   section: '',
 }
 

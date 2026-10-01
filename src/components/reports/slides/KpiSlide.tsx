@@ -12,7 +12,7 @@ import {
 } from '@/lib/reports/data/kpiTargets'
 import { useReportKpi, useReportKpiTargets, useReportMetrics, useReportYtd } from '@/lib/reports/data/metricsContext'
 import {
-  fmtYtdPct, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta,
+  fmtYtdGrowth, fmtYtdPct, fmtYtdPrior, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta,
   ytdIcon, ytdLabel, ytdRowFor,
 } from '@/lib/reports/data/ytdMetrics'
 import { PJ, AiInsightBlock } from './parts'
@@ -26,7 +26,7 @@ const COUNTS = [3, 4, 5, 6]
 // (achievement & run rate) alih-alih satu badge delta.
 // YTD sama tingginya dengan KPI: kartunya juga membawa satu baris tambahan
 // (sejak kapan diakumulasi) di atas badge deltanya.
-const ROW_H = { kpi: '20cqh', ytd: '20cqh', dashboard: '17cqh' } as const
+const ROW_H = { kpi: '20cqh', ytd: '20cqh', ytdMatrix: '30cqh', dashboard: '17cqh' } as const
 
 // Font sizes scale with the number of scorecards (smaller when there are more).
 function sizesFor(n: number) {
@@ -327,6 +327,75 @@ function YtdRow({
 }
 
 /**
+ * Matriks YTD (deck revisi Report Maker, slide 10): tiga baris — Last Year,
+ * This Year, Growth — kali N kolom metrik. Header kolom = slot yang bisa diklik
+ * untuk memilih metriknya, sama seperti kartu di tampilan scorecard.
+ */
+function YtdMatrix({
+  slide, accent, editable, onConfigure,
+}: {
+  slide: ContentSlide; accent: string; editable: boolean
+  onConfigure?: (block: ConfigBlock) => void
+}) {
+  const t = useT()
+  const ytd = useReportYtd()
+  const section = ytdChannelFor(ytd, slide.channel)
+  const count = Math.max(1, slide.metricCount)
+  if (ytd === null || !section) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center rounded-[1.2cqw] border-2 border-dashed border-[#dbe1e8]" style={{ background: 'rgba(255,255,255,0.45)' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '2.6cqw', color: '#c4c9d4' }}>timeline</span>
+        <span style={{ fontSize: '1.1cqw', fontWeight: 700, color: '#94a3b8', marginTop: '0.6cqh', ...PJ }}>
+          {ytd === null ? t('Loading…') : t('No YTD window for this channel')}
+        </span>
+      </div>
+    )
+  }
+  const rowsOf = Array.from({ length: count }, (_, i) => ytdRowFor(ytd, slide.channel, slide.kpiMetrics[i] ?? null))
+  const valueFs = count <= 3 ? '2cqw' : count <= 4 ? '1.8cqw' : count === 5 ? '1.55cqw' : '1.35cqw'
+  const lines: { label: string; sub: string; cell: (r: NonNullable<(typeof rowsOf)[number]>) => { text: string; color: string } }[] = [
+    { label: t('Last Year'), sub: fmtYtdPriorRange(section.window), cell: r => ({ text: fmtYtdPrior(r), color: '#475569' }) },
+    { label: t('This Year'), sub: fmtYtdRange(section.window), cell: r => ({ text: fmtYtdRow(r), color: '#0f172a' }) },
+    {
+      label: t('Growth'), sub: t('vs last year'),
+      cell: r => {
+        const d = ytdDelta(r)
+        return { text: fmtYtdGrowth(r), color: d == null ? '#94a3b8' : d >= 0 ? '#16a34a' : '#dc2626' }
+      },
+    },
+  ]
+  const cols = `14cqw repeat(${count}, minmax(0, 1fr))`
+  return (
+    <div className="h-full grid rounded-[1.2cqw] bg-white border border-[#e8ebee] overflow-hidden" style={{ gridTemplateColumns: cols, gridTemplateRows: 'auto repeat(3, 1fr)', boxShadow: '0 1cqh 2.4cqh -1.4cqh rgba(16,24,40,0.18)', ...PJ }}>
+      <div style={{ background: accent }} />
+      {rowsOf.map((r, i) => (
+        <button key={i} onClick={editable ? () => onConfigure?.(`kpi-${i}`) : undefined} disabled={!editable}
+          className={`truncate text-center ${editable ? 'hover:brightness-110 cursor-pointer' : 'cursor-default'}`}
+          style={{ background: accent, color: '#fff', fontSize: '1cqw', fontWeight: 800, padding: '1cqh 0.6cqw', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          {r ? t(ytdLabel(r.metric)) : `+ ${t('Add YTD metric')}`}
+        </button>
+      ))}
+      {lines.map((line, li) => (
+        <div key={li} className="contents">
+          <div className="flex flex-col justify-center" style={{ padding: '0 1.2cqw', background: '#f8fafb', borderTop: '1px solid #eef0f2' }}>
+            <span style={{ fontSize: '1.15cqw', fontWeight: 800, color: '#0f172a' }}>{line.label}</span>
+            <span className="truncate" style={{ fontSize: '0.8cqw', color: '#94a3b8' }}>{line.sub}</span>
+          </div>
+          {rowsOf.map((r, i) => {
+            const c = r ? line.cell(r) : { text: '—', color: '#cbd5e1' }
+            return (
+              <div key={i} className="flex items-center justify-center" style={{ borderTop: '1px solid #eef0f2', borderLeft: '1px solid #f1f3f5', fontSize: valueFs, fontWeight: 800, color: c.color, letterSpacing: '-0.01em' }}>
+                {c.text}
+              </div>
+            )
+          })}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
  * KPI Overview body — a row of metric scorecards over a deep-dive chart + summary.
  * Clicking a scorecard opens metric selection; the metric count is changed via the
  * edit button (modal). Header & footer come from the slide shell (SlidePreview).
@@ -356,11 +425,12 @@ export default function KpiSlide({
   const metricFor = (key: string | null) => resolveKpiMetric(kpi, table, slide.channel, key)
   const isTargets = slide.type === 'kpi'
   const isYtd = slide.type === 'ytd'
+  const ytdMatrix = isYtd && (slide.ytdView ?? 'matrix') === 'matrix'
 
   return (
     <>
       {/* Scorecards */}
-      <div style={{ height: isTargets ? ROW_H.kpi : isYtd ? ROW_H.ytd : ROW_H.dashboard, flexShrink: 0, position: 'relative' }}>
+      <div style={{ height: isTargets ? ROW_H.kpi : ytdMatrix ? ROW_H.ytdMatrix : isYtd ? ROW_H.ytd : ROW_H.dashboard, flexShrink: 0, position: 'relative' }}>
         {editable && (
           <button
             onClick={() => setCountOpen(true)}
@@ -373,6 +443,8 @@ export default function KpiSlide({
         )}
         {isTargets ? (
           <TargetRow slide={slide} accent={colors.primary} editable={editable} onConfigure={onConfigure} />
+        ) : ytdMatrix ? (
+          <YtdMatrix slide={slide} accent={colors.primary} editable={editable} onConfigure={onConfigure} />
         ) : isYtd ? (
           <YtdRow slide={slide} accent={colors.primary} editable={editable} onConfigure={onConfigure} />
         ) : (
@@ -420,7 +492,7 @@ export default function KpiSlide({
               {COUNTS.map(n => (
                 <button
                   key={n}
-                  onClick={() => { onChange?.({ ...slide, metricCount: n }); if (!isTargets) setCountOpen(false) }}
+                  onClick={() => { onChange?.({ ...slide, metricCount: n }); if (!isTargets && !isYtd) setCountOpen(false) }}
                   style={PJ}
                   className={`py-4 rounded-xl border flex flex-col items-center gap-1 transition-all ${count === n ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}
                 >
@@ -434,6 +506,19 @@ export default function KpiSlide({
                 Overview cuma punya satu pembanding yang masuk akal (periode
                 sebelumnya), jadi menawarkannya di sana hanya akan jadi pilihan
                 dengan satu isi. */}
+            {isYtd && (
+              <div className="mt-5 pt-4 border-t border-[#f0f1f2]">
+                <h3 style={PJ} className="text-[14px] font-bold text-[#0f172a]">{t('View')}</h3>
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  {([['matrix', t('Year-over-year table')], ['cards', t('Scorecards')]] as const).map(([id, label]) => (
+                    <button key={id} onClick={() => onChange?.({ ...slide, ytdView: id })} style={PJ}
+                      className={`py-2.5 rounded-xl border text-[12.5px] font-semibold transition-all ${(slide.ytdView ?? 'matrix') === id ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {isTargets && (
               <div className="mt-5 pt-4 border-t border-[#f0f1f2]">
                 <h3 style={PJ} className="text-[14px] font-bold text-[#0f172a]">{t('Comparison')}</h3>

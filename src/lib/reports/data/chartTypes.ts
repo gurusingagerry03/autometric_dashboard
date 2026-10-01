@@ -5,6 +5,7 @@
 // dimensions (Day Month / Last 3 Months / Daily-by-weekday) so the chart can
 // switch dimension without refetching — exactly like the table's ReportTableMetrics.
 import type { DashPlatform } from '@/components/dashboard/data'
+import type { ChartMonthly } from './monthlyTracker'
 
 /** Line metrics wired to the DB (sentiments excluded — no pipeline yet). */
 export const CHART_METRIC_IDS = [
@@ -90,6 +91,12 @@ export interface ReportChartMetrics {
   words: Partial<Record<DashPlatform, ChannelWords>>             // word cloud
   competitors?: Partial<Record<DashPlatform, CompetitorChartSection>>  // brand vs competitors (l2_gold)
   customMetrics?: { id: string; label: string }[]               // org custom metrics available as line series
+  /**
+   * Dimensi line "Monthly" (Jan → bulan report). Tidak dikirim chart-metrics:
+   * dirakit di ReportBuilder dari payload monthly-tracker (trackerToChartMonthly),
+   * supaya satu query bulanan melayani chart dan tabel Monthly Tracker sekaligus.
+   */
+  monthly?: ChartMonthly | null
 }
 
 /** Sentiment series values for a channel + sentiment + dimension, or null when unavailable. */
@@ -143,6 +150,8 @@ export function chartSeriesFor(
   metricId: string,
   dim: string | undefined,
 ): number[] | null {
+  // 'monthly' diselesaikan resolveLineData lewat trackerLineData (butuh bulan mulai slide).
+  if (dim === 'monthly') return null
   const entry = metrics?.channels?.[channel as DashPlatform]?.[metricId as ChartMetricId]
   if (!entry) return null
   return dim === 'days' ? entry.days : dim === 'last3months' ? entry.last3months : entry.daymonth

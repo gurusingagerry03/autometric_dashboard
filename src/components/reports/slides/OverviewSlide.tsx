@@ -67,7 +67,7 @@ export default function OverviewSlide({
         ) : (
           <div className="h-full relative">
             {editable && <SwitchButton onClick={() => onChange?.({ ...slide, visualMode: null, table: null })} />}
-            <TableBlock config={slide.table} colors={colors} channel={slide.channel} editable={editable} onConfigure={() => onConfigure?.('table')} />
+            <TableBlock config={slide.table} colors={colors} channel={slide.channel} editable={editable} onConfigure={() => onConfigure?.('table')} onChange={table => onChange?.({ ...slide, table })} />
           </div>
         )}
       </div>

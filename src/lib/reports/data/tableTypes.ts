@@ -6,9 +6,10 @@
 // Values are REAL DB numbers (via metricsQuery); no data renders "—", never dummy.
 import type { DashPlatform } from '@/components/dashboard/data'
 import { groupInt } from './format'
+import { TABLE_COLUMN_TO_TRACKER, fmtTrackerMom, fmtTrackerMonth, fmtTrackerValue, trackerMom, type TrackerMetric, type TrackerMonth } from './monthlyTracker'
 
-export type TableFormat = 'compact' | 'number' | 'percent' | 'time'
-export type TableRowType = 'comparison' | 'competitors' | 'sentiments' | 'platforms' | 'generic'
+export type TableFormat = 'compact' | 'number' | 'percent' | 'time' | 'text'
+export type TableRowType = 'comparison' | 'competitors' | 'sentiments' | 'platforms' | 'months' | 'generic'
 
 // `channels` omitted = available on every channel; otherwise the metric only
 // exists for the listed platforms (per the ROBZ LAUNCH mapping).
@@ -45,7 +46,13 @@ export interface TableType {
 
 /** A configured table on a slide. `competitorIds` applies to the competitors
  *  table only — the chosen competitor social_account_ids (undefined = all). */
-export interface TableConfig { type: string; columns: string[]; competitorIds?: string[] }
+export interface TableConfig {
+  type: string; columns: string[]; competitorIds?: string[]
+  /** 'monthly_tracker' only — isi kolom Key Highlight per bulan (YYYY-MM → teks). */
+  highlights?: Record<string, string>
+  /** 'monthly_tracker' only — bulan mulai (YYYY-MM); kosong = Januari tahun report. */
+  fromMonth?: string
+}
 
 /** Real metric value for a comparison table: previous vs current period. */
 export interface MetricPair { prev: number | null; curr: number | null }
@@ -74,7 +81,7 @@ export interface CompetitorSection {
 
 /** One org custom-metric column: id + display label + value format. Its per-channel
  *  values live in the content/channel SectionMetrics (keyed by this id). */
-export interface CustomMetricColumn { id: string; label: string; format: TableFormat }
+export interface CustomMetricColumn { id: string; label: string; format: Exclude<TableFormat, 'text'> }
 
 /**
  * Platform-comparison table values: the CURRENT-period value per platform, keyed
@@ -402,6 +409,29 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
     ],
   },
+  // Monthly Tracker Performance (deck revisi Report Maker, slide 11/12): satu baris
+  // per bulan, Jan → bulan report, dengan perubahan MoM di bawah tiap angka. Kolom
+  // Key Highlight diisi tangan per bulan langsung di tabelnya (TableConfig.highlights).
+  monthly_tracker: {
+    id: 'monthly_tracker', label: 'Monthly Tracker', icon: 'calendar_month',
+    description: 'Month by month, Jan → report month, with MoM change.', rowType: 'months',
+    columns: [
+      { id: 'followers', label: 'Followers', format: 'number' },
+      { id: 'followers_growth', label: 'Followers Growth', format: 'number' },
+      { id: 'reach', label: 'Channel Reach', format: 'number' },
+      { id: 'profile_visit', label: 'Profile Views', format: 'number' },
+      { id: 'profile_reach', label: 'Profile Reach', format: 'number' },
+      { id: 'total_posts', label: 'Total Post', format: 'number' },
+      { id: 'engagement', label: 'Total Engagement', format: 'number' },
+      { id: 'likes', label: 'Likes', format: 'number' },
+      { id: 'comments', label: 'Comments', format: 'number' },
+      { id: 'shares', label: 'Shares', format: 'number' },
+      { id: 'impressions', label: 'Impressions', format: 'number' },
+      { id: 'er', label: 'Engagement Rate', format: 'percent' },
+      { id: 'key_highlight', label: 'Key Highlight', format: 'text' },
+    ],
+    defaultColumns: ['followers', 'followers_growth', 'reach', 'profile_visit', 'total_posts', 'engagement', 'key_highlight'],
+  },
   sentiments: {
     id: 'sentiments', label: 'Sentiments', icon: 'favorite',
     description: 'Sentiment analysis breakdown.', rowType: 'sentiments',
@@ -429,6 +459,7 @@ const ROW_DEFS: Record<TableRowType, { id: string; label: string; isGap?: boolea
     { id: 'neutral', label: 'Neutral' },
     { id: 'negative', label: 'Negative' },
   ],
+  months: [],   // dinamis — satu baris per bulan dari data monthly tracker
   platforms: [
     { id: 'instagram', label: 'Instagram' },
     { id: 'facebook', label: 'Facebook' },
@@ -446,6 +477,7 @@ export function firstColHeader(rowType: TableRowType): string {
     : rowType === 'competitors' ? 'Brand'
     : rowType === 'sentiments' ? 'Sentiment'
     : rowType === 'platforms' ? 'Platform'
+    : rowType === 'months' ? 'Month'
     : 'Category'
 }
 
@@ -540,7 +572,13 @@ function fmtReal(format: TableFormat, val: number): string {
   return groupInt(val)
 }
 
-export interface TableCell { text: string; gap?: boolean; positive?: boolean }
+export interface TableCell {
+  text: string; gap?: boolean; positive?: boolean
+  /** Baris kedua kecil di bawah angka — perubahan MoM tabel Monthly Tracker. */
+  sub?: { text: string; positive: boolean; flat: boolean }
+  /** Teks bebas (Key Highlight): rata kiri, bukan font angka. */
+  note?: boolean
+}
 export interface TableRow { id: string; label: string; isGap?: boolean; cells: Record<string, TableCell> }
 
 // Real cell from DB metrics. Null values (missing/ambiguous data) render "—".
@@ -595,6 +633,8 @@ export function buildTable(
   competitors?: CompetitorSection | null,
   customCols: TableColumn[] = [],
   platformMetrics?: PlatformMetrics | null,
+  /** 'monthly_tracker' — bulan-bulan yang ditampilkan (lihat trackerMonthsFor). */
+  months?: TrackerMonth[] | null,
 ): { header: string; columns: TableColumn[]; rows: TableRow[] } {
   const def = TABLE_TYPES[config.type] ?? TABLE_TYPES.content_level
   // Selections saved before a column was renamed still carry the old id.
@@ -630,6 +670,31 @@ export function buildTable(
       })
     }
     return { header: firstColHeader('competitors'), columns, rows }
+  }
+
+  // Monthly tracker: satu baris per bulan; tiap angka membawa perubahan vs bulan
+  // sebelumnya. Selama data memuat (months == null) tabelnya kosong.
+  if (def.rowType === 'months') {
+    const list = months ?? []
+    const rows: TableRow[] = list.map((m, i) => {
+      const prev = i > 0 ? list[i - 1] : null
+      const cells: Record<string, TableCell> = {}
+      columns.forEach(col => {
+        if (col.id === 'key_highlight') {
+          cells[col.id] = { text: config.highlights?.[m.month] ?? '', note: true }
+          return
+        }
+        const metric = TABLE_COLUMN_TO_TRACKER[col.id] ?? (col.id as TrackerMetric)
+        const v = m.values[metric]
+        const d = prev ? trackerMom(v, prev.values[metric], metric) : null
+        cells[col.id] = {
+          text: fmtTrackerValue(metric, v),
+          sub: d == null ? undefined : { text: fmtTrackerMom(metric, d), positive: d > 0, flat: Math.abs(d) < 0.005 },
+        }
+      })
+      return { id: m.month, label: fmtTrackerMonth(m.month), cells }
+    })
+    return { header: firstColHeader('months'), columns, rows }
   }
 
   // Per-platform comparison table: one row per platform, current-period value per

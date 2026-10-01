@@ -16,10 +16,12 @@ import { ReportKpiMetrics } from '@/lib/reports/data/kpiMetrics'
 import { ReportKpiTargets, autofillKpiSlots } from '@/lib/reports/data/kpiTargets'
 import { ReportYtdMetrics } from '@/lib/reports/data/ytdMetrics'
 import { ReportPostMetrics } from '@/lib/reports/data/posts'
+import { trackerToChartMonthly, type ReportMonthlyTracker } from '@/lib/reports/data/monthlyTracker'
 import type { AvailablePeriod } from '@/lib/reports/data/periodsQuery'
-import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportYtdContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportYtdContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportMonthlyContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import {
   ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig, makeSlide,
+  type MonthlyTrackerSetup,
   type ReportTemplateConfig, type ReportTemplateRecord,
 } from '@/lib/reports/data/slideModel'
 import CoverPreview from '../cover/CoverPreview'
@@ -152,6 +154,8 @@ export default function ReportBuilder({
   // Sentimen audiens + demografi untuk brand & bulan ini, dipakai slide Audience
   // Sentiment dan Audience Demographics.
   const [audienceMetrics, setAudienceMetrics] = useState<ReportAudienceMetrics | null>(null)
+  // 12 bulan s.d. bulan report, untuk slide Monthly Tracker Performance.
+  const [monthlyTracker, setMonthlyTracker] = useState<ReportMonthlyTracker | null>(null)
   // Bumped when the org custom-metric library changes (create/edit/delete) so the table
   // metrics refetch and newly-defined custom columns get their defs + live values.
   const [cmVersion, setCmVersion] = useState(0)
@@ -214,10 +218,10 @@ export default function ReportBuilder({
     return () => { alive = false }
   }, [orgId, brandId, month, year, cmVersion])
   useEffect(() => {
-    if (!brandId) { setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); setCompetitorPosts(null); setAudienceMetrics(null); return }
+    if (!brandId) { setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); setCompetitorPosts(null); setAudienceMetrics(null); setMonthlyTracker(null); return }
     const monthNum = MONTHS.indexOf(month) + 1
     let alive = true
-    setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); setCompetitorPosts(null); setAudienceMetrics(null)
+    setChartMetrics(null); setKpiMetrics(null); setPostMetrics(null); setCompetitorPosts(null); setAudienceMetrics(null); setMonthlyTracker(null)
     const base = `/api/organizations/${encodeURIComponent(orgId)}/reports`
     const qs = `brand=${encodeURIComponent(brandId)}&year=${year}&month=${monthNum}`
     fetch(`${base}/chart-metrics?${qs}`, { cache: 'no-store' })
@@ -238,6 +242,11 @@ export default function ReportBuilder({
       .then(r => (r.ok ? r.json() : null))
       .then((d: ReportAudienceMetrics | null) => { if (alive) setAudienceMetrics(d) })
       .catch(e => { if (alive) { console.error('[report] audience metrics fetch failed:', e); setAudienceMetrics(null) } })
+    // Monthly tracker: terpisah juga — gagal di sini tidak boleh mengosongkan slide lain.
+    fetch(`${base}/monthly-tracker?${qs}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: ReportMonthlyTracker | null) => { if (alive) setMonthlyTracker(d) })
+      .catch(e => { if (alive) { console.error('[report] monthly tracker fetch failed:', e); setMonthlyTracker(null) } })
     // Post kompetitor: dipakai slide Visual Content mode competitive review.
     // Diambil terpisah dari post-metrics karena sumbernya beda (l0_raw, bukan gold)
     // dan kegagalannya tidak boleh ikut menjatuhkan kumpulan post milik sendiri.
@@ -266,12 +275,21 @@ export default function ReportBuilder({
     return () => { alive = false }
   }, [brandId, brands, logoIsManual])
 
+  // Line chart berdimensi "Monthly" membaca deret bulanan dari payload monthly
+  // tracker — dirakit sekali di sini, jadi preview dan PPTX memakai angka yang sama.
+  const monthNum = MONTHS.indexOf(month) + 1
+  const chartCtx = useMemo<ReportChartMetrics | null>(
+    () => (chartMetrics ? { ...chartMetrics, monthly: trackerToChartMonthly(monthlyTracker, year, monthNum) } : null),
+    [chartMetrics, monthlyTracker, year, monthNum],
+  )
+  const monthlyCtx = useMemo(() => ({ data: monthlyTracker, year, month: monthNum }), [monthlyTracker, year, monthNum])
+
   const template = getTemplate(templateId)
   const kpiSlot = typeof configBlock === 'string' && configBlock.startsWith('kpi-') ? Number(configBlock.slice(4)) : null
   const slotOpen = typeof configBlock === 'string' && configBlock.startsWith('kpi-')
 
-  function addSlide(type: SlideType, channel = 'instagram') {
-    const base = makeSlide(type, ++slideSeq, channel)
+  function addSlide(type: SlideType, channel = 'instagram', tracker?: MonthlyTrackerSetup) {
+    const base = makeSlide(type, ++slideSeq, channel, tracker)
     // Slide KPI Overview lahir sudah terisi KPI aktif channel itu. Slide yang
     // lahir kosong memaksa pemakai memilih ulang satu per satu apa yang sudah
     // dia tentukan di tab KPI — dan kalau targetnya belum termuat, slotnya tetap
@@ -306,18 +324,26 @@ export default function ReportBuilder({
     setActiveSlideId(id)
     setStep('editSlide')
   }
-  function pickSlideType(type: SlideType, channel: string) {
+  function pickSlideType(type: SlideType, channel: string, tracker?: MonthlyTrackerSetup) {
     setPickerOpen(false)
-    openSlide(addSlide(type, channel).id)
+    openSlide(addSlide(type, channel, tracker).id)
   }
   function applyChart(config: ChartConfig) {
     if (activeSlide && (configBlock === 'chart' || configBlock === 'chartA' || configBlock === 'chartB')) {
-      updateSlide({ ...activeSlide, [configBlock]: config })
+      // Monthly Tracker: bulan mulai slide ikut ke chart barunya (modal tidak mengenalnya).
+      const next = activeSlide.type === 'monthly_tracker' && config.dimension === 'monthly'
+        ? { ...config, fromMonth: activeSlide.trackerFrom }
+        : config
+      updateSlide({ ...activeSlide, [configBlock]: next })
     }
     setConfigBlock(null)
   }
   function applyTable(config: TableConfig) {
-    if (activeSlide) updateSlide({ ...activeSlide, table: config })
+    // Tabel bulanan: Key Highlight yang sudah diketik dan bulan mulai slide dipertahankan.
+    const next = activeSlide && config.type === 'monthly_tracker'
+      ? { ...config, highlights: activeSlide.table?.highlights, fromMonth: activeSlide.trackerFrom }
+      : config
+    if (activeSlide) updateSlide({ ...activeSlide, table: next })
     setConfigBlock(null)
   }
   function applyMetric(key: string) {
@@ -370,7 +396,7 @@ export default function ReportBuilder({
       const cover = { brandName, title, subtitle, period, logoDataUrl, colors, mode, template, font }
       const { blob, fileName } = slides.length === 0
         ? await exportCoverPptx(cover)
-        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics })
+        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics: chartCtx, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker: monthlyCtx })
 
       downloadBlob(blob, fileName)
 
@@ -445,12 +471,13 @@ export default function ReportBuilder({
   return (
     <ReportAIContext.Provider value={{ orgId, brandName, period }}>
     <ReportMetricsContext.Provider value={tableMetrics}>
-    <ReportChartContext.Provider value={chartMetrics}>
+    <ReportChartContext.Provider value={chartCtx}>
     <ReportKpiContext.Provider value={kpiMetrics}>
     <ReportKpiTargetContext.Provider value={kpiTargets}>
     <ReportYtdContext.Provider value={ytdMetrics}>
     <ReportCompetitorPostContext.Provider value={competitorPosts}>
     <ReportAudienceContext.Provider value={audienceMetrics}>
+    <ReportMonthlyContext.Provider value={monthlyCtx}>
     <ReportPostContext.Provider value={postMetrics}>
     <div className="min-h-screen bg-[#f7f8f9]">
       <ToastHost toast={toast} onClose={clearToast} />
@@ -691,13 +718,14 @@ export default function ReportBuilder({
         )}
       </div>
 
-      <SlideTypePicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={pickSlideType} />
+      <SlideTypePicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={pickSlideType} reportYear={year} reportMonth={monthNum} />
 
       <ChartSelectionModal
         open={configBlock === 'chart' || configBlock === 'chartA' || configBlock === 'chartB'}
         orgId={orgId}
         onCustomMetricsChanged={() => setCmVersion(v => v + 1)}
         allowWordCloud={activeSlide?.type === 'comparison'}
+        monthlyOnly={activeSlide?.type === 'monthly_tracker'}
         availableCompetitors={competitorSectionFor(tableMetrics, activeSlide?.channel ?? 'instagram')?.competitors.map(c => ({ id: c.id, label: c.label })) ?? []}
         onClose={() => setConfigBlock(null)}
         onSelect={applyChart}
@@ -708,6 +736,7 @@ export default function ReportBuilder({
         orgId={orgId}
         onCustomMetricsChanged={() => setCmVersion(v => v + 1)}
         initial={activeSlide?.table ?? null}
+        monthlyOnly={activeSlide?.type === 'monthly_tracker'}
         channel={activeSlide?.channel ?? 'instagram'}
         availableCompetitors={competitorSectionFor(tableMetrics, activeSlide?.channel ?? 'instagram')?.competitors.map(c => ({ id: c.id, label: c.label })) ?? []}
         onClose={() => setConfigBlock(null)}
@@ -752,6 +781,7 @@ export default function ReportBuilder({
       />
     </div>
     </ReportPostContext.Provider>
+    </ReportMonthlyContext.Provider>
     </ReportAudienceContext.Provider>
     </ReportCompetitorPostContext.Provider>
     </ReportYtdContext.Provider>

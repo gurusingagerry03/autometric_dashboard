@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { SlideType } from '@/lib/reports/data/slideModel'
+import { SlideType, type MonthlyTrackerSetup, type TrackerLayout } from '@/lib/reports/data/slideModel'
+import { defaultTrackerFrom, trackerStartOptions } from '@/lib/reports/data/monthlyTracker'
 import { PLATFORM_META } from '@/components/dashboard/data'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -40,6 +41,7 @@ const TEMPLATES: Item[] = [
   { id: 'overview', name: 'Overview Slide', desc: 'Full Visualization & Notes', icon: 'view_quilt', enabled: true },
   { id: 'sentiment', name: 'Audience Sentiment', desc: 'Comments & tagged posts + word cloud', icon: 'sentiment_satisfied', enabled: true },
   { id: 'demographic', name: 'Audience Demographics', desc: 'Age & gender, month over month', icon: 'groups', enabled: true },
+  { id: 'monthly_tracker', name: 'Monthly Tracker Performance', desc: 'Month-by-month table, MoM change & trend', icon: 'calendar_month', enabled: true },
   { id: 'custom', name: 'Custom Template', desc: 'Configurable Grid (2×2, 3×3)', icon: 'grid_view', enabled: false },
 ]
 
@@ -78,7 +80,7 @@ const VARIANTS: Record<string, Item[]> = {
 // sentiment counts ADD UP across platforms (they are comment counts), while
 // demographics are per-platform shares that must never be blended — so the
 // demographic slide answers 'all' by drawing one panel per platform instead.
-const ALL_CHANNEL_TYPES = new Set<string>(['overview', 'comparison', 'sentiment', 'demographic'])
+const ALL_CHANNEL_TYPES = new Set<string>(['overview', 'comparison', 'sentiment', 'demographic', 'monthly_tracker'])
 
 interface Channel {
   id: string
@@ -95,12 +97,21 @@ const CHANNELS: Channel[] = [
   { id: 'all', name: 'All Channels', desc: 'Overview & Comparison only', icon: 'hub' },
 ]
 
+/** Dua bentuk slide Monthly Tracker — deck revisi, slide 12 dan slide 11. */
+const TRACKER_LAYOUTS: { id: TrackerLayout; name: string; desc: string; icon: string }[] = [
+  { id: 'chart_table', name: 'Chart + Table', desc: 'Trend line, AI summary and the monthly table', icon: 'monitoring' },
+  { id: 'table', name: 'Table only', desc: 'Monthly table with a key highlight per month', icon: 'table_rows' },
+]
+
 export default function SlideTypePicker({
-  open, onClose, onSelect,
+  open, onClose, onSelect, reportYear, reportMonth,
 }: {
   open: boolean
   onClose: () => void
-  onSelect: (type: SlideType, channel: string) => void
+  onSelect: (type: SlideType, channel: string, tracker?: MonthlyTrackerSetup) => void
+  /** Periode report — menentukan pilihan "mulai dari bulan" Monthly Tracker. */
+  reportYear: number
+  reportMonth: number
 }) {
   const t = useT()
   const [channel, setChannel] = useState<string | null>(null)
@@ -108,8 +119,17 @@ export default function SlideTypePicker({
   // daftar variannya, bukan flag — sekarang ada dua pintu yang memakainya.
   const [variants, setVariants] = useState<Item[] | null>(null)
 
+  // Monthly Tracker: layout + bulan mulai ditanyakan SEBELUM slidenya dibuat.
+  const [trackerSetup, setTrackerSetup] = useState(false)
+  const [trackerLayout, setTrackerLayout] = useState<TrackerLayout>('chart_table')
+  const [trackerFrom, setTrackerFrom] = useState(defaultTrackerFrom(reportYear))
+
   // Always start at the channel step when (re)opened.
-  useEffect(() => { if (open) { setChannel(null); setVariants(null) } }, [open])
+  useEffect(() => {
+    if (!open) return
+    setChannel(null); setVariants(null)
+    setTrackerSetup(false); setTrackerLayout('chart_table'); setTrackerFrom(defaultTrackerFrom(reportYear))
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
 
@@ -123,6 +143,7 @@ export default function SlideTypePicker({
     if (!tpl.enabled) return
     const next = VARIANTS[tpl.id as string]
     if (next) { setVariants(next); return }
+    if (tpl.id === 'monthly_tracker') { setTrackerSetup(true); return }
     onSelect(tpl.id as SlideType, channel!)
   }
 
@@ -136,8 +157,8 @@ export default function SlideTypePicker({
         <div className="flex items-center gap-3 px-6 py-4 border-b border-[#f0f1f2]">
           {channel && (
             <button
-              onClick={() => (variants ? setVariants(null) : setChannel(null))}
-              title={variants ? t('Back to layouts') : t('Back to channels')}
+              onClick={() => (trackerSetup ? setTrackerSetup(false) : variants ? setVariants(null) : setChannel(null))}
+              title={variants || trackerSetup ? t('Back to layouts') : t('Back to channels')}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors"
             >
               <span className="material-symbols-outlined text-[20px]">arrow_back</span>
@@ -145,10 +166,12 @@ export default function SlideTypePicker({
           )}
           <div className="flex-1">
             <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a]">
-              {variants ? 'Choose a template' : channel ? 'Choose a slide layout' : 'Choose a channel'}
+              {trackerSetup ? t('Monthly Tracker Performance') : variants ? 'Choose a template' : channel ? 'Choose a slide layout' : 'Choose a channel'}
             </h2>
             <p className="text-[12px] text-[#94a3b8] mt-0.5">
-              {variants
+              {trackerSetup
+                ? t('Pick the layout and the month the tracker starts from.')
+                : variants
                 ? 'Same layout, different content — pick which one this slide is.'
                 : channel
                   ? channel === 'all'
@@ -190,8 +213,48 @@ export default function SlideTypePicker({
           </div>
         )}
 
+        {/* Monthly Tracker — layout + bulan mulai, lalu slidenya dibuat */}
+        {channel && trackerSetup && (
+          <div className="p-6 space-y-5">
+            <div>
+              <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Layout')}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {TRACKER_LAYOUTS.map(l => {
+                  const on = trackerLayout === l.id
+                  return (
+                    <button key={l.id} onClick={() => setTrackerLayout(l.id)}
+                      className={`flex items-center gap-3.5 p-4 rounded-xl border text-left transition-all ${on ? 'border-[#2C3079] bg-[#F1F2FB] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:border-[#2C3079] hover:bg-[#F1F2FB]'}`}>
+                      <span className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${on ? 'bg-[#2C3079] text-white' : 'bg-[#E6E7F3] text-[#2C3079]'}`}>
+                        <span className="material-symbols-outlined text-[22px]">{l.icon}</span>
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p style={PJ} className="text-[13.5px] font-bold text-[#0f172a]">{t(l.name)}</p>
+                        <p className="text-[12px] text-[#94a3b8] mt-0.5">{t(l.desc)}</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Start from month')}</p>
+              <select value={trackerFrom} onChange={e => setTrackerFrom(e.target.value)} style={PJ}
+                className="w-full h-11 text-[13px] font-semibold text-[#334155] bg-white border border-[#e5e7eb] rounded-lg px-3 cursor-pointer hover:border-[#cbd5e1] outline-none">
+                {trackerStartOptions(reportYear, reportMonth).map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+              <p className="text-[11.5px] text-[#94a3b8] mt-1.5">{t('The tracker runs from this month through the report month.')}</p>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => onSelect('monthly_tracker', channel, { layout: trackerLayout, from: trackerFrom })} style={PJ}
+                className="px-5 py-2.5 bg-[#2C3079] text-white text-[13px] font-bold rounded-xl hover:bg-[#20224F] transition-colors">
+                {t('Add slide')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Step 2 — layout, dan Step 3 — bentuk slide di balik entri gabungan */}
-        {channel && (
+        {channel && !trackerSetup && (
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {items.map(tpl => (
               <button
