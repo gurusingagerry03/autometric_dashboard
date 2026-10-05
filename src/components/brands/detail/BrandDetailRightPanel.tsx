@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useBrandDetail } from './BrandDetailContext'
-import { PLATFORM_CONFIG } from '@/lib/brands/types'
+import { getPlatformConfig } from '@/lib/brands/types'
 import { useT } from '@/lib/i18n/LanguageContext'
 
 const PJB = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
@@ -75,7 +75,7 @@ export default function BrandDetailRightPanel() {
           <div className="flex items-center gap-2">
             {brand.accounts.map(acc => {
               const logo = PLATFORM_LOGO[acc.platform]
-              const cfg  = PLATFORM_CONFIG[acc.platform]
+              const cfg  = getPlatformConfig(acc.platform)
               if (!logo) return null
               return (
                 <a key={acc.id} href={acc.profile_url ?? getProfileUrl(acc.platform, acc.username)}

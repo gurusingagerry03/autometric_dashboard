@@ -18,6 +18,19 @@ export const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
 export const PLATFORM_LIST: Platform[] = ['instagram', 'tiktok', 'facebook', 'youtube', 'twitter']
 
 /**
+ * Config untuk key platform apa pun yang datang dari tabel `platforms`.
+ *
+ * Tabel itu tidak terikat ke union `Platform`: akun X dimasukkan dengan key `'x'`
+ * (bukan `'twitter'`), dan lookup langsung `PLATFORM_CONFIG[key]` lalu membaca
+ * `.label`/`.bg` dari undefined — satu akun asing cukup untuk membuat seluruh
+ * halaman brand gagal dimuat. Key yang tidak dikenal tetap tampil, pakai namanya.
+ */
+export function getPlatformConfig(key: string): PlatformConfig {
+  const known = PLATFORM_CONFIG[(key === 'x' ? 'twitter' : key) as Platform]
+  return known ?? { label: key, short: key.slice(0, 2).toUpperCase(), bg: '#6b7280', textColor: 'white' }
+}
+
+/**
  * Platforms a competitor can actually be tracked on — the ones with a working
  * scrape pipeline. YouTube and X stay in `Platform`/`PLATFORM_CONFIG` (the type
  * and any existing rows still reference them) but are kept out of the competitor

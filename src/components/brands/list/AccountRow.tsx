@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Brand, SocialAccount, PLATFORM_CONFIG } from '@/lib/brands/types'
+import { Brand, SocialAccount, getPlatformConfig } from '@/lib/brands/types'
 import BrandAvatar from '../BrandAvatar'
 import CompetitorAvatars from './CompetitorAvatars'
 import PlatformIcon from '../PlatformIcon'
@@ -18,7 +18,7 @@ function fmt(d: string | null) {
 }
 
 export default function AccountRow({ brand, account, orgSlug }: Props) {
-  const cfg = PLATFORM_CONFIG[account.platform]
+  const cfg = getPlatformConfig(account.platform)
 
   return (
     <div className="grid grid-cols-[1.6fr_1.2fr_1.4fr_1.2fr_1.3fr_1.3fr] items-center px-6 py-2.5 border-b border-[#e5e7eb] hover:bg-[#fafafa] transition-colors">

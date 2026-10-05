@@ -1,7 +1,7 @@
 'use client'
 
 import { useBrandDetail } from './BrandDetailContext'
-import { PLATFORM_CONFIG } from '@/lib/brands/types'
+import { getPlatformConfig } from '@/lib/brands/types'
 import PlatformIcon from '../PlatformIcon'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -79,7 +79,7 @@ export default function BrandOverviewTab() {
               <PlatformIcon platform={comp.platform} size={26} />
               <span className="flex-1 text-[13px] text-[#374151] font-medium">{comp.username}</span>
               <span style={PJB} className="text-[11px] text-[#9ca3af] uppercase tracking-wide">
-                {PLATFORM_CONFIG[comp.platform].short}
+                {getPlatformConfig(comp.platform).short}
               </span>
             </div>
           ))

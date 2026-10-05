@@ -1,4 +1,4 @@
-import { SocialAccount, CompetitorAccount, PLATFORM_CONFIG } from '@/lib/brands/types'
+import { SocialAccount, CompetitorAccount, getPlatformConfig } from '@/lib/brands/types'
 import CompetitorAvatars from './CompetitorAvatars'
 import AccountStatusBadge from './AccountStatusBadge'
 import PlatformIcon from '../PlatformIcon'
@@ -17,7 +17,7 @@ function fmt(d: string | null) {
 }
 
 export default function ChannelRow({ account, competitors, brandCreatedAt }: Props) {
-  const cfg = PLATFORM_CONFIG[account.platform]
+  const cfg = getPlatformConfig(account.platform)
 
   return (
     <div className="grid grid-cols-[1.6fr_1.4fr_1.2fr_1fr_1.3fr_1.3fr] items-center px-6 py-2.5 border-b border-[#e5e7eb] hover:bg-[#fafafa] transition-colors">

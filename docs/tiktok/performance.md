@@ -15,7 +15,7 @@
 ## Delta & spark
 
 - **Delta:** rumus diulang di window previous. Views/New/Lost/Net → `%`; **Lost Followers** memakai `lowerIsGood` (turun = hijau). Completion → poin (`pts`).
-- **Spark:** harian. Net Growth spark = **kumulatif** `net_growth`. Completion spark = avg harian dari `unified_post`.
+- **Spark:** harian. Net Growth spark = `net_growth` per tanggal (bukan kumulatif). Completion spark = avg harian dari `unified_post`.
 
 ## Contoh SQL (churn totals)
 

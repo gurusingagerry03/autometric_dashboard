@@ -1,4 +1,4 @@
-import { Platform, PLATFORM_CONFIG } from '@/lib/brands/types'
+import { Platform, getPlatformConfig } from '@/lib/brands/types'
 
 const LOGOS: Partial<Record<Platform, string>> = {
   instagram: '/instagram.png',
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function PlatformIcon({ platform, size = 22 }: Props) {
-  const cfg  = PLATFORM_CONFIG[platform]
+  const cfg  = getPlatformConfig(platform)
   const logo = LOGOS[platform]
 
   if (logo) {

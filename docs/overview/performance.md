@@ -33,7 +33,7 @@ Deret **harian** pada window current — `GROUP BY metric_date` di `dailySparks(
 | Total Engagement | `SUM(engagement_sum)` per tanggal |
 | Blended Eng. Rate | `SUM(engagement_sum)/SUM(er_denominator_sum)×100` per tanggal |
 | TK Video Views | `SUM(video_views_sum) FILTER (tiktok)` per tanggal |
-| Net Follower Growth | **kumulatif** `net_growth_sum` (akumulasi harian) |
+| Net Follower Growth | `SUM(net_growth_sum)` per tanggal (harian, bukan kumulatif) |
 
 ## Contoh SQL (Total Reach)
 
