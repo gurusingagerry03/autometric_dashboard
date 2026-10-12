@@ -9,14 +9,14 @@ import { ChartConfig, resolveBarData, resolveLineData, chartSummary, groupBarSer
 import { TableColumn, TableConfig, TABLE_TYPES, SectionMetrics, SentimentTable, CompetitorSection, PlatformMetrics, ReportTableMetrics, buildTable, columnsForChannel, sentimentTableFor, customColumnsFrom } from '../data/tableTypes'
 import { cloudWordsFrom, type ReportChartMetrics, type CloudWordData } from '../data/chartTypes'
 import {
-  AGE_BUCKETS, SENTIMENT_COLOR, SENTIMENT_KEYS, SENTIMENT_LABEL, SOURCE_LABEL,
+  ageBucketsFor, SENTIMENT_COLOR, SENTIMENT_KEYS, SENTIMENT_LABEL, SOURCE_LABEL,
   audienceWordsFor, biggestShift, demographicChannels, demographicsFor, sentimentFor,
   type ReportAudienceMetrics, type SentimentBlock, type SourceFilter,
 } from '../data/audienceTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
 import { KpiMetric, ReportKpiMetrics, deltaIsGood, resolveKpiMetric } from '../data/kpiMetrics'
 import {
-  KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiCount, fmtKpiPeriod, fmtKpiRate,
+  KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiValue, fmtKpiPeriod, fmtKpiRate,
   kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
 } from '../data/kpiTargets'
 import {
@@ -279,8 +279,8 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
       const cell = r.cells[c.id]
       // Key Highlight — teks bebas, rata kiri, bukan font angka.
       if (cell.note) return { text: cell.text || '—', options: { align: 'left' as const, color: '475569', fontSize: fsz.note, valign: 'middle' as const } }
-      const color = cell.gap ? (cell.positive ? '16A34A' : 'DC2626') : '475569'
-      const value = (cell.gap && cell.positive ? '+' : '') + cell.text
+      const color = cell.gap ? (cell.flat ? '0F172A' : cell.positive ? '16A34A' : 'DC2626') : '475569'
+      const value = cell.text
       // Perubahan MoM (tabel bulanan) = baris kedua kecil di sel yang sama.
       if (cell.sub) {
         const subColor = cell.sub.flat ? '94A3B8' : cell.sub.positive ? '16A34A' : 'DC2626'
@@ -458,9 +458,9 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
   const rateFs = FS(count >= 6 ? 0.72 : count === 5 ? 0.78 : count === 4 ? 0.82 : 0.88)
 
   slide.addText(kpiTargetLabel(target.metric).toUpperCase(), { x: x + pad, y: y + H(1.6), w: bw, h: H(2.4), fontSize: FS(count >= 6 ? 0.8 : 0.95), bold: true, color: '94A3B8', fontFace: PJ })
-  slide.addText(fmtKpiCount(target.achieved), { x: x + pad, y: y + H(4.6), w: bw, h: H(5), fontSize: FS(valueCqw), bold: true, color: '0F172A', fontFace: PJ })
+  slide.addText(fmtKpiValue(target.metric, target.achieved), { x: x + pad, y: y + H(4.6), w: bw, h: H(5), fontSize: FS(valueCqw), bold: true, color: '0F172A', fontFace: PJ })
   slide.addText(
-    `Target ${target.operation} ${fmtKpiCount(target.target)}  ·  ${fmtKpiPeriod(target.startDate, target.endDate)}`,
+    `Target ${target.operation} ${fmtKpiValue(target.metric, target.target)}  ·  ${fmtKpiPeriod(target.startDate, target.endDate)}`,
     { x: x + pad, y: y + H(10), w: bw, h: H(2.2), fontSize: metaFs, color: '94A3B8', fontFace: PJ },
   )
 
@@ -887,14 +887,19 @@ function demographicPanel(
   if (showAge) {
     s.addText('AGE GROUP', { x: x + W(1), y: cursor, w: w - W(2), h: H(2.6), fontSize: FS(0.95), bold: true, color: '94A3B8', charSpacing: 0.5, fontFace: PJ })
     cursor += H(3)
-    const max = Math.max(...AGE_BUCKETS.map(b => Math.max(cur.age[b] ?? 0, prev?.age[b] ?? 0)), 1)
+    const buckets = ageBucketsFor(platform)
+    const max = Math.max(...buckets.map(([, k]) => Math.max(cur.age[k] ?? 0, prev?.age[k] ?? 0)), 1)
     const rowH = H(2.6)
-    const labelW = W(4.4), valW = W(3.2), deltaW = W(2.8)
-    const barW = w - W(2) - labelW - valW - deltaW - W(1.5)
-    for (const b of AGE_BUCKETS) {
+    // Wide enough for "100.0%" / "+12.3" at three panels per slide; with the old
+    // 3.2/2.8 widths PowerPoint wrapped the % and the sign onto their own lines.
+    // Every text box in these rows is margin 0 + no wrap for the same reason.
+    const labelW = W(4.4), valW = W(4.6), deltaW = W(3.8)
+    const barW = Math.max(w - W(2) - labelW - valW - deltaW - W(1), W(4))
+    const tight = { margin: 0, wrap: false, valign: 'middle' as const, fontFace: PJ }
+    for (const [label, b] of buckets) {
       const now = cur.age[b] ?? 0
       const before = prev ? (prev.age[b] ?? 0) : null
-      s.addText(b, { x: x + W(1), y: cursor, w: labelW, h: rowH, align: 'right', valign: 'middle', fontSize: FS(1), color: '64748B', fontFace: PJ })
+      s.addText(label, { ...tight, x: x + W(1), y: cursor, w: labelW, h: rowH, align: 'right', fontSize: FS(1), color: '64748B' })
       const bx = x + W(1) + labelW + W(0.5)
       s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: barW, h: H(1.5), rectRadius: 0.02, fill: { color: 'F1F5F9' }, line: { width: 0 } })
       if (now > 0) s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: Math.max(barW * (now / max), 0.02), h: H(1.5), rectRadius: 0.02, fill: { color: noHash(accent) }, line: { width: 0 } })
@@ -902,11 +907,11 @@ function demographicPanel(
       if (before !== null) {
         s.addShape('rect', { x: bx + barW * (before / max), y: cursor + H(0.3), w: W(0.16), h: H(2), fill: { color: '0F172A', transparency: 62 }, line: { width: 0 } })
       }
-      s.addText(`${now.toFixed(1)}%`, { x: bx + barW + W(0.5), y: cursor, w: valW, h: rowH, align: 'right', valign: 'middle', fontSize: FS(1), bold: true, color: '0F172A', fontFace: PJ })
+      s.addText(`${now.toFixed(1)}%`, { ...tight, x: bx + barW + W(0.5), y: cursor, w: valW, h: rowH, align: 'right', fontSize: FS(1), bold: true, color: '0F172A' })
       const d = before === null ? null : +(now - before).toFixed(1)
       s.addText(d === null ? '—' : Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''), {
-        x: bx + barW + W(0.5) + valW, y: cursor, w: deltaW, h: rowH, align: 'right', valign: 'middle',
-        fontSize: FS(0.95), bold: true, color: d === null ? 'CBD5E1' : Math.abs(d) < 0.05 ? 'A3ADBA' : d > 0 ? '15803D' : 'B91C1C', fontFace: PJ,
+        ...tight, x: bx + barW + W(0.5) + valW, y: cursor, w: deltaW, h: rowH, align: 'right',
+        fontSize: FS(0.95), bold: true, color: d === null ? 'CBD5E1' : Math.abs(d) < 0.05 ? 'A3ADBA' : d > 0 ? '15803D' : 'B91C1C',
       })
       cursor += rowH
     }
@@ -925,9 +930,11 @@ function demographicPanel(
     cursor += H(3)
     const fd = prev ? +(cur.female - prev.female).toFixed(1) : null
     const md = prev ? +(cur.male - prev.male).toFixed(1) : null
-    const dTxt = (d: number | null) => (d === null ? '—' : Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''))
-    s.addText(`● Female  ${dTxt(fd)}`, { x: x + W(1), y: cursor, w: gw / 2, h: H(2.6), fontSize: FS(0.95), color: '64748B', fontFace: PJ })
-    s.addText(`● Male  ${dTxt(md)}`, { x: x + W(1) + gw / 2, y: cursor, w: gw / 2, h: H(2.6), align: 'right', fontSize: FS(0.95), color: '64748B', fontFace: PJ })
+    // Bare "Female 0.0" read as a 0% share; spell out that it is the change in points.
+    const dTxt = (d: number | null) => (d === null ? '' : `  (${Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', '')} pp)`)
+    const legend = { margin: 0, wrap: false, valign: 'middle' as const, fontFace: PJ, fontSize: FS(0.95), color: '64748B', h: H(2.6), y: cursor, w: gw / 2 }
+    s.addText(`● Female ${cur.female.toFixed(1)}%${dTxt(fd)}`, { ...legend, x: x + W(1) })
+    s.addText(`● Male ${cur.male.toFixed(1)}%${dTxt(md)}`, { ...legend, x: x + W(1) + gw / 2, align: 'right' })
   }
 }
 

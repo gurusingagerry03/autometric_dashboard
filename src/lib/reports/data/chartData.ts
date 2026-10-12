@@ -61,14 +61,37 @@ export const BAR_CATEGORIES = [
     ],
   },
   {
+    // Mirrors the KPI catalog (lib/kpi/types KPI_METRICS) so a KPI Overview's
+    // deep-dive chart offers the same metrics its cards measure. 'er_reach' is the
+    // mean of per-post ER (unchanged id, so saved slides keep their series) — the
+    // pooled ΣEng/ΣReach is 'er_reach_pooled'.
     id: 'last3months_performance', label: 'Last 3 Months Performance', desc: 'Quarterly comparison',
     metrics: [
       { id: 'followers', label: 'Followers' },
+      { id: 'net_followers_growth', label: 'Followers Growth' },
       { id: 'followers_growth_pct', label: 'Followers Growth (%)' },
-      { id: 'er_reach', label: 'ER Reach' },
+      { id: 'er_reach_pooled', label: 'ER Reach (%)' },
+      { id: 'er_reach', label: 'Avg. ER Reach per Post (%)' },
+      { id: 'er_views_pooled', label: 'ER Views (%)' },
+      { id: 'avg_er_views', label: 'Avg. ER Views per Post (%)' },
       { id: 'engagements', label: 'Engagements' },
-      { id: 'avg_engagements', label: 'Avg Engagements' },
+      { id: 'avg_engagements', label: 'Avg. Engagement per Post' },
       { id: 'total_reach', label: 'Total Reach' },
+      { id: 'avg_reach', label: 'Avg. Reach per Post' },
+      { id: 'views', label: 'Views' },
+      { id: 'avg_views', label: 'Avg. Views per Post' },
+      { id: 'likes', label: 'Likes' },
+      { id: 'avg_likes', label: 'Avg. Likes per Post' },
+      { id: 'comments', label: 'Comments' },
+      { id: 'avg_comments', label: 'Avg. Comments per Post' },
+      { id: 'shares', label: 'Shares' },
+      { id: 'avg_shares', label: 'Avg. Shares per Post' },
+      { id: 'saves', label: 'Saves' },
+      { id: 'avg_saves', label: 'Avg. Saves per Post' },
+      { id: 'post_count', label: 'Post Count' },
+      { id: 'new_followers', label: 'New Followers' },
+      { id: 'profile_views', label: 'Profile Visits' },
+      { id: 'profile_reach', label: 'Profile Reach' },
     ],
   },
   {
@@ -125,6 +148,14 @@ export const METRIC_LABELS: Record<string, string> = (() => {
   BAR_CATEGORIES.forEach(c => c.metrics.forEach(x => (m[x.id] = x.label)))
   return m
 })()
+
+/**
+ * Bar metric label as its OWN category names it. METRIC_LABELS is one flat map,
+ * so an id shared by several categories ('avg_reach', 'likes', …) carries
+ * whichever label was registered last — wrong for every other category.
+ */
+export const barMetricLabel = (cat: string | undefined, id: string): string | undefined =>
+  BAR_CATEGORIES.find(c => c.id === cat)?.metrics.find(x => x.id === id)?.label ?? METRIC_LABELS[id]
 
 /* ── axis labels (real labels; used as placeholders only while ctx is null) ────── */
 
@@ -276,7 +307,7 @@ export function resolveBarData(
     ids.forEach((id, idx) => {
       const data = entities.map(e => e.metrics[id] ?? 0)
       if (data.some(v => Number.isFinite(v) && v !== 0)) {
-        series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: paletteBar[idx % paletteBar.length], data, scale: barScale(data) })
+        series.push({ name: barMetricLabel(cat, id) ?? customLabel(id) ?? id, color: paletteBar[idx % paletteBar.length], data, scale: barScale(data) })
       }
     })
     return { labels, series }
@@ -304,7 +335,7 @@ export function resolveBarData(
       const zeros = new Array<number>(n).fill(0)
       const currData = curr?.length === n ? curr : zeros
       const prevData = prev?.length === n ? prev : zeros
-      const title = METRIC_LABELS[id] ?? customLabel(id) ?? id
+      const title = barMetricLabel(cat, id) ?? customLabel(id) ?? id
       const scale = barScale([...currData, ...prevData])
       series.push({ name: prevLabel, group: title, color: PREV_PERIOD_COLOR, data: prevData, scale })
       series.push({ name: currLabel, group: title, color: palette[idx % palette.length], data: currData, scale })
@@ -318,7 +349,7 @@ export function resolveBarData(
   ids.forEach((id, idx) => {
     const real = catData?.metrics?.[id]
     if (real && real.length === n) {
-      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx % palette.length], data: real, scale: barScale(real) })
+      series.push({ name: barMetricLabel(cat, id) ?? customLabel(id) ?? id, color: palette[idx % palette.length], data: real, scale: barScale(real) })
     }
   })
   return { labels, series }
@@ -339,7 +370,7 @@ export function chartSummary(c: ChartConfig, labelOf?: (id: string) => string | 
   const lbl = (m: string) => METRIC_LABELS[m] ?? labelOf?.(m) ?? m
   if (c.chartType === 'line') return (c.metrics ?? []).map(lbl).join(' · ')
   if (c.chartType === 'bar') {
-    const metrics = (c.barMetrics ?? []).map(lbl).join(' · ')
+    const metrics = (c.barMetrics ?? []).map(m => barMetricLabel(c.barCategory, m) ?? labelOf?.(m) ?? m).join(' · ')
     return c.barCompare === 'period' ? `${metrics} · vs previous month` : metrics
   }
   return `Word cloud${c.sentiment && c.sentiment !== 'all' ? ` · ${c.sentiment}` : ''}`

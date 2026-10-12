@@ -2,7 +2,7 @@
 
 import { useReportKpiTargets } from '@/lib/reports/data/metricsContext'
 import {
-  fmtKpiCount, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
+  fmtKpiValue, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
   kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
 } from '@/lib/reports/data/kpiTargets'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -74,10 +74,10 @@ export default function KpiTargetPickerModal({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p style={PJ} className="text-[13px] font-bold text-[#0f172a] truncate">
-                        {t(kpiTargetLabel(k.metric))} {k.operation} {fmtKpiCount(k.target)}
+                        {t(kpiTargetLabel(k.metric))} {k.operation} {fmtKpiValue(k.metric, k.target)}
                       </p>
                       <p className="text-[11.5px] text-[#94a3b8] truncate">
-                        {fmtKpiPeriod(k.startDate, k.endDate)} · {fmtKpiCount(k.achieved)} {t('achieved')}
+                        {fmtKpiPeriod(k.startDate, k.endDate)} · {fmtKpiValue(k.metric, k.achieved)} {t('achieved')}
                       </p>
                     </div>
                     {/* Capaiannya ikut ditampilkan di pemilih: memilih KPI tanpa

@@ -9,7 +9,7 @@
 //   berarti dua rumus untuk satu angka, dan yang di slide-lah yang akan diam-diam
 //   berbeda dari yang tersimpan.
 import type { DashPlatform } from '@/components/dashboard/data'
-import { KPI_METRIC_LABEL, type KpiMetric } from '@/lib/kpi/types'
+import { KPI_METRIC_LABEL, kpiMetricUnit, type KpiMetric } from '@/lib/kpi/types'
 import { groupInt } from './format'
 
 /** Satu KPI brand beserta capaiannya. */
@@ -76,13 +76,39 @@ const ICON: Record<KpiMetric, string> = {
   shares:           'send',
   saves:            'bookmark',
   post_count:       'grid_view',
+  er_reach:         'bar_chart',
+  avg_er_reach:     'bar_chart',
+  er_views:         'bar_chart',
+  avg_er_views:     'bar_chart',
+  avg_engagement:   'touch_app',
+  avg_reach:        'ads_click',
+  avg_views:        'play_circle',
+  avg_likes:        'favorite',
+  avg_comments:     'chat_bubble',
+  avg_shares:       'send',
+  avg_saves:        'bookmark',
+  new_followers:    'person_add',
+  profile_visits:   'person',
+  profile_reach:    'ads_click',
+  link_clicks:      'mouse',
 }
 
 export const kpiTargetIcon = (m: KpiMetric): string => ICON[m] ?? 'flag'
 export const kpiTargetLabel = (m: KpiMetric): string => KPI_METRIC_LABEL[m] ?? m
 
-/** Angka capaian/target — bilangan bulat penuh, sama dengan tabel report. */
-export const fmtKpiCount = (n: number | null): string => (n == null ? '—' : groupInt(n))
+/**
+ * Capaian/target menurut satuan metriknya: hitungan → bilangan bulat penuh (sama
+ * dengan tabel report), ER → "5.25%", rata-rata per post → "1,234.56".
+ * Bilangan bulat untuk ER akan mencetak target 3.5% sebagai "4".
+ */
+export function fmtKpiValue(metric: KpiMetric, n: number | null): string {
+  if (n == null) return '—'
+  const unit = kpiMetricUnit(metric)
+  if (unit === 'count') return groupInt(n)
+  const r = Math.round(n * 100) / 100
+  const [int, dec] = Math.abs(r).toFixed(2).split('.')
+  return `${r < 0 ? '-' : ''}${groupInt(Number(int))}.${dec}${unit === 'pct' ? '%' : ''}`
+}
 
 /** Persentase capaian/run rate: satu desimal, dan ribuan tetap dipisah (1.508,9%). */
 export const fmtKpiRate = (n: number | null): string => {
