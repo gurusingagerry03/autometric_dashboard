@@ -16,7 +16,7 @@ import {
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
 import { KpiMetric, ReportKpiMetrics, deltaIsGood, resolveKpiMetric } from '../data/kpiMetrics'
 import {
-  KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiValue, fmtKpiPeriod, fmtKpiRate,
+  KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiCount, fmtKpiPeriod, fmtKpiRate,
   kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
 } from '../data/kpiTargets'
 import {
@@ -458,9 +458,9 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
   const rateFs = FS(count >= 6 ? 0.72 : count === 5 ? 0.78 : count === 4 ? 0.82 : 0.88)
 
   slide.addText(kpiTargetLabel(target.metric).toUpperCase(), { x: x + pad, y: y + H(1.6), w: bw, h: H(2.4), fontSize: FS(count >= 6 ? 0.8 : 0.95), bold: true, color: '94A3B8', fontFace: PJ })
-  slide.addText(fmtKpiValue(target.metric, target.achieved), { x: x + pad, y: y + H(4.6), w: bw, h: H(5), fontSize: FS(valueCqw), bold: true, color: '0F172A', fontFace: PJ })
+  slide.addText(fmtKpiCount(target.achieved), { x: x + pad, y: y + H(4.6), w: bw, h: H(5), fontSize: FS(valueCqw), bold: true, color: '0F172A', fontFace: PJ })
   slide.addText(
-    `Target ${target.operation} ${fmtKpiValue(target.metric, target.target)}  ·  ${fmtKpiPeriod(target.startDate, target.endDate)}`,
+    `Target ${target.operation} ${fmtKpiCount(target.target)}  ·  ${fmtKpiPeriod(target.startDate, target.endDate)}`,
     { x: x + pad, y: y + H(10), w: bw, h: H(2.2), fontSize: metaFs, color: '94A3B8', fontFace: PJ },
   )
 

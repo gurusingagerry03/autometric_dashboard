@@ -7,7 +7,7 @@ import {
 } from '@/lib/reports/data/slideModel'
 import { KpiMetric, deltaIsGood, resolveKpiMetric } from '@/lib/reports/data/kpiMetrics'
 import {
-  KPI_TARGET_MAX, KpiTarget, fmtKpiValue, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
+  KPI_TARGET_MAX, KpiTarget, fmtKpiCount, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
   kpiTargetById, kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
 } from '@/lib/reports/data/kpiTargets'
 import { useReportKpi, useReportKpiTargets, useReportMetrics, useReportYtd } from '@/lib/reports/data/metricsContext'
@@ -174,14 +174,14 @@ function TargetCard({
       </div>
 
       <div style={{ fontSize: s.value, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1, ...PJ }}>
-        {fmtKpiValue(target.metric, target.achieved)}
+        {fmtKpiCount(target.achieved)}
       </div>
 
       {/* Target dan periodenya — dua dari tiga hal yang mendefinisikan KPI ini
           (metriknya sudah jadi judul kartu). Tanpa keduanya, angka capaian di
           atas tidak bisa dinilai siapa pun yang tidak ikut men-set-nya. */}
       <div className="truncate" style={{ fontSize: s.meta, color: '#94a3b8', ...PJ }}>
-        {t('Target')} {target.operation} {fmtKpiValue(target.metric, target.target)} · {fmtKpiPeriod(target.startDate, target.endDate)}
+        {t('Target')} {target.operation} {fmtKpiCount(target.target)} · {fmtKpiPeriod(target.startDate, target.endDate)}
       </div>
 
       <div className="flex flex-col" style={{ gap: '0.35cqh' }}>
