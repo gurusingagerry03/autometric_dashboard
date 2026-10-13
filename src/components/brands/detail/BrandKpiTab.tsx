@@ -8,9 +8,10 @@ import CustomMetricModal from '@/components/reports/modals/CustomMetricModal'
 import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
 import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import {
-  KPI_METRICS_BY_PLATFORM, KPI_METRIC_LABEL, KPI_OPERATIONS, KPI_PLATFORMS,
+  KPI_METRICS_BY_PLATFORM, KPI_METRIC_LABEL, KPI_OPERATIONS, KPI_PLATFORMS, kpiMetricUnit,
   type KpiInput, type KpiMetric, type KpiOperation, type KpiPlatform, type KpiRow,
 } from '@/lib/kpi/types'
+import { fmtKpiValue } from '@/lib/reports/data/kpiTargets'
 import type { Platform } from '@/lib/brands/types'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -249,6 +250,8 @@ export default function BrandKpiTab() {
   }
 
   const metricOptions = draft ? KPI_METRICS_BY_PLATFORM[draft.platform] : []
+  // ER (persen) dan rata-rata per post butuh desimal; hitungan tetap bulat.
+  const unit = draft?.metric ? kpiMetricUnit(draft.metric) : 'count'
 
   return (
     <div className="max-w-4xl pb-10">
@@ -343,7 +346,7 @@ export default function BrandKpiTab() {
                 <div key={i} className="flex items-center gap-2 rounded-lg bg-white border border-[#e5e7eb] px-3 py-2">
                   <PlatformIcon platform={s.platform as Platform} size={16} />
                   <span style={PJB} className="text-[12.5px] font-semibold text-[#374151]">
-                    {t(KPI_METRIC_LABEL[s.metric])} {s.operation} {s.valueTarget.toLocaleString('en-US')}
+                    {t(KPI_METRIC_LABEL[s.metric])} {s.operation} {fmtKpiValue(s.metric, s.valueTarget)}
                   </span>
                   <span className="text-[11.5px] text-[#6b7280]">{fmtSelection(s.startDate, s.endDate, t)}</span>
                   <button onClick={() => setStaged(list => list.filter((_, j) => j !== i))} title={t('Remove')}
@@ -388,8 +391,11 @@ export default function BrandKpiTab() {
             </label>
 
             <label className="w-[120px]">
-              <span className="block text-[11px] font-semibold text-[#6b7280] mb-1">{t('Value')}</span>
-              <input type="number" min={1} inputMode="numeric" value={draft.value} placeholder="1000"
+              <span className="block text-[11px] font-semibold text-[#6b7280] mb-1">{t('Value')}{unit === 'pct' ? ' (%)' : ''}</span>
+              <input type="number" value={draft.value}
+                min={unit === 'count' ? 1 : 0.01} step={unit === 'count' ? 1 : 0.01}
+                inputMode={unit === 'count' ? 'numeric' : 'decimal'}
+                placeholder={unit === 'pct' ? '5' : unit === 'avg' ? '250' : '1000'}
                 className={fieldCls} onChange={e => setDraft({ ...draft, value: e.target.value })} />
             </label>
 
@@ -442,7 +448,7 @@ export default function BrandKpiTab() {
               <span className="text-[12.5px] text-[#374151] truncate">{PLATFORM_LABEL[row.platform]}</span>
             </span>
             <span style={PJB} className="text-[12.5px] font-semibold text-[#111827]">
-              {t(KPI_METRIC_LABEL[row.metric])} {row.operation} {row.valueTarget.toLocaleString('en-US')}
+              {t(KPI_METRIC_LABEL[row.metric])} {row.operation} {fmtKpiValue(row.metric, row.valueTarget)}
             </span>
             <span className="text-[12px] text-[#6b7280]">{fmtSelection(row.startDate, row.endDate, t)}</span>
             <span className="flex justify-end">

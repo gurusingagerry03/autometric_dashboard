@@ -11,26 +11,58 @@
 export const KPI_PLATFORMS = ['instagram', 'facebook', 'tiktok'] as const
 export type KpiPlatform = (typeof KPI_PLATFORMS)[number]
 
-/** 11 key yang dipetakan procedure. Urutannya = urutan tampil di dropdown. */
+/**
+ * Key yang dipetakan procedure (migration 057). Urutannya = urutan tampil di
+ * dropdown — mengikuti daftar "mandatory" deck revisi: tiap metrik diikuti
+ * versi rata-rata per post-nya.
+ */
 export const KPI_METRICS = [
-  'followers_growth', 'engagement', 'reach', 'impressions',
-  'views', 'video_views', 'likes', 'comments', 'shares', 'saves', 'post_count',
+  'followers_growth',
+  'er_reach', 'avg_er_reach', 'er_views', 'avg_er_views',
+  'engagement', 'avg_engagement', 'reach', 'avg_reach', 'views', 'avg_views',
+  'impressions', 'video_views',
+  'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares', 'saves', 'avg_saves',
+  'post_count', 'new_followers', 'profile_visits', 'profile_reach', 'link_clicks',
 ] as const
 export type KpiMetric = (typeof KPI_METRICS)[number]
 
 export const KPI_METRIC_LABEL: Record<KpiMetric, string> = {
   followers_growth: 'Followers Growth',
+  er_reach:         'ER Reach',
+  avg_er_reach:     'Avg. ER Reach per Post',
+  er_views:         'ER Views',
+  avg_er_views:     'Avg. ER Views per Post',
   engagement:       'Engagement',
+  avg_engagement:   'Avg. Engagement per Post',
   reach:            'Reach',
-  impressions:      'Impressions',
+  avg_reach:        'Avg. Reach per Post',
   views:            'Views',
+  avg_views:        'Avg. Views per Post',
+  impressions:      'Impressions',
   video_views:      'Video Views',
   likes:            'Likes',
+  avg_likes:        'Avg. Likes per Post',
   comments:         'Comments',
+  avg_comments:     'Avg. Comments per Post',
   shares:           'Shares',
+  avg_shares:       'Avg. Shares per Post',
   saves:            'Saves',
+  avg_saves:        'Avg. Saves per Post',
   post_count:       'Post Count',
+  new_followers:    'New Followers',
+  profile_visits:   'Profile Visits',
+  profile_reach:    'Profile Reach',
+  link_clicks:      'Link Clicks',
 }
+
+/**
+ * Satuan nilai KPI: 'pct' = ER dalam persen (5.25 → "5.25%"), 'avg' = rata-rata
+ * per post (dua desimal), 'count' = bilangan bulat. Dipakai form (step input,
+ * akhiran %) dan semua tempat yang mencetak target/capaian.
+ */
+export type KpiUnit = 'count' | 'avg' | 'pct'
+export const kpiMetricUnit = (m: KpiMetric): KpiUnit =>
+  m.startsWith('er_') || m.startsWith('avg_er_') ? 'pct' : m.startsWith('avg_') ? 'avg' : 'count'
 
 /**
  * Metrik yang boleh dipilih per platform.
@@ -47,10 +79,26 @@ export const KPI_METRIC_LABEL: Record<KpiMetric, string> = {
  *   Facebook & TikTok (selalu 0), `reach` di TikTok (35 dari 439 baris),
  *   `views`/`video_views` di Facebook (42 dari 343 baris).
  */
+const ALLOWED: Record<KpiPlatform, readonly KpiMetric[]> = {
+  instagram: ['followers_growth', 'er_reach', 'avg_er_reach', 'er_views', 'avg_er_views',
+              'engagement', 'avg_engagement', 'reach', 'avg_reach', 'views', 'avg_views', 'video_views',
+              'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares', 'saves', 'avg_saves',
+              'post_count', 'new_followers', 'profile_visits', 'profile_reach', 'link_clicks'],
+  facebook:  ['followers_growth', 'er_reach', 'avg_er_reach',
+              'engagement', 'avg_engagement', 'reach', 'avg_reach', 'impressions',
+              'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares',
+              'post_count', 'new_followers', 'profile_visits', 'profile_reach', 'link_clicks'],
+  // TikTok: reach jarang terisi → tanpa ER Reach / Avg Reach; link clicks selalu 0.
+  tiktok:    ['followers_growth', 'er_views', 'avg_er_views',
+              'engagement', 'avg_engagement', 'views', 'avg_views', 'video_views',
+              'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares',
+              'post_count', 'new_followers', 'profile_visits', 'profile_reach'],
+}
+// Urutan dropdown selalu mengikuti KPI_METRICS, berapa pun isi per platform.
 export const KPI_METRICS_BY_PLATFORM: Record<KpiPlatform, readonly KpiMetric[]> = {
-  instagram: ['followers_growth', 'engagement', 'reach', 'views', 'video_views', 'likes', 'comments', 'shares', 'saves', 'post_count'],
-  facebook:  ['followers_growth', 'engagement', 'reach', 'impressions', 'likes', 'comments', 'shares', 'post_count'],
-  tiktok:    ['followers_growth', 'engagement', 'views', 'video_views', 'likes', 'comments', 'shares', 'post_count'],
+  instagram: KPI_METRICS.filter(m => ALLOWED.instagram.includes(m)),
+  facebook:  KPI_METRICS.filter(m => ALLOWED.facebook.includes(m)),
+  tiktok:    KPI_METRICS.filter(m => ALLOWED.tiktok.includes(m)),
 }
 
 /**
