@@ -2,12 +2,11 @@
 // dashboard. Dipakai bersama preview, exporter, dan jalur AI, jadi berkas ini
 // tidak boleh mengimpor apa pun dari sisi server.
 //
-// ANGKANYA MILIK PROCEDURE, BUKAN MILIK BERKAS INI
+// ANGKANYA MILIK SERVER, BUKAN MILIK BERKAS INI
 //   `achieved`, `achievementRate`, dan `runRate` datang apa adanya dari
-//   `l2_gold.kpi_achievement` — hasil `l2_gold.sp_calculate_kpi_achievement`.
-//   Tidak ada satu pun yang dihitung ulang di sini: menghitung ulang di client
-//   berarti dua rumus untuk satu angka, dan yang di slide-lah yang akan diam-diam
-//   berbeda dari yang tersimpan.
+//   kpiTargetQuery, dihitung sampai periode report (`asOf`). Tidak ada satu pun
+//   yang dihitung ulang di sini: menghitung ulang di client berarti dua rumus
+//   untuk satu angka, dan yang di slide-lah yang akan diam-diam berbeda.
 import type { DashPlatform } from '@/components/dashboard/data'
 import { KPI_METRIC_LABEL, type KpiMetric } from '@/lib/kpi/types'
 import { groupInt } from './format'
@@ -19,12 +18,14 @@ export interface KpiTarget {
   metric: KpiMetric
   operation: string
   target: number
-  /** null = procedure belum pernah jalan untuk KPI ini (baris capaiannya belum ada). */
+  /** null = capaiannya gagal dihitung (metrik di luar katalog, atau query error). */
   achieved: number | null
   achievementRate: number | null   // achieved / target × 100
   runRate: number | null           // hari berjalan / total hari × 100
   startDate: string                // YYYY-MM-DD
   endDate: string                  // YYYY-MM-DD
+  /** Hari terakhir yang ikut dihitung: LEAST(hari ini, endDate, akhir bulan report). */
+  asOf?: string                    // YYYY-MM-DD
 }
 
 /** KPI aktif per platform, untuk satu brand. */
@@ -84,11 +85,12 @@ export const kpiTargetLabel = (m: KpiMetric): string => KPI_METRIC_LABEL[m] ?? m
 /** Angka capaian/target — bilangan bulat penuh, sama dengan tabel report. */
 export const fmtKpiCount = (n: number | null): string => (n == null ? '—' : groupInt(n))
 
-/** Persentase capaian/run rate: satu desimal, dan ribuan tetap dipisah (1.508,9%). */
+/** Persentase capaian/run rate: "#.##%" seperti persen lain di report (deck
+ *  revisi Dashboard, slide 15), dan ribuan tetap dipisah (1,508.94%). */
 export const fmtKpiRate = (n: number | null): string => {
   if (n == null) return '—'
-  const r = Math.round(n * 10) / 10
-  const [int, dec] = Math.abs(r).toFixed(1).split('.')
+  const r = Math.round(n * 100) / 100
+  const [int, dec] = Math.abs(r).toFixed(2).split('.')
   return `${r < 0 ? '-' : ''}${groupInt(Number(int))}.${dec}%`
 }
 

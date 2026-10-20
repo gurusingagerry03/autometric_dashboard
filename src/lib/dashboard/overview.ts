@@ -5,6 +5,7 @@ import type {
 } from '@/components/dashboard/data'
 import { fmtNum, fmtInt, compact, compactSigned, fmtPct, fmtSignedPct, fmtPts, round2, pct2 } from './format'
 import type { Translator } from '@/lib/i18n/translate'
+import { EOD_GROWTH, PREV_EOD_JOIN } from '@/lib/metrics/followerGrowth'
 
 /**
  * Gold-layer data access for the Overview dashboard, scoped to one organization.
@@ -89,8 +90,9 @@ async function totals(orgId: string, platform: PlatformParam, w: Window, brandId
         COALESCE(SUM(bmd.engagement_sum),0)::float   eng,
         COALESCE(SUM(bmd.er_denominator_sum),0)::float erden,
         COALESCE(SUM(bmd.video_views_sum) FILTER (WHERE bmd.platform='tiktok'),0)::float tkviews,
-        COALESCE(SUM(bmd.net_growth_sum),0)::float   net
+        COALESCE(SUM(${EOD_GROWTH}),0)::float        net
        FROM l2_gold.brand_metric_daily bmd
+       ${PREV_EOD_JOIN}
        JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'bmd')})
         AND bmd.metric_date BETWEEN $3 AND $4
@@ -107,8 +109,9 @@ async function dailySparks(orgId: string, platform: PlatformParam, w: Window, br
         COALESCE(SUM(bmd.engagement_sum),0)::float eng,
         COALESCE(SUM(bmd.er_denominator_sum),0)::float erden,
         COALESCE(SUM(bmd.video_views_sum) FILTER (WHERE bmd.platform='tiktok'),0)::float tkviews,
-        COALESCE(SUM(bmd.net_growth_sum),0)::float net
+        COALESCE(SUM(${EOD_GROWTH}),0)::float net
        FROM l2_gold.brand_metric_daily bmd
+       ${PREV_EOD_JOIN}
        JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'bmd')})
         AND bmd.metric_date BETWEEN $3 AND $4

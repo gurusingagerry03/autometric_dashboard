@@ -183,16 +183,16 @@ export default function ReportBuilder({
     setMonth(MONTHS[latest.month - 1])
     setYear(latest.year)
   }, [availablePeriods]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Target KPI brand dan metrik YTD — sama-sama TIDAK bergantung pada bulan
-  // report: periodenya ditentukan KPI itu sendiri. Karena itu efeknya berdiri
-  // sendiri, supaya mengganti bulan tidak mengosongkan kedua slide lalu
-  // mengisinya lagi dengan isi yang sama persis.
+  // Target KPI brand dan metrik YTD — periodenya ditentukan KPI / ytd_setting
+  // sendiri, tapi capaiannya dipotong di akhir bulan report (YTD Jan–Des di
+  // report September = Jan–Sep), jadi keduanya ikut diambil ulang saat bulan
+  // report berganti.
   useEffect(() => {
     if (!brandId) { setKpiTargets(null); setYtdMetrics(null); return }
     let alive = true
     setKpiTargets(null); setYtdMetrics(null)
     const base = `/api/organizations/${encodeURIComponent(orgId)}/reports`
-    const q = `brand=${encodeURIComponent(brandId)}`
+    const q = `brand=${encodeURIComponent(brandId)}&year=${year}&month=${MONTHS.indexOf(month) + 1}`
     fetch(`${base}/kpi-targets?${q}`, { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then((d: ReportKpiTargets | null) => { if (alive) setKpiTargets(d) })
@@ -202,7 +202,7 @@ export default function ReportBuilder({
       .then((d: ReportYtdMetrics | null) => { if (alive) setYtdMetrics(d) })
       .catch(e => { if (alive) { console.error('[report] ytd metrics fetch failed:', e); setYtdMetrics(null) } })
     return () => { alive = false }
-  }, [orgId, brandId])
+  }, [orgId, brandId, month, year])
   // Table metrics — also refetched on custom-metric changes (cmVersion).
   useEffect(() => {
     if (!brandId) { setTableMetrics(null); return }
@@ -726,6 +726,10 @@ export default function ReportBuilder({
         onCustomMetricsChanged={() => setCmVersion(v => v + 1)}
         allowWordCloud={activeSlide?.type === 'comparison'}
         monthlyOnly={activeSlide?.type === 'monthly_tracker'}
+        initialValueLabels={
+          (configBlock === 'chart' || configBlock === 'chartA' || configBlock === 'chartB')
+            ? (activeSlide?.[configBlock] as ChartConfig | null | undefined)?.valueLabels : undefined
+        }
         availableCompetitors={competitorSectionFor(tableMetrics, activeSlide?.channel ?? 'instagram')?.competitors.map(c => ({ id: c.id, label: c.label })) ?? []}
         onClose={() => setConfigBlock(null)}
         onSelect={applyChart}

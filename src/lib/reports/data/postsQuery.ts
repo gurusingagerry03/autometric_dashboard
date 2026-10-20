@@ -105,6 +105,7 @@ export async function getReportPostMetrics(
       formatId: f.id, format: f.label,
       pillarId: pil.id, pillar: pil.label,
       isActivity: r.is_activity === true,
+      link: r.link || null,
       values: {
         new_follow: num(r.follows),
         submission: num(r.submission),

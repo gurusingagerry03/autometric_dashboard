@@ -297,8 +297,13 @@ const BRAND_DAILY: Record<string, MetricEntry> = {
   },
   'brand_metric_daily.net_growth_sum': {
     label: 'Net Follower Growth', labelEn: 'Net Follower Growth',
-    description: 'Jumlah follower yang bertambah setelah dikurangi follower yang hilang pada periode ini.',
-    descriptionEn: 'The difference between new followers gained and followers lost during the selected period.',
+    description: 'Selisih total follower di akhir periode dengan total follower di akhir periode sebelumnya. Contoh September: follower 30 September − follower 31 Agustus.',
+    descriptionEn: 'Total followers at the end of the period minus total followers at the end of the previous one. For September: followers on 30 September − followers on 31 August.',
+  },
+  'derived.unfollows_calc': {
+    label: 'Unfollow (Kalkulasi)', labelEn: 'Unfollow Calculation',
+    description: 'Unfollow yang dihitung ulang per hari: follow baru − pertumbuhan follower (minimal 0), lalu dijumlah. Angka ini selalu tally dengan pertumbuhan follower, berbeda dengan angka unfollow dari platform.',
+    descriptionEn: 'Unfollows re-derived per day as new follows − follower growth (floored at 0), then summed. Unlike the platform’s own unfollow count, it always tallies with follower growth.',
   },
   'brand_metric_daily.profile_visit_sum': {
     label: 'Kunjungan Profil', labelEn: 'Profile Visits',
@@ -959,6 +964,7 @@ export const METRIC_ALIASES: Record<string, string> = {
   engagement:          'post_metric.engagement_owned',
   total_interactions:  'post_metric.engagement_owned',
   eng_public:          'post_metric.engagement_public',
+  engagement_public:   'post_metric.engagement_public',
   impressions:         'post_metric.impressions',
   impressions_views:   'derived.impressions_views',
   video_views:         'brand_metric_daily.views_sum',
@@ -986,6 +992,7 @@ export const METRIC_ALIASES: Record<string, string> = {
   new_follows:          'brand_metric_daily.new_followers_sum',
   new_followers:        'brand_metric_daily.new_followers_sum',
   unfollows:            'brand_metric_daily.lost_followers_sum',
+  unfollows_calc:       'derived.unfollows_calc',
   profile_reach:        'brand_metric_daily.profile_reach_sum',
   profile_views:        'derived.profile_views',
   visits:               'derived.profile_views',

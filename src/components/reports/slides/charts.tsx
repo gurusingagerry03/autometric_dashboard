@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ChartTooltip, useChartTooltip, formatTipValue } from '@/components/ui/ChartTooltip'
+import type { CSSProperties } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import {
   ChartConfig, Series, LineSeries, BarSeries, resolveBarData, resolveLineData, chartIcon, chartSummary,
-  groupBarSeries, SENTIMENT_PALETTES,
+  groupBarSeries, SENTIMENT_PALETTES, fmtChartValue, type ValueLabels,
 } from '@/lib/reports/data/chartData'
 import { AxisScale, compactNum, cloudWordsFrom, CloudWordData } from '@/lib/reports/data/chartTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT, type PlacedWord } from '@/lib/reports/data/wordcloudLayout'
@@ -28,7 +29,18 @@ function ChartLegend({ series }: { series: Series[] }) {
 const Y_AXIS_W = '5cqw'
 const BAR_SCALE: AxisScale = { min: 0, max: 100, ticks: [100, 75, 50, 25, 0] }
 
-interface Axis { scale: AxisScale; color: string }
+interface Axis { scale: AxisScale; color: string; pct?: boolean }
+
+// Axis tick text — percent axes carry "%" so an ER axis doesn't read as a count.
+const tickText = (t: number, pct?: boolean) => compactNum(t) + (pct ? '%' : '')
+
+// Value labels (deck slide 15) are HTML laid over the SVG, not <text> inside it:
+// the plot SVG uses preserveAspectRatio="none", so text in it would be squashed.
+// Positions are percentages of the plot box.
+const VALUE_LABEL_STYLE: CSSProperties = {
+  position: 'absolute', fontSize: '0.85cqw', fontWeight: 700, lineHeight: 1,
+  whiteSpace: 'nowrap', pointerEvents: 'none', ...PJ,
+}
 
 // Show ~8 x-labels max; blank the rest so a 30-day month doesn't crowd the axis.
 function sampleLabels(labels: string[]): string[] {
@@ -45,7 +57,7 @@ function AxisTicks({ axis, side }: { axis: Axis; side: 'left' | 'right' }) {
       style={{ width: Y_AXIS_W, flexShrink: 0, [side === 'left' ? 'paddingRight' : 'paddingLeft']: '0.8cqw' }}
     >
       {axis.scale.ticks.map((t, i) => (
-        <span key={i} style={{ fontSize: '0.95cqw', color: axis.color, opacity: 0.85, lineHeight: 1, ...PJ }}>{compactNum(t)}</span>
+        <span key={i} style={{ fontSize: '0.95cqw', color: axis.color, opacity: 0.85, lineHeight: 1, ...PJ }}>{tickText(t, axis.pct)}</span>
       ))}
     </div>
   )
@@ -86,7 +98,7 @@ function ChartFrame({ labels, left, right, horizontal, children }: { labels: str
           <div style={{ width: Y_AXIS_W, flexShrink: 0 }} />
           <div className="flex-1 flex justify-between">
             {valTicks.map((t, i) => (
-              <span key={i} style={{ fontSize: '0.95cqw', color: left.color, opacity: 0.85, ...PJ }}>{compactNum(t)}</span>
+              <span key={i} style={{ fontSize: '0.95cqw', color: left.color, opacity: 0.85, ...PJ }}>{tickText(t, left.pct)}</span>
             ))}
           </div>
         </div>
@@ -122,7 +134,7 @@ function ChartFrame({ labels, left, right, horizontal, children }: { labels: str
 // Multi-line plot — each series maps against its OWN scale (dual-axis), so a
 // large-magnitude metric and a small one both fill the plot height.
 // Hovering anywhere over the plot reads out every series at that x position.
-function MultiLine({ series, labels }: { series: LineSeries[]; labels: string[] }) {
+function MultiLine({ series, labels, valueLabels = 'none' }: { series: LineSeries[]; labels: string[]; valueLabels?: ValueLabels }) {
   const w = 100, h = 56
   const svgRef = useRef<SVGSVGElement>(null)
   const [hover, setHover] = useState<number | null>(null)
@@ -141,13 +153,18 @@ function MultiLine({ series, labels }: { series: LineSeries[]; labels: string[] 
     const r = el.getBoundingClientRect()
     const i = Math.min(len - 1, Math.max(0, Math.round(((e.clientX - r.left) / r.width) * (len - 1))))
     setHover(i)
-    show(e, labels[i], series.map(s => ({ label: s.name, value: formatTipValue(s.data[i] ?? 0), color: s.color })))
+    show(e, labels[i], series.map(s => ({ label: s.name, value: fmtChartValue(s.data[i] ?? 0, s.pct), color: s.color })))
   }
 
   function onLeave() { setHover(null); hide() }
 
+  // A 30-day line gets a label only where the x-axis shows one; denser than that
+  // the numbers overlap into noise.
+  const xShown = sampleLabels(labels)
+  const labelAt = (i: number) => len <= 12 || xShown[i] !== ''
+
   return (
-    <>
+    <div className="relative w-full h-full">
       <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none"
         onMouseMove={onMove} onMouseLeave={onLeave}>
         {series.map(s => {
@@ -171,14 +188,21 @@ function MultiLine({ series, labels }: { series: LineSeries[]; labels: string[] 
           </g>
         )}
       </svg>
+      {valueLabels !== 'none' && series.map(s => s.data.map((v, i) => labelAt(i) && (
+        <span key={`${s.name}-${i}`} style={{
+          ...VALUE_LABEL_STYLE, color: s.color,
+          left: `${(xAt(i) / w) * 100}%`, top: `${(yAt(s, i) / h) * 100}%`,
+          transform: `translate(${i === 0 ? '0' : i === len - 1 ? '-100%' : '-50%'}, -130%)`,
+        }}>{fmtChartValue(v, s.pct, valueLabels)}</span>
+      )))}
       <ChartTooltip tip={tip} />
-    </>
+    </div>
   )
 }
 
 // Bars are drawn as a fraction of the shared value axis (scale.max), so every
 // series reads in the same true units from a zero baseline.
-function GroupedBars({ labels, series, orientation }: { labels: string[]; series: BarSeries[]; orientation: 'vertical' | 'horizontal' }) {
+function GroupedBars({ labels, series, orientation, valueLabels = 'none' }: { labels: string[]; series: BarSeries[]; orientation: 'vertical' | 'horizontal'; valueLabels?: ValueLabels }) {
   const w = 100, h = 56, gGap = 3
   const groups = labels.length
   const n = Math.max(series.length, 1)
@@ -190,8 +214,8 @@ function GroupedBars({ labels, series, orientation }: { labels: string[]; series
   // rather than trying to hit-test a shared band.
   const hoverProps = (s: BarSeries, gi: number) => ({
     className: 'cursor-pointer',
-    onMouseEnter: (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: formatTipValue(s.data[gi] ?? 0), color: s.color }]),
-    onMouseMove:  (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: formatTipValue(s.data[gi] ?? 0), color: s.color }]),
+    onMouseEnter: (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: fmtChartValue(s.data[gi] ?? 0, s.pct), color: s.color }]),
+    onMouseMove:  (e: React.MouseEvent) => show(e, labels[gi], [{ label: s.name, value: fmtChartValue(s.data[gi] ?? 0, s.pct), color: s.color }]),
     onMouseLeave: hide,
   })
 
@@ -199,21 +223,28 @@ function GroupedBars({ labels, series, orientation }: { labels: string[]; series
     const gH = (h - gGap * (groups - 1)) / groups
     const bh = (gH - bGap * (n - 1)) / n
     return (
-      <>
+      <div className="relative w-full h-full">
         <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
           {labels.map((_, gi) => series.map((s, si) => (
             <rect key={`${gi}-${si}`} x={0} y={gi * (gH + gGap) + si * (bh + bGap)} width={frac(s, gi) * w} height={bh} rx={0.6} fill={s.color}
               {...hoverProps(s, gi)} />
           )))}
         </svg>
+        {valueLabels !== 'none' && labels.map((_, gi) => series.map((s, si) => (
+          <span key={`v${gi}-${si}`} style={{
+            ...VALUE_LABEL_STYLE, color: '#475569',
+            left: `${frac(s, gi) * 100}%`, top: `${((gi * (gH + gGap) + si * (bh + bGap) + bh / 2) / h) * 100}%`,
+            transform: 'translate(0.4cqw, -50%)',
+          }}>{fmtChartValue(s.data[gi] ?? 0, s.pct, valueLabels)}</span>
+        )))}
         <ChartTooltip tip={tip} />
-      </>
+      </div>
     )
   }
   const gW = (w - gGap * (groups - 1)) / groups
   const bw = (gW - bGap * (n - 1)) / n
   return (
-    <>
+    <div className="relative w-full h-full">
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full" preserveAspectRatio="none">
         {labels.map((_, gi) => series.map((s, si) => {
           const bh = frac(s, gi) * h
@@ -221,8 +252,16 @@ function GroupedBars({ labels, series, orientation }: { labels: string[]; series
             {...hoverProps(s, gi)} />
         }))}
       </svg>
+      {valueLabels !== 'none' && labels.map((_, gi) => series.map((s, si) => (
+        <span key={`v${gi}-${si}`} style={{
+          ...VALUE_LABEL_STYLE, color: '#475569',
+          left: `${((gi * (gW + gGap) + si * (bw + bGap) + bw / 2) / w) * 100}%`,
+          top: `${(1 - frac(s, gi)) * 100}%`,
+          transform: 'translate(-50%, -125%)',
+        }}>{fmtChartValue(s.data[gi] ?? 0, s.pct, valueLabels)}</span>
+      )))}
       <ChartTooltip tip={tip} />
-    </>
+    </div>
   )
 }
 
@@ -329,8 +368,8 @@ function RenderChart({ config, colors, channel }: { config: ChartConfig; colors:
               </div>
             )}
             <div className="flex-1 min-h-0">
-              <ChartFrame labels={labels} left={{ scale: g.series[0].scale, color: '#b6bcc4' }} horizontal={config.barOrientation === 'horizontal'}>
-                <GroupedBars labels={labels} series={g.series} orientation={config.barOrientation ?? 'vertical'} />
+              <ChartFrame labels={labels} left={{ scale: g.series[0].scale, color: '#b6bcc4', pct: g.series[0].pct }} horizontal={config.barOrientation === 'horizontal'}>
+                <GroupedBars labels={labels} series={g.series} orientation={config.barOrientation ?? 'vertical'} valueLabels={config.valueLabels} />
               </ChartFrame>
             </div>
           </div>
@@ -349,10 +388,10 @@ function RenderChart({ config, colors, channel }: { config: ChartConfig; colors:
       <div className="flex-1 min-h-0">
         <ChartFrame
           labels={labels}
-          left={{ scale: left.scale, color: left.color }}
-          right={right ? { scale: right.scale, color: right.color } : undefined}
+          left={{ scale: left.scale, color: left.color, pct: left.pct }}
+          right={right ? { scale: right.scale, color: right.color, pct: right.pct } : undefined}
         >
-          <MultiLine series={series} labels={labels} />
+          <MultiLine series={series} labels={labels} valueLabels={config.valueLabels} />
         </ChartFrame>
       </div>
     </div>

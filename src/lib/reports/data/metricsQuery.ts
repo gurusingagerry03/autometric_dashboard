@@ -20,6 +20,7 @@ import {
 } from './tableTypes'
 import { getOrgCustomMetrics } from './customMetricsStore'
 import { evaluateExpression, type CustomMetricDef } from './customMetrics'
+import { EOD_GROWTH, PREV_EOD_JOIN, competitorBaseCte } from '@/lib/metrics/followerGrowth'
 
 const PLATFORMS: DashPlatform[] = ['instagram', 'facebook', 'tiktok']
 
@@ -155,6 +156,7 @@ function aggPostsAll(rows: PostRow[]): PostAgg {
 
 interface GoldAgg {
   followers: number | null; netGrowth: number | null; newFollows: number | null; unfollows: number | null
+  unfollowsCalc: number | null   // "Unfollow Calculation" — see unfollowsCalc()
   profileViews: number | null; profileReach: number | null; videoViews: number | null
 }
 function goldSumPos(rows: GoldRow[], f: keyof GoldRow): number | null {
@@ -179,12 +181,28 @@ function firstEod(rows: GoldRow[]): number | null {
   }
   return best
 }
+// "Unfollow Calculation" (deck slide 12, FAQ): the platform's own unfollow count
+// ("Unfollow Meta") often doesn't tally with the follower delta, so unfollows are
+// re-derived per day as Follows − Followers Growth, floored at 0 — the client's
+// Excel =IF(G−F<=0, 0, G−F) — then summed over the period. Only days carrying
+// both numbers count; null when there is none.
+function unfollowsCalc(rows: GoldRow[]): number | null {
+  let s = 0, has = false
+  for (const r of rows) {
+    if (r.new_followers_sum == null || r.net_growth_sum == null) continue
+    s += Math.max(0, Number(r.new_followers_sum) - Number(r.net_growth_sum))
+    has = true
+  }
+  return has ? s : null
+}
 function aggGold(rows: GoldRow[]): GoldAgg {
   return {
     followers: lastEod(rows),
+    // net_growth_sum here is already the EOD delta (EOD_GROWTH in fetchGold), not the gold column.
     netGrowth: goldSumSigned(rows, 'net_growth_sum'),
     newFollows: goldSumPos(rows, 'new_followers_sum'),
     unfollows: goldSumPos(rows, 'lost_followers_sum'),
+    unfollowsCalc: unfollowsCalc(rows),
     profileViews: goldSumPos(rows, 'profile_visit_sum'),
     profileReach: goldSumPos(rows, 'profile_reach_sum'),
     videoViews: goldSumPos(rows, 'video_views_sum'),
@@ -225,6 +243,7 @@ function channelValue(ch: TableChannel, id: string, a: PostAgg, g: GoldAgg): num
     case 'followers_net_growth': return g.netGrowth
     case 'new_follows': return g.newFollows
     case 'unfollows': return g.unfollows
+    case 'unfollows_calc': return g.unfollowsCalc
     case 'profile_visit': return g.profileViews   // g.profileViews = gold profile_visit_sum
     case 'profile_reach': return g.profileReach
     case 'avg_er_reach': return a.erReach
@@ -373,6 +392,7 @@ function allChannelValues(g: GoldAgg, a: PostAgg, days: number): Record<string, 
     followers_net_growth: g.netGrowth, avg_followers_net_growth: perDay(g.netGrowth),
     new_follows: g.newFollows, avg_new_follows: perDay(g.newFollows),
     unfollows: g.unfollows, avg_unfollows: perDay(g.unfollows),
+    unfollows_calc: g.unfollowsCalc, avg_unfollows_calc: perDay(g.unfollowsCalc),
     profile_reach: g.profileReach, avg_profile_reach: perDay(g.profileReach),
     profile_visit: g.profileViews, avg_profile_visit: perDay(g.profileViews), // g.profileViews = profile_visit_sum
     total_posts: a.cnt > 0 ? a.cnt : null,
@@ -415,18 +435,24 @@ const CHANNEL_LABEL: Record<string, string> = {
 }
 
 // Brand row of the Brand-vs-Competitor table (current month, one platform).
-// Growth = last − first end-of-day followers in the month (symmetric with the
-// competitor rows). Reach columns are real for the brand (unlike competitors).
+// Growth = EOD at month end − EOD at the previous month's end: the same Nett
+// Followers Growth the Channel tables show (EOD_GROWTH summed), so both slides
+// read one number. `first` is the baseline that implies — Growth %'s denominator.
+// Reach columns are real for the brand (unlike competitors).
 function brandCompetitorValues(pRows: PostRow[], gRows: GoldRow[]): Record<string, number | null> {
-  const first = firstEod(gRows), last = lastEod(gRows)
-  const growth = first != null && last != null ? last - first : null
+  const last = lastEod(gRows)
+  const growth = goldSumSigned(gRows, 'net_growth_sum')
+  const first = growth != null && last != null ? last - growth : firstEod(gRows)
   const eng = sumOrNull(pRows, 'engagement')
+  const engPub = sumOrNull(pRows, 'engagement_public')
   const cnt = pRows.length
   return {
     followers_growth:     growth,
     followers_growth_pct: growth != null && first ? (growth / first) * 100 : null,
     post_count:           cnt > 0 ? cnt : null,
     engagement:           eng,
+    engagement_public:    engPub,
+    avg_engagement_public: perPost(engPub, cnt),
     // ER by followers = avg engagement PER POST ÷ followers (comparable to the
     // brand's channel-level ER), not total monthly engagement ÷ followers.
     er_followers:         eng != null && cnt > 0 && last ? (eng / cnt / last) * 100 : null,
@@ -466,6 +492,10 @@ function competitorRowValues(r: CompRow): Record<string, number | null> {
     followers_growth_pct: growth != null && first ? (growth / first) * 100 : null,
     post_count:           cnt,
     engagement:           eng,
+    // Everything scraped from a competitor is a public interaction already, so
+    // its Engagement Public is its Engagement.
+    engagement_public:    eng,
+    avg_engagement_public: perPost(eng, cnt),
     // ER by followers = avg engagement PER POST ÷ followers (see brand row).
     er_followers:         eng != null && cnt && last ? (eng / cnt / last) * 100 : null,
     // Never published for a competitor — no public surface exposes reach.
@@ -513,10 +543,11 @@ async function fetchPosts(orgId: string, brandId: string, start: string, end: st
 async function fetchGold(orgId: string, brandId: string, start: string, end: string): Promise<GoldRow[]> {
   const res = await pool.query<GoldRow>(
     `SELECT bmd.platform, to_char(bmd.metric_date, 'YYYY-MM-DD') metric_date,
-            bmd.net_growth_sum, bmd.new_followers_sum, bmd.lost_followers_sum,
+            ${EOD_GROWTH} AS net_growth_sum, bmd.new_followers_sum, bmd.lost_followers_sum,
             bmd.profile_visit_sum, bmd.profile_reach_sum, bmd.follower_count_eod,
             bmd.video_views_sum, bmd.post_count
        FROM l2_gold.brand_metric_daily bmd
+       ${PREV_EOD_JOIN}
        JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND bmd.brand_id = $2
         AND bmd.metric_date >= $3 AND bmd.metric_date < $4
@@ -604,7 +635,9 @@ export async function getReportTableMetrics(
   // Brand-vs-Competitor: every competitor of this brand per platform, LEFT JOINed
   // to its current-month gold aggregate (competitors without data still list, with
   // null values → "—"). Ordered by end-of-month followers so the picker/rows read
-  // biggest-first. Source is 100% l2_gold (never l0_raw).
+  // biggest-first. Source is 100% l2_gold (never l0_raw). `first_foll` is the
+  // growth baseline: the last count BEFORE the month (Followers 31 Agu), falling
+  // back to the first count in it for a competitor tracked only since this month.
   const compRows = await pool.query<CompRow>(
     `WITH comp AS (
        SELECT csa.id AS sid, csa.username, cp.key AS platform
@@ -613,6 +646,7 @@ export async function getReportTableMetrics(
          JOIN public.platforms cp        ON cp.id  = csa.platform_id
         WHERE bc.brand_id = $1 AND cp.key IN ('instagram','facebook','tiktok')
      ),
+     ${competitorBaseCte('$1', '$2')},
      agg AS (
        SELECT competitor_social_account_id AS sid, platform,
               (array_agg(follower_count ORDER BY metric_date)
@@ -638,10 +672,12 @@ export async function getReportTableMetrics(
         GROUP BY competitor_social_account_id, platform
      )
      SELECT comp.sid, comp.username, comp.platform,
-            agg.first_foll, agg.last_foll, agg.post_count, agg.engagement,
+            COALESCE(base.follower_count, agg.first_foll) AS first_foll,
+            agg.last_foll, agg.post_count, agg.engagement,
             agg.likes, agg.comments, agg.shares, agg.views, agg.saves
        FROM comp
        LEFT JOIN agg ON agg.sid = comp.sid AND agg.platform = comp.platform
+       LEFT JOIN base ON base.sid = comp.sid AND base.platform = comp.platform
       ORDER BY comp.platform, agg.last_foll DESC NULLS LAST, comp.username`,
     [brandId, curStart, rangeEnd],
   )
@@ -753,7 +789,7 @@ export async function getReportTableMetrics(
   const presentChans = Object.keys(competitors) as DashPlatform[]
   if (presentChans.length > 0) {
     const SUMMABLE = [
-      'followers', 'followers_growth', 'post_count', 'engagement',
+      'followers', 'followers_growth', 'post_count', 'engagement', 'engagement_public',
       'likes', 'comments', 'shares', 'views', 'saves',
       'post_reach', 'profile_reach',
     ] as const
@@ -776,6 +812,7 @@ export async function getReportTableMetrics(
       brandAll.followers_growth != null && foll && foll - brandAll.followers_growth !== 0
         ? (brandAll.followers_growth / (foll - brandAll.followers_growth)) * 100 : null
     brandAll.avg_engagement = per(eng)
+    brandAll.avg_engagement_public = per(brandAll.engagement_public)
     brandAll.avg_likes = per(brandAll.likes)
     brandAll.avg_comments = per(brandAll.comments)
     brandAll.avg_shares = per(brandAll.shares)

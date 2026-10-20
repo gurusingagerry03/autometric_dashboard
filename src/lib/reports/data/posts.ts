@@ -131,6 +131,8 @@ export interface PostRow {
   format: string   // display label, e.g. 'Reel'
   pillar: string   // display label, e.g. 'Awareness'
   metrics: Record<string, string>   // display-formatted per POST_METRICS id
+  /** Permalink post — foto, #id, dan ikon open_in_new di kartu menaut ke sini. */
+  link?: string
 }
 
 // A candidate post carrying numeric metric values, fetched from
@@ -142,6 +144,8 @@ export interface PostCandidate {
   pillarId: string; pillar: string
   /** true kalau is_activity di l0_extra bernilai true — penyaring slide Activity Performance. */
   isActivity?: boolean
+  /** Permalink post di platform (unified_post.link / permalink kompetitor). */
+  link?: string | null
   values: Record<string, number>   // numeric per POST_METRICS id (er_* are percent numbers)
   /** Bentuk siap-baca untuk metrik yang bukan angka (tanggal). Kalau ada, dipakai
    *  apa adanya; `values` untuk id yang sama hanya dipakai mengurutkan. */
@@ -195,6 +199,13 @@ const fmtValue = (id: string, v: number) =>
   : id === 'watch_time' ? v.toFixed(1) + 's'
   : groupInt(v)
 
+// Only http(s) permalinks become hyperlinks — the value comes from scraped data
+// and ends up as an <a href> in the preview and a click target in the PPTX.
+function safeLink(link: string | null | undefined): string | undefined {
+  const s = (link ?? '').trim()
+  return /^https?:\/\//i.test(s) ? s : undefined
+}
+
 export interface PostOptions {
   format?: string
   pillar?: string
@@ -235,7 +246,7 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
       // Teks menang untuk metrik tanggal; sisanya diformat dari angkanya.
       metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0)
     })
-    return { id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics }
+    return { id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics, link: safeLink(cand.link) }
   })
 }
 

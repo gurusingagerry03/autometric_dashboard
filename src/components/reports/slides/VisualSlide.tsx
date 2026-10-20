@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
 import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
@@ -29,7 +29,18 @@ function metricFsCqw(rows: number, baseCqw: number, count: number) {
   return Math.min(baseCqw, (CARD_H - head - imgH) / n / (CQW_TO_CQH * METRIC_LINE))
 }
 
-function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number }) {
+// Embedded link content (deck revisi Dashboard, slide 13): foto, #id, dan ikon
+// open_in_new menaut ke permalink post. Tanpa link, elemennya dirender polos.
+function PostLink({ link, className, style, children }: { link?: string; className?: string; style?: CSSProperties; children: ReactNode }) {
+  if (!link) return <div className={className} style={style}>{children}</div>
+  return (
+    <a href={link} target="_blank" rel="noopener noreferrer" title={link} className={className} style={style}>
+      {children}
+    </a>
+  )
+}
+
+function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count, link }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number; link?: string }) {
   // Pilar boleh kosong (post kompetitor tidak punya), jadi keterangannya dirakit
   // dari bagian yang benar-benar ada — bukan template "format · pilar" yang
   // menyisakan pemisah menggantung. Exporter merakitnya dengan cara yang sama.
@@ -46,21 +57,26 @@ function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count 
           list to leave it ~IMG_MIN, the same share postCardFit reserves on export.
           No min-height here on purpose — the photo absorbs any error in HEAD_H
           rather than pushing the list out of the card. */}
-      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden" style={{ background: `linear-gradient(135deg, hsl(${h} 45% 88%), hsl(${(h + 40) % 360} 45% 80%))` }}>
+      <PostLink link={link} className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden" style={{ background: `linear-gradient(135deg, hsl(${h} 45% 88%), hsl(${(h + 40) % 360} 45% 80%))` }}>
         <img src={image} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
         <span className="material-symbols-outlined" style={{ fontSize: '3cqw', color: 'rgba(255,255,255,0.85)' }}>image</span>
         {tag && (
           <span style={{ position: 'absolute', top: '0.6cqh', left: '0.5cqw', fontSize: '0.8cqw', fontWeight: 800, color: '#fff', padding: '0.2cqh 0.7cqw', borderRadius: '999px', background: tag === 'TOP' ? '#16a34a' : '#e11d48', ...PJ }}>{tag}</span>
         )}
-      </div>
+      </PostLink>
       {/* Stats */}
       <div className="shrink-0" style={{ padding: count === 4 ? '0.9cqh 0.8cqw' : '0.7cqh 0.6cqw', borderTop: '1px solid #f1f3f5' }}>
         <div className="flex items-start justify-between gap-[0.4cqw]" style={{ paddingBottom: '0.5cqh', marginBottom: '0.5cqh', borderBottom: '1px solid #f1f3f5' }}>
-          <div className="min-w-0">
-            <span className="block" style={{ fontSize: labelFs, fontWeight: 800, color: '#334155', ...PJ }}>#{id}</span>
+          <PostLink link={link} className="block min-w-0">
+            <span className={`block${link ? ' hover:underline' : ''}`} style={{ fontSize: labelFs, fontWeight: 800, color: '#334155', ...PJ }}>#{id}</span>
             <span className="block truncate" style={{ fontSize: capFs, fontWeight: 500, color: '#94a3b8', ...PJ }} title={caption}>{caption}</span>
-          </div>
-          <span className="material-symbols-outlined shrink-0" style={{ fontSize: '1.2cqw', color: '#94a3b8' }}>open_in_new</span>
+          </PostLink>
+          {link ? (
+            <a href={link} target="_blank" rel="noopener noreferrer" title={link}
+              className="material-symbols-outlined shrink-0 text-[#94a3b8] hover:text-[#2C3079] transition-colors" style={{ fontSize: '1.2cqw' }}>open_in_new</a>
+          ) : (
+            <span className="material-symbols-outlined shrink-0" style={{ fontSize: '1.2cqw', color: '#cbd5e1' }}>open_in_new</span>
+          )}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', columnGap: '0.6cqw', lineHeight: METRIC_LINE }}>
           {postMetrics.map(mid => {
@@ -220,7 +236,7 @@ export default function VisualSlide({
         ) : (
           <div className="h-full" style={{ display: 'grid', gridTemplateColumns: cols, gap: count === 4 ? '1.2cqw' : count === 6 ? '0.9cqw' : '0.7cqw' }}>
             {posts.map((p, i) => (
-              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} />
+              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} link={p.link} />
             ))}
           </div>
         )}

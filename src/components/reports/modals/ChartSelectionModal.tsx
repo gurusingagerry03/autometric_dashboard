@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import {
   BAR_CATEGORIES, ChartConfig, LINE_DIMENSIONS, LINE_METRICS, MAX_LINE_METRICS,
-  WORDCLOUD_SENTIMENTS, type BarOrientation, type ChartCategory, type LineDimension,
+  WORDCLOUD_SENTIMENTS, VALUE_LABEL_OPTIONS, type BarOrientation, type ChartCategory, type LineDimension,
+  type ValueLabels,
 } from '@/lib/reports/data/chartData'
 import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
@@ -18,8 +19,35 @@ const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
  *   Bar   → orientation → category → metrics
  *   Cloud → sentiment
  */
+// Value labels on every line/bar chart (deck slide 15): none, "1,234" or "1.2K".
+function ValueLabelPicker({ value, onChange }: { value: ValueLabels; onChange: (v: ValueLabels) => void }) {
+  const t = useT()
+  return (
+    <div>
+      <span style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-2">{t('Data labels')}</span>
+      <div className="grid grid-cols-3 gap-2">
+        {VALUE_LABEL_OPTIONS.map(o => {
+          const on = value === o.id
+          return (
+            <button key={o.id} onClick={() => onChange(o.id)} style={PJ}
+              className={`p-2.5 rounded-lg border flex items-center gap-2 text-left transition-all ${on ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#475569]'}`}>
+              <span className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ${on ? 'border-[#2C3079]' : 'border-[#cbd5e1]'}`}>
+                {on && <span className="w-2 h-2 rounded-full bg-[#2C3079]" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[12px] font-semibold">{t(o.label)}</span>
+                <span className="block text-[10.5px] text-[#94a3b8] font-mono">{o.sample}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function ChartSelectionModal({
-  open, orgId, allowWordCloud = false, monthlyOnly = false, availableCompetitors = [], onClose, onSelect, onCustomMetricsChanged,
+  open, orgId, allowWordCloud = false, monthlyOnly = false, availableCompetitors = [], initialValueLabels = 'none', onClose, onSelect, onCustomMetricsChanged,
 }: {
   open: boolean
   orgId: string
@@ -31,6 +59,8 @@ export default function ChartSelectionModal({
    */
   monthlyOnly?: boolean
   availableCompetitors?: { id: string; label: string }[]
+  /** Mode label nilai chart yang sedang terpasang — dipertahankan saat chart diganti. */
+  initialValueLabels?: ValueLabels
   onClose: () => void
   onSelect: (config: ChartConfig) => void
   onCustomMetricsChanged?: () => void
@@ -46,6 +76,7 @@ export default function ChartSelectionModal({
   // Content Pillars only: put last month's bars next to this month's, per pillar.
   const [comparePeriod, setComparePeriod] = useState(false)
   const [competitorIds, setCompetitorIds] = useState<string[]>([])
+  const [valueLabels, setValueLabels] = useState<ValueLabels>(initialValueLabels)
   // Org custom metrics — selectable as line series (created/managed via CustomMetricModal).
   const [customMetrics, setCustomMetrics] = useState<CustomMetricDef[]>([])
   const [cmOpen, setCmOpen] = useState(false)
@@ -53,6 +84,7 @@ export default function ChartSelectionModal({
   useEffect(() => {
     if (!open) return
     loadCustom()
+    setValueLabels(initialValueLabels)
     if (monthlyOnly) { setCategory('line'); setDimension('monthly'); setStep(3) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -89,9 +121,9 @@ export default function ChartSelectionModal({
     setCompetitorIds(prev => (prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]))
 
   const confirm = () => {
-    if (category === 'line') onSelect({ chartType: 'line', dimension: dimension ?? 'daymonth', metrics: lineMetrics })
+    if (category === 'line') onSelect({ chartType: 'line', dimension: dimension ?? 'daymonth', metrics: lineMetrics, valueLabels })
     else if (category === 'bar') onSelect({
-      chartType: 'bar', barOrientation: orientation, barCategory: barCategory ?? undefined, barMetrics,
+      chartType: 'bar', barOrientation: orientation, barCategory: barCategory ?? undefined, barMetrics, valueLabels,
       ...(barCategory === 'content_pillars' && comparePeriod ? { barCompare: 'period' as const } : {}),
       ...(barCategory === 'competitors' ? { competitorIds } : {}),
     })
@@ -289,6 +321,7 @@ export default function ChartSelectionModal({
                 <span className="material-symbols-outlined text-[16px]">add</span>Create a custom metric
               </button>
             )}
+            <ValueLabelPicker value={valueLabels} onChange={setValueLabels} />
             <button onClick={confirm} disabled={lineMetrics.length === 0} style={PJ}
               className={`w-full py-3 rounded-xl font-bold text-[13px] transition-all ${lineMetrics.length > 0 ? 'bg-[#2C3079] text-white hover:bg-[#20224F]' : 'bg-[#f1f3f5] text-[#b6bcc4] cursor-not-allowed'}`}>
               Apply ({lineMetrics.length} selected)
@@ -396,6 +429,7 @@ export default function ChartSelectionModal({
                 )}
               </div>
             )}
+            <ValueLabelPicker value={valueLabels} onChange={setValueLabels} />
             <button onClick={confirm} disabled={barMetrics.length === 0} style={PJ}
               className={`w-full py-3 rounded-xl font-bold text-[13px] transition-all ${barMetrics.length > 0 ? 'bg-[#2C3079] text-white hover:bg-[#20224F]' : 'bg-[#f1f3f5] text-[#b6bcc4] cursor-not-allowed'}`}>
               Apply ({barMetrics.length} selected)

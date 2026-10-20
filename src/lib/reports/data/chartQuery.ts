@@ -24,6 +24,7 @@ import {
 } from './chartTypes'
 import { getOrgCustomMetrics } from './customMetricsStore'
 import { evaluateExpression, type CustomMetricDef } from './customMetrics'
+import { EOD_GROWTH, PREV_EOD_JOIN, competitorBaseCte } from '@/lib/metrics/followerGrowth'
 
 const PLATFORMS: DashPlatform[] = ['instagram', 'facebook', 'tiktok']
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -349,14 +350,15 @@ function buildBars(
   // last3months_performance — one value per month (report month + 2 prior)
   {
     const lastFoll = (dates: string[]) => { for (let i = dates.length - 1; i >= 0; i--) { const v = num(gold.get(dates[i])?.foll); if (v !== undefined) return v } return 0 }
-    const firstFoll = (dates: string[]) => { for (const d of dates) { const v = num(gold.get(d)?.foll); if (v !== undefined) return v } return 0 }
     const sumNg = (dates: string[]) => dates.reduce((s, d) => { const v = num(gold.get(d)?.ng); return s + (v ?? 0) }, 0)
+    // Growth % base = the previous month's closing count (last − growth this month).
+    const baseFoll = (dates: string[]) => { const l = lastFoll(dates); return l > 0 ? l - sumNg(dates) : 0 }
 
     const engagements = monthGroups.map(dates => sumPost(dates, v => v.eng))
     const postsCnt = monthGroups.map(dates => sumPost(dates, v => v.posts))
     const m: Record<string, number[]> = {}
     put(m, 'followers', monthGroups.map(lastFoll))
-    put(m, 'followers_growth_pct', monthGroups.map(dates => { const f0 = firstFoll(dates); return f0 > 0 ? (sumNg(dates) / f0) * 100 : 0 }))
+    put(m, 'followers_growth_pct', monthGroups.map(dates => { const f0 = baseFoll(dates); return f0 > 0 ? (sumNg(dates) / f0) * 100 : 0 }))
     put(m, 'er_reach', monthGroups.map(dates => { const es = sumPost(dates, v => v.er_sum); const ec = sumPost(dates, v => v.er_cnt); return ec > 0 ? (es / ec) * 100 : 0 }))
     put(m, 'engagements', engagements)
     put(m, 'avg_engagements', engagements.map((e, i) => (postsCnt[i] > 0 ? e / postsCnt[i] : 0)))
@@ -440,9 +442,10 @@ export async function getReportChartMetrics(
     pool.query<GoldRow>(
       `SELECT bmd.platform, to_char(bmd.metric_date, 'YYYY-MM-DD') metric_date,
               bmd.follower_count_eod::float foll, bmd.profile_visit_sum::float pv,
-              bmd.profile_reach_sum::float pr, bmd.net_growth_sum::float ng,
+              bmd.profile_reach_sum::float pr, ${EOD_GROWTH}::float ng,
               bmd.new_followers_sum::float nf, bmd.video_views_sum::float vv
          FROM l2_gold.brand_metric_daily bmd
+         ${PREV_EOD_JOIN}
          JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
         WHERE b.organization_id = $1 AND bmd.brand_id = $2
           AND bmd.metric_date >= $3 AND bmd.metric_date < $4
@@ -518,6 +521,8 @@ export async function getReportChartMetrics(
            JOIN public.platforms cp        ON cp.id  = csa.platform_id
           WHERE bc.brand_id = $1 AND cp.key IN ('instagram','facebook','tiktok')
        ),
+       -- Growth baseline = last count before the month (see metricsQuery).
+       ${competitorBaseCte('$1', '$2')},
        agg AS (
          SELECT competitor_social_account_id AS sid, platform,
                 (array_agg(follower_count ORDER BY metric_date)
@@ -542,10 +547,12 @@ export async function getReportChartMetrics(
           GROUP BY competitor_social_account_id, platform
        )
        SELECT comp.sid, comp.username, comp.platform,
-              agg.first_foll, agg.last_foll, agg.post_count, agg.engagement,
+              COALESCE(base.follower_count, agg.first_foll) AS first_foll,
+              agg.last_foll, agg.post_count, agg.engagement,
               agg.likes, agg.comments, agg.shares, agg.views, agg.saves
          FROM comp
          LEFT JOIN agg ON agg.sid = comp.sid AND agg.platform = comp.platform
+         LEFT JOIN base ON base.sid = comp.sid AND base.platform = comp.platform
         ORDER BY comp.platform, agg.last_foll DESC NULLS LAST, comp.username`,
       [brandId, monthStart(year, month), windowEnd],
     ),
@@ -638,8 +645,13 @@ export async function getReportChartMetrics(
       .filter(r => r.platform === p && r.metric_date >= curMonthStart && r.foll != null)
       .sort((a, b) => (a.metric_date < b.metric_date ? -1 : 1))
     const postsCur = posts.rows.filter(r => r.platform === p && r.post_date >= curMonthStart)
-    const bFirst = goldCur.length ? Number(goldCur[0].foll) : null
     const bLast = goldCur.length ? Number(goldCur[goldCur.length - 1].foll) : null
+    // Baseline = last − Nett Followers Growth (EOD deltas), i.e. the previous
+    // month's closing count — the same growth the tables show.
+    const bGrowth = sumFloatNull(gold.rows
+      .filter(r => r.platform === p && r.metric_date >= curMonthStart).map(r => r.ng))
+    const bFirst = bLast != null && bGrowth != null ? bLast - bGrowth
+      : goldCur.length ? Number(goldCur[0].foll) : null
     const brand: CompetitorChartEntity = {
       id: 'brand', label: brandName,
       metrics: competitorMetrics({
@@ -735,6 +747,6 @@ export async function getReportChartMetrics(
     sentiment: sentimentByChannel,
     words: wordsByChannel,
     competitors: competitorsOut,
-    customMetrics: customDefs.map(d => ({ id: d.id, label: d.name })),
+    customMetrics: customDefs.map(d => ({ id: d.id, label: d.name, format: d.format })),
   }
 }

@@ -10,6 +10,7 @@
 import pool from '@/lib/db'
 import type { DashPlatform } from '@/components/dashboard/data'
 import type { ReportKpiMetrics, KpiPair } from './kpiMetrics'
+import { EOD_GROWTH, PREV_EOD_JOIN } from '@/lib/metrics/followerGrowth'
 
 const PLATFORMS: DashPlatform[] = ['instagram', 'facebook', 'tiktok']
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -35,9 +36,10 @@ export async function getReportKpiMetrics(
               bmd.reach_sum::float, bmd.impressions_sum::float, bmd.engagement_sum::float,
               bmd.likes_sum::float, bmd.comments_sum::float, bmd.saves_sum::float,
               bmd.shares_sum::float, bmd.reposts_sum::float, bmd.views_sum::float,
-              bmd.profile_visit_sum::float, bmd.new_followers_sum::float, bmd.net_growth_sum::float,
+              bmd.profile_visit_sum::float, bmd.new_followers_sum::float, ${EOD_GROWTH}::float AS net_growth_sum,
               bmd.er_denominator_sum::float, bmd.follower_count_eod::float
          FROM l2_gold.brand_metric_daily bmd
+         ${PREV_EOD_JOIN}
          JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
         WHERE b.organization_id = $1 AND bmd.brand_id = $2
           AND bmd.metric_date >= $3 AND bmd.metric_date < $4

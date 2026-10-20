@@ -1019,6 +1019,10 @@ export const ID: Record<string, string> = {
   'Horizontal bar chart': 'Grafik batang horizontal',
   'Custom Metrics': 'Metrik Kustom',
   'Compare with previous month': 'Bandingkan dengan bulan sebelumnya',
+  'Data labels': 'Label angka',
+  'No Value': 'Tanpa angka',
+  'Absolute Value': 'Angka penuh',
+  'Rounded Value': 'Angka dibulatkan',
   'No competitor has data for this channel/period yet.':
     'Belum ada competitor dengan data untuk kanal/periode ini.',
   'No custom metrics yet': 'Belum ada metrik kustom',

@@ -21,6 +21,7 @@
 import pool from '@/lib/db'
 import type { DashPlatform } from '@/components/dashboard/data'
 import { KPI_METRICS } from '@/lib/kpi/types'
+import { EOD_GROWTH, PREV_EOD_JOIN } from '@/lib/metrics/followerGrowth'
 import {
   ytdDashDefsFor, ytdDashKey,
   type ReportYtdMetrics, type YtdChannel, type YtdRow, type YtdWindow,
@@ -33,17 +34,20 @@ const num = (v: any): number => (v == null || !Number.isFinite(Number(v)) ? 0 : 
 const numOrNull = (v: any): number | null => (v == null || !Number.isFinite(Number(v)) ? null : Number(v))
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-/** Periode YTD aktif brand, batas atas "sampai hari ini" ikut dihitung di SQL. */
+/** Periode YTD aktif brand. Batas atasnya ikut dihitung di SQL: hari ini, akhir
+ *  periode, atau akhir bulan report ($3) — mana yang paling awal. */
 const WINDOW_SQL = `
   SELECT to_char(y.start_date, 'YYYY-MM-DD') AS start_date,
          to_char(y.end_date,   'YYYY-MM-DD') AS end_date,
-         to_char(LEAST(CURRENT_DATE, y.end_date), 'YYYY-MM-DD') AS today_as_of
+         to_char(LEAST(CURRENT_DATE, y.end_date, $3::date), 'YYYY-MM-DD') AS today_as_of
     FROM public.ytd_setting y
     JOIN public.brands b ON b.id = y.brand_id AND b.deleted_at IS NULL
    WHERE b.organization_id = $1 AND y.brand_id = $2 AND y.is_active`
 
 /**
- * Baris terakhir tiap (platform, metrik) — akumulasi "sampai hari terakhir build".
+ * Baris terakhir tiap (platform, metrik) — akumulasi "sampai hari terakhir build",
+ * tapi tidak melewati akhir bulan report ($3): YTD Jan–Des di report September
+ * dibaca per 30 September (deck revisi Dashboard, slide 14).
  *
  * `ytd_performance` adalah deret HARIAN: satu baris per hari per metrik. Yang
  * dibutuhkan kartu hanyalah hari terakhir, jadi DISTINCT ON memungut itu saja
@@ -60,6 +64,7 @@ const PROC_SQL = `
     JOIN public.brands b ON b.id = y.brand_id AND b.deleted_at IS NULL
     JOIN public.platforms p ON p.id = yp.platform_id
    WHERE b.organization_id = $1 AND y.brand_id = $2 AND y.is_active
+     AND yp.metric_date <= $3::date
    ORDER BY p.key, yp.metrics_target, yp.metric_date DESC`
 
 /**
@@ -76,7 +81,7 @@ const PROC_SQL = `
 const BOUNDS_SQL = `
   SELECT to_char($1::date - INTERVAL '1 year', 'YYYY-MM-DD') AS prior_start,
          to_char($2::date - INTERVAL '1 year', 'YYYY-MM-DD') AS prior_end,
-         ROUND((($2::date - $1::date) + 1)::numeric
+         ROUND(GREATEST(0, ($2::date - $1::date) + 1)::numeric
                / NULLIF(($3::date - $1::date) + 1, 0) * 100, 2)::float AS elapsed_pct`
 
 /* Agregat dashboard. Dua jendela sekaligus (berjalan + tahun lalu), dipisah
@@ -97,7 +102,7 @@ const GOLD_SQL = `
          SUM(bmd.views_sum)::float          AS views,
          SUM(bmd.profile_visit_sum)::float  AS visits,
          SUM(bmd.new_followers_sum)::float  AS new_followers,
-         SUM(bmd.net_growth_sum)::float     AS growth,
+         SUM(${EOD_GROWTH})::float          AS growth,
          SUM(bmd.er_denominator_sum)::float AS er_den,
          -- Total Followers bukan penjumlahan: yang berlaku adalah angka hari
          -- TERAKHIR di jendela. Menjumlahkannya akan menghasilkan ratusan juta
@@ -105,6 +110,7 @@ const GOLD_SQL = `
          CAST((array_agg(bmd.follower_count_eod ORDER BY bmd.metric_date DESC)
                  FILTER (WHERE bmd.follower_count_eod IS NOT NULL))[1] AS float) AS followers
     FROM l2_gold.brand_metric_daily bmd
+    ${PREV_EOD_JOIN}
     JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
    WHERE b.organization_id = $1 AND bmd.brand_id = $2
      AND bmd.platform IN ('instagram','facebook','tiktok')
@@ -170,17 +176,22 @@ const bucket = (rows: AggRow[], platform: string, cur: boolean): AggRow | null =
 /**
  * Metrik YTD per platform untuk satu brand.
  *
- * Tanpa parameter bulan report: periodenya milik `ytd_setting`, bukan periode
- * report — itu memang arti "year to date".
+ * Periodenya milik `ytd_setting`, bukan periode report — itu memang arti "year
+ * to date". Bulan report hanya memotong batas akhirnya: report September atas
+ * periode Jan–Des menghitung Jan–Sep.
  *
  * Kosong berarti periode YTD-nya belum di-set; slide menyebut itu dan menunjuk
  * ke tab KPI brand. Brand yang periodenya sudah di-set tapi belum punya KPI
  * aktif TIDAK kosong lagi — metrik dashboard-nya tetap terhitung.
  */
-export async function getReportYtdMetrics(orgId: string, brandId: string): Promise<ReportYtdMetrics> {
+export async function getReportYtdMetrics(
+  orgId: string, brandId: string, year: number, month: number,
+): Promise<ReportYtdMetrics> {
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const reportEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
   const [win, proc] = await Promise.all([
-    pool.query<{ start_date: string; end_date: string; today_as_of: string }>(WINDOW_SQL, [orgId, brandId]),
-    pool.query<ProcRow>(PROC_SQL, [orgId, brandId]),
+    pool.query<{ start_date: string; end_date: string; today_as_of: string }>(WINDOW_SQL, [orgId, brandId, reportEnd]),
+    pool.query<ProcRow>(PROC_SQL, [orgId, brandId, reportEnd]),
   ])
   const w = win.rows[0]
   if (!w) return {}

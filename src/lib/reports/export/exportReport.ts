@@ -5,7 +5,7 @@
 // so everything stays editable in PowerPoint.
 import { CoverColors, noHash, tint } from '../cover/colors'
 import { CoverConfig, SLIDE_IN, addCoverSlide, addContainImage, addCoverImage, svgToPng } from './exportCover'
-import { ChartConfig, resolveBarData, resolveLineData, chartSummary, groupBarSeries, SENTIMENT_PALETTES } from '../data/chartData'
+import { ChartConfig, resolveBarData, resolveLineData, chartSummary, groupBarSeries, SENTIMENT_PALETTES, pptxValueFormat, type ValueLabels } from '../data/chartData'
 import { TableColumn, TableConfig, TABLE_TYPES, SectionMetrics, SentimentTable, CompetitorSection, PlatformMetrics, ReportTableMetrics, buildTable, columnsForChannel, sentimentTableFor, customColumnsFrom } from '../data/tableTypes'
 import { cloudWordsFrom, type ReportChartMetrics, type CloudWordData } from '../data/chartTypes'
 import {
@@ -96,6 +96,17 @@ function wordCloudSvg(cloud: CloudWordData[], cw: number, ch: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${cw}" height="${ch}" viewBox="0 0 ${WC_W} ${WC_H}">${body}</svg>`
 }
 
+// Native data labels for a chart's value-label mode (deck slide 15) — the same
+// "1,234" / "1.2K" / "#.##%" the preview draws, as an Excel number format so the
+// chart stays editable in PowerPoint.
+function dataLabelOpts(pct: boolean | undefined, mode: ValueLabels | undefined, position: 'outEnd' | 't') {
+  if (!mode || mode === 'none') return {}
+  return {
+    showValue: true, dataLabelPosition: position, dataLabelFormatCode: pptxValueFormat(pct, mode),
+    dataLabelFontSize: FS(0.85), dataLabelFontFace: PJ, dataLabelFontBold: true, dataLabelColor: '475569',
+  }
+}
+
 async function chartCard(
   pptx: any, slide: Slide, config: ChartConfig | null, colors: CoverColors,
   x: number, y: number, w: number, h: number, placeholderLabel = 'MAIN CHART AREA',
@@ -146,6 +157,7 @@ async function chartCard(
         valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ,
         barDir: config.barOrientation === 'horizontal' ? 'bar' : 'col',
         barGrouping: 'clustered', barGapWidthPct: 20,
+        ...dataLabelOpts(g.series[0].pct, config.valueLabels, 'outEnd'),
       })
     })
     return
@@ -161,8 +173,8 @@ async function chartCard(
     const [a, b] = series
     slide.addChart(
       [
-        { type: 'line', data: [{ name: a.name, labels, values: a.data }], options: { chartColors: [noHash(a.color)], ...lineStyle } },
-        { type: 'line', data: [{ name: b.name, labels, values: b.data }], options: { chartColors: [noHash(b.color)], ...lineStyle, secondaryValAxis: true, secondaryCatAxis: true } },
+        { type: 'line', data: [{ name: a.name, labels, values: a.data }], options: { chartColors: [noHash(a.color)], ...lineStyle, ...dataLabelOpts(a.pct, config.valueLabels, 't') } },
+        { type: 'line', data: [{ name: b.name, labels, values: b.data }], options: { chartColors: [noHash(b.color)], ...lineStyle, ...dataLabelOpts(b.pct, config.valueLabels, 't'), secondaryValAxis: true, secondaryCatAxis: true } },
       ],
       {
         ...box, ...legend,
@@ -186,6 +198,7 @@ async function chartCard(
     valAxisMinVal: scale.min, valAxisMaxVal: scale.max,
     valGridLine: { style: 'solid', size: 1, color: 'F1F3F5' }, catGridLine: { style: 'none' },
     valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ,
+    ...dataLabelOpts(series[0]?.pct, config.valueLabels, 't'),
   })
 }
 
@@ -637,7 +650,7 @@ function postCardFit(rows: number, baseFs: number, h: number, labelW: number, lo
   return { imgH, fs }
 }
 
-async function postCard(slide: Slide, post: { id: number; tag?: string; image?: string; format?: string; pillar?: string; metrics: Record<string, string> }, postMetrics: string[], n: number, x: number, y: number, w: number, h: number) {
+async function postCard(slide: Slide, post: { id: number; tag?: string; image?: string; format?: string; pillar?: string; metrics: Record<string, string>; link?: string }, postMetrics: string[], n: number, x: number, y: number, w: number, h: number) {
   card(slide, x, y, w, h)
   const pad = W(0.6)
   const baseFs = n === 4 ? FS(1.05) : n === 6 ? FS(0.9) : FS(0.78)
@@ -648,9 +661,20 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   slide.addShape('rect', { x, y, w, h: imgH, fill: { color: hslToHex((post.id * 47) % 360, 0.42, 0.85) }, line: { width: 0 } })
   const imgData = post.image ? await toDataUrl(post.image) : null
   if (imgData) await addCoverImage(slide, imgData, x, y, w, imgH)
+  // Embedded link content (deck slide 13): the photo, #id and the ↗ mark open the
+  // post's permalink. The photo is covered by a fully transparent rect carrying the
+  // link, so it also works when the image failed to load (gradient only).
+  const link = post.link ? { url: post.link, tooltip: post.link } : undefined
+  if (link) slide.addShape('rect', { x, y, w, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { width: 0 }, hyperlink: link })
   if (post.tag) slide.addText(post.tag, { x: x + W(0.4), y: y + H(0.6), w: W(5), h: H(2.2), fontSize: FS(0.8), bold: true, color: 'FFFFFF', fill: { color: post.tag === 'TOP' ? '16A34A' : 'E11D48' }, align: 'center', valign: 'middle', fontFace: PJ })
   const capFs = Math.max(6, Math.round(baseFs * 0.82 * 10) / 10)
-  slide.addText(`#${post.id}`, { x: x + pad, y: y + imgH + H(0.4), w: w - 2 * pad, h: H(2.0), fontSize: baseFs, bold: true, color: '334155', fontFace: PJ })
+  const idBox = { x: x + pad, y: y + imgH + H(0.4), w: w - 2 * pad, h: H(2.0), fontSize: baseFs, bold: true, color: '334155', fontFace: PJ }
+  if (link) {
+    slide.addText([{ text: `#${post.id}`, options: { hyperlink: link } }], idBox)
+    slide.addText([{ text: '↗', options: { hyperlink: link } }], { ...idBox, align: 'right', color: '94A3B8' })
+  } else {
+    slide.addText(`#${post.id}`, idBox)
+  }
   const caption = [post.format, post.pillar].filter(Boolean).join('  ·  ')
   if (caption) slide.addText(caption, { x: x + pad, y: y + imgH + H(2.5), w: w - 2 * pad, h: H(1.8), fontSize: capFs, color: '94A3B8', valign: 'top', fontFace: PJ })
   const colY = y + imgH + H(4.4), colH = h - imgH - POST_HEAD_H

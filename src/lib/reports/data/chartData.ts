@@ -27,6 +27,53 @@ export interface ChartConfig {
   competitorIds?: string[]  // 'competitors' bar category only — chosen competitors (undefined = all)
   // wordcloud
   sentiment?: string
+  /** Label angka di tiap titik/bar (line & bar). Kosong = 'none'. */
+  valueLabels?: ValueLabels
+}
+
+/**
+ * Label nilai di chart (deck revisi Dashboard, slide 15) — berlaku di semua chart
+ * line & bar, preview maupun PPTX: tanpa angka, angka penuh "1,234", atau
+ * dibulatkan "1.2K". Metrik persen selalu "#.##%" di mode mana pun.
+ */
+export type ValueLabels = 'none' | 'absolute' | 'rounded'
+export const VALUE_LABEL_OPTIONS: { id: ValueLabels; label: string; sample: string }[] = [
+  { id: 'none', label: 'No Value', sample: '—' },
+  { id: 'absolute', label: 'Absolute Value', sample: '1,234' },
+  { id: 'rounded', label: 'Rounded Value', sample: '1.2K' },
+]
+
+/** Metrik chart yang nilainya persen (sudah ×100) — ditulis "#.##%". */
+const PCT_METRIC_IDS = new Set(['followers_growth_pct', 'er_reach', 'avg_er_pct', 'er_followers', 'er'])
+export const isPctMetric = (id: string) => PCT_METRIC_IDS.has(id)
+
+const roundedNum = (n: number): string => {
+  const a = Math.abs(n)
+  const r = (v: number, s: string) => (Math.round(v * 10) / 10).toFixed(1).replace(/\.0$/, '') + s
+  if (a >= 1_000_000_000) return r(n / 1_000_000_000, 'B')
+  if (a >= 1_000_000) return r(n / 1_000_000, 'M')
+  if (a >= 1_000) return r(n / 1_000, 'K')
+  return String(Math.round(n * 10) / 10)
+}
+
+/**
+ * Satu formatter untuk angka chart: tooltip ('tip'), dan label nilai
+ * ('absolute' / 'rounded'). Persen selalu dua desimal; angka biasa di tooltip
+ * dipisah ribuan dengan paling banyak dua desimal (rata-rata per post).
+ */
+export function fmtChartValue(v: number, pct: boolean | undefined, mode: 'tip' | 'absolute' | 'rounded' = 'tip'): string {
+  if (!Number.isFinite(v)) return '—'
+  if (pct) return v.toFixed(2) + '%'
+  if (mode === 'rounded') return roundedNum(v)
+  if (mode === 'absolute') return Math.round(v).toLocaleString('en-US')
+  return v.toLocaleString('en-US', { maximumFractionDigits: 2 })
+}
+
+/** Format code Excel untuk data label PPTX — padanan fmtChartValue. */
+export function pptxValueFormat(pct: boolean | undefined, mode: ValueLabels): string {
+  if (pct) return '0.00"%"'
+  if (mode === 'rounded') return '[>=1000000]0.0,,"M";[>=1000]0.0,"K";0'
+  return '#,##0'
 }
 
 export const MAX_LINE_METRICS = 2
@@ -157,9 +204,17 @@ export function barCategoryLabels(cat?: string): string[] {
   }
 }
 
-export interface Series { name: string; color: string; data: number[] }
+export interface Series {
+  name: string; color: string; data: number[]
+  /** Nilainya persen → tooltip, sumbu, dan label ditulis "#.##%". */
+  pct?: boolean
+}
 
 const SENTIMENT_COLORS: Record<string, string> = { Negative: '#ef4444', Neutral: '#94a3b8', Positive: '#22c55e' }
+
+// Persen = metrik katalog yang persen, atau custom metric org berformat 'percent'.
+const isPctSeries = (ctx: ReportChartMetrics | null, id: string) =>
+  isPctMetric(id) || ctx?.customMetrics?.find(c => c.id === id)?.format === 'percent'
 
 /* ── real line data (shared by preview + PPTX export) ────────────────────────── */
 
@@ -186,7 +241,7 @@ export function resolveLineData(
     const palette = distinctSeriesColors([colors.primary, colors.accent, colors.secondary], Math.max(ids.length, 1))
     return {
       labels: m.labels.length ? m.labels : dimensionLabels(dim),
-      series: m.series.map(s => ({ name: METRIC_LABELS[s.id] ?? s.id, color: palette[ids.indexOf(s.id)], data: s.data, scale: niceScale(s.data) })),
+      series: m.series.map(s => ({ name: METRIC_LABELS[s.id] ?? s.id, color: palette[ids.indexOf(s.id)], data: s.data, scale: niceScale(s.data), pct: isPctMetric(s.id) })),
     }
   }
   const labels = ctx ? dimensionLabelsFor(dim, ctx.meta) : dimensionLabels(dim)
@@ -217,7 +272,7 @@ export function resolveLineData(
   ids.forEach((id, idx) => {
     const data = chartSeriesFor(ctx, channel, id, dim)
     if (data && data.length) {
-      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx], data, scale: niceScale(data) })
+      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx], data, scale: niceScale(data), pct: isPctSeries(ctx, id) })
     }
   })
   return { labels, series }
@@ -276,7 +331,7 @@ export function resolveBarData(
     ids.forEach((id, idx) => {
       const data = entities.map(e => e.metrics[id] ?? 0)
       if (data.some(v => Number.isFinite(v) && v !== 0)) {
-        series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: paletteBar[idx % paletteBar.length], data, scale: barScale(data) })
+        series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: paletteBar[idx % paletteBar.length], data, scale: barScale(data), pct: isPctSeries(ctx, id) })
       }
     })
     return { labels, series }
@@ -306,8 +361,9 @@ export function resolveBarData(
       const prevData = prev?.length === n ? prev : zeros
       const title = METRIC_LABELS[id] ?? customLabel(id) ?? id
       const scale = barScale([...currData, ...prevData])
-      series.push({ name: prevLabel, group: title, color: PREV_PERIOD_COLOR, data: prevData, scale })
-      series.push({ name: currLabel, group: title, color: palette[idx % palette.length], data: currData, scale })
+      const pct = isPctSeries(ctx, id)
+      series.push({ name: prevLabel, group: title, color: PREV_PERIOD_COLOR, data: prevData, scale, pct })
+      series.push({ name: currLabel, group: title, color: palette[idx % palette.length], data: currData, scale, pct })
     })
     return { labels, series }
   }
@@ -318,7 +374,7 @@ export function resolveBarData(
   ids.forEach((id, idx) => {
     const real = catData?.metrics?.[id]
     if (real && real.length === n) {
-      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx % palette.length], data: real, scale: barScale(real) })
+      series.push({ name: METRIC_LABELS[id] ?? customLabel(id) ?? id, color: palette[idx % palette.length], data: real, scale: barScale(real), pct: isPctSeries(ctx, id) })
     }
   })
   return { labels, series }

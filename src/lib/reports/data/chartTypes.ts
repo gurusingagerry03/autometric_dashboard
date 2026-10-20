@@ -90,7 +90,7 @@ export interface ReportChartMetrics {
   sentiment: Partial<Record<DashPlatform, ChannelSentiment>>     // sentiment line (3 series)
   words: Partial<Record<DashPlatform, ChannelWords>>             // word cloud
   competitors?: Partial<Record<DashPlatform, CompetitorChartSection>>  // brand vs competitors (l2_gold)
-  customMetrics?: { id: string; label: string }[]               // org custom metrics available as line series
+  customMetrics?: { id: string; label: string; format?: string }[]  // org custom metrics available as line series
   /**
    * Dimensi line "Monthly" (Jan → bulan report). Tidak dikirim chart-metrics:
    * dirakit di ReportBuilder dari payload monthly-tracker (trackerToChartMonthly),

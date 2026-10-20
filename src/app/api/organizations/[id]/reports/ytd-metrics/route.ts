@@ -4,23 +4,30 @@ import { getReportYtdMetrics } from '@/lib/reports/data/ytdQuery'
 
 type Params = { params: Promise<{ id: string }> }
 
-// GET /api/organizations/[id]/reports/ytd-metrics?brand=<brandId>
+// GET /api/organizations/[id]/reports/ytd-metrics?brand=<brandId>&year=&month=
 // Metrik YTD per platform: akumulasi sepanjang periode KPI brand, plus jendela
 // sepanjang itu tepat sebelumnya sebagai pembanding.
 //
-// Tanpa year/month — sama seperti kpi-targets. Jendelanya milik periode KPI,
-// bukan periode report; memotongnya ke bulan report akan membuat "YTD" hanya
-// mencakup satu bulan.
+// Jendelanya tetap milik periode YTD, bukan periode report — year/month hanya
+// memotong BATAS AKHIRNYA ke akhir bulan report (YTD Jan–Des di report
+// September = Jan–Sep), tidak mempersempitnya jadi satu bulan.
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     const { id: orgId } = await params
     const access = await requireOrgMemberById(orgId)
     if (!access) return NextResponse.json({ error: 'Not authorized for this organization.' }, { status: 401 })
 
-    const brandId = req.nextUrl.searchParams.get('brand')
+    const sp = req.nextUrl.searchParams
+    const brandId = sp.get('brand')
     if (!brandId) return NextResponse.json({ error: 'Missing brand.' }, { status: 400 })
 
-    const data = await getReportYtdMetrics(orgId, brandId)
+    const year = Number(sp.get('year'))
+    const month = Number(sp.get('month'))
+    if (!Number.isInteger(year) || month < 1 || month > 12) {
+      return NextResponse.json({ error: 'Invalid year/month.' }, { status: 400 })
+    }
+
+    const data = await getReportYtdMetrics(orgId, brandId, year, month)
     return NextResponse.json(data)
   } catch (err) {
     console.error('[GET /api/organizations/[id]/reports/ytd-metrics]', err)

@@ -3,14 +3,17 @@
 // kpiQuery / chartQuery; tipe & formatnya di monthlyTracker.ts.
 //
 //   - metrik aliran   → SUM sepanjang bulan (reach, engagement, impressions,
-//                        profile visits/reach, post_count, net growth, likes,
-//                        comments, shares)
+//                        profile visits/reach, post_count, likes, comments,
+//                        shares)
+//   - Followers Growth → SUM selisih EOD harian = EOD akhir bulan − EOD akhir
+//                        bulan lalu (lib/metrics/followerGrowth)
 //   - Followers       → angka terakhir tiap akun di bulan itu, lalu dijumlah
 //   - Engagement Rate → SUM(engagement) / SUM(er_denominator), dihitung ulang
 //                        untuk 'all' dari jumlahnya, bukan rata-rata persen
 import pool from '@/lib/db'
 import type { DashPlatform } from '@/components/dashboard/data'
 import type { ReportMonthlyTracker, TrackerMonth, TrackerValues } from './monthlyTracker'
+import { EOD_GROWTH, PREV_EOD_JOIN } from '@/lib/metrics/followerGrowth'
 
 const PLATFORMS: DashPlatform[] = ['instagram', 'facebook', 'tiktok']
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -66,9 +69,10 @@ export async function getReportMonthlyTracker(
               COALESCE(SUM(bmd.comments_sum),0)::float comments,
               COALESCE(SUM(bmd.shares_sum),0)::float shares,
               COALESCE(SUM(bmd.post_count),0)::float posts,
-              COALESCE(SUM(bmd.net_growth_sum),0)::float growth,
+              COALESCE(SUM(${EOD_GROWTH}),0)::float growth,
               COALESCE(SUM(bmd.er_denominator_sum),0)::float erden
          FROM l2_gold.brand_metric_daily bmd
+         ${PREV_EOD_JOIN}
          JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
         WHERE b.organization_id = $1 AND bmd.brand_id = $2
           AND bmd.metric_date >= $3 AND bmd.metric_date < $4

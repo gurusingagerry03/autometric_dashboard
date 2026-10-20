@@ -5,6 +5,7 @@ import type {
 } from '@/components/dashboard/data'
 import { fmtNum, fmtInt, compact, compactSigned, fmtSignedPct, round2, pct2 } from './format'
 import type { Translator } from '@/lib/i18n/translate'
+import { EOD_GROWTH, PREV_EOD_JOIN } from '@/lib/metrics/followerGrowth'
 
 /**
  * Data access for the Audience Deep Dive dashboard, scoped to one organization.
@@ -238,8 +239,9 @@ async function followerTrend(orgId: string, platform: PlatformParam, w: Window, 
   const { rows } = await pool.query<{ brand: string; wk: string; f: number; net: number }>(
     `WITH daily AS (
         SELECT b.name brand, bmd.metric_date d,
-               SUM(bmd.follower_count_eod)::float f, SUM(bmd.net_growth_sum)::float net
+               SUM(bmd.follower_count_eod)::float f, SUM(${EOD_GROWTH})::float net
           FROM l2_gold.brand_metric_daily bmd
+          ${PREV_EOD_JOIN}
           JOIN public.brands b ON b.id = bmd.brand_id AND b.deleted_at IS NULL
          WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'bmd')})
            AND bmd.metric_date BETWEEN $3 AND $4

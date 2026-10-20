@@ -154,8 +154,12 @@ const CHANNEL_ALL_COLUMNS: TableColumn[] = [
   { id: 'avg_followers_net_growth', label: 'Avg. Followers Nett Growth', format: 'number' },
   { id: 'new_follows', label: 'New Follow', format: 'number' },
   { id: 'avg_new_follows', label: 'Avg. New Follow', format: 'number' },
-  { id: 'unfollows', label: 'Unfollows', format: 'number' },
-  { id: 'avg_unfollows', label: 'Avg. Unfollows', format: 'number' },
+  // Two unfollow figures (deck slide 12, FAQ): the platform's own count, and the
+  // one re-derived as Follows − Followers Growth so it tallies with the growth.
+  { id: 'unfollows', label: 'Unfollow Meta', format: 'number' },
+  { id: 'avg_unfollows', label: 'Avg. Unfollow Meta', format: 'number' },
+  { id: 'unfollows_calc', label: 'Unfollow Calculation', format: 'number' },
+  { id: 'avg_unfollows_calc', label: 'Avg. Unfollow Calculation', format: 'number' },
   { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
   { id: 'avg_profile_reach', label: 'Avg. Profile Reach', format: 'compact' },
   // "Profile Views" and "Profile Visit" are the same metric (glossary: Kunjungan
@@ -231,7 +235,8 @@ const CHANNEL_LEVEL_COLUMNS: TableColumn[] = [
   { id: 'total_followers', label: 'Total Followers', format: 'compact' },
   { id: 'followers_net_growth', label: 'Followers Net Growth', format: 'number' },
   { id: 'new_follows', label: 'New Follows', format: 'number' },
-  { id: 'unfollows', label: 'Unfollows', format: 'number' },
+  { id: 'unfollows', label: 'Unfollow Meta', format: 'number' },
+  { id: 'unfollows_calc', label: 'Unfollow Calculation', format: 'number' },
   // Same metric the picker used to call "Profile Views" (gold profile_visit_sum),
   // renamed for consistency with the All-Channels layout; legacy id is aliased.
   { id: 'profile_visit', label: 'Profile Visit', format: 'number' },
@@ -393,9 +398,13 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'views', label: 'Views', format: 'compact', channels: ['instagram', 'tiktok'] },
       { id: 'saves', label: 'Saves', format: 'compact', channels: ['tiktok'] },
       { id: 'engagement', label: 'Engagement', format: 'compact' },
+      // Brand: unified_post.engagement_public (IG = likes + comments). Competitor:
+      // its scraped engagement, which is public by nature.
+      { id: 'engagement_public', label: 'Engagement Public', format: 'compact' },
 
       // ── calculated ─────────────────────────────────────────────────────────
       { id: 'avg_engagement', label: 'Avg Engagement / Post', format: 'number' },
+      { id: 'avg_engagement_public', label: 'Avg Engagement Public / Post', format: 'number' },
       { id: 'avg_likes', label: 'Avg Likes / Post', format: 'number' },
       { id: 'avg_comments', label: 'Avg Comments / Post', format: 'number', channels: ['instagram', 'tiktok'] },
       { id: 'avg_shares', label: 'Avg Shares / Post', format: 'number', channels: ['facebook', 'tiktok'] },

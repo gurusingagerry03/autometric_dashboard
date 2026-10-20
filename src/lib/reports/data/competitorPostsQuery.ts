@@ -111,6 +111,7 @@ export async function getReportCompetitorPosts(
       image: r.cover_image || null,
       formatId: fmt.id, format: fmt.label,
       ...NO_PILLAR,
+      link: r.url || null,
       values: {
         likes, comments, shares, saves,
         impressions_views: num(r.plays),
