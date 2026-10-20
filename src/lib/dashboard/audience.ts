@@ -52,6 +52,12 @@ const AGE_LABELS: [string, string][] = [
   ['age_13_17', '13–17'], ['age_18_24', '18–24'], ['age_25_34', '25–34'],
   ['age_35_44', '35–44'], ['age_45_54', '45–54'], ['age_55_64', '55–64'], ['age_65_plus', '65+'],
 ]
+// TikTok reports no 13–17 bucket and a single open-ended "55+", which the sync
+// stores in age_65_plus (age_55_64 stays NULL) — so TikTok-only shows 5 buckets.
+const TIKTOK_AGE_LABELS: [string, string][] = [
+  ['age_18_24', '18–24'], ['age_25_34', '25–34'], ['age_35_44', '35–44'],
+  ['age_45_54', '45–54'], ['age_65_plus', '55+'],
+]
 const UGC_FORMAT: Record<string, string> = {
   CAROUSEL_ALBUM: 'Carousel', IMAGE: 'Image', VIDEO: 'Video', REELS: 'Reel',
 }
@@ -74,6 +80,11 @@ const fmtDateLabel = (iso: string, t: Translator) => { const [, m, d] = iso.spli
 const fmtShort = (d: Date, t: Translator) => `${d.getUTCDate()} ${t(MONTH_ABBR[d.getUTCMonth()])}`
 
 const PLAT = `($2 = 'all' OR {col}.platform = $2)`
+// Latest demographic snapshot PER ACCOUNT (u.brand_id = social_accounts.id, so
+// one account = one platform). A single org-wide max(audience_date) kept only the
+// platform synced most recently — on "All", IG's newer snapshot hid TikTok/FB.
+const LATEST_SNAPSHOT = `SELECT max(u2.audience_date) FROM l2_gold.audience_demographics_daily u2
+          WHERE u2.brand_id = u.brand_id AND u2.audience_type = 'follower_demographics'`
 
 interface Window { start: string; end: string }
 
@@ -144,20 +155,16 @@ async function ageDistribution(orgId: string, platform: PlatformParam, brandId: 
        JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'u')})
         AND u.audience_type = 'follower_demographics'
-        AND u.audience_date = (
-          SELECT max(u2.audience_date) FROM l2_gold.audience_demographics_daily u2
-          JOIN public.brand_social_accounts bsa2 ON bsa2.social_account_id = u2.brand_id
-          JOIN public.brands b2 ON b2.id = bsa2.brand_id AND b2.deleted_at IS NULL
-          WHERE b2.organization_id = $1 AND (${PLAT.replace('{col}', 'u2')}) AND u2.audience_type='follower_demographics'
-            AND ($3::uuid IS NULL OR bsa2.brand_id = $3))
+        AND u.audience_date = (${LATEST_SNAPSHOT})
         AND ($3::uuid IS NULL OR bsa.brand_id = $3)`,
     [orgId, platform, brandId],
   )
   const r = rows[0] ?? {}
-  const total = AGE_LABELS.reduce((s, [col]) => s + (r[col] ?? 0), 0)
+  const labels = platform === 'tiktok' ? TIKTOK_AGE_LABELS : AGE_LABELS
+  const total = labels.reduce((s, [col]) => s + (r[col] ?? 0), 0)
   // `count` rides along with the share so the hover can report how many people a
   // percentage actually stands for — 4% of 2M and 4% of 2K read very differently.
-  const age = AGE_LABELS.map(([col, label], i) => ({
+  const age = labels.map(([col, label], i) => ({
     bucket: label,
     value: total > 0 ? round2(pct(r[col] ?? 0, total)) : 0,
     count: Math.round(r[col] ?? 0),
@@ -182,12 +189,7 @@ async function genderSplit(orgId: string, platform: PlatformParam, brandId: stri
        JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'u')})
         AND u.audience_type = 'follower_demographics'
-        AND u.audience_date = (
-          SELECT max(u2.audience_date) FROM l2_gold.audience_demographics_daily u2
-          JOIN public.brand_social_accounts bsa2 ON bsa2.social_account_id = u2.brand_id
-          JOIN public.brands b2 ON b2.id = bsa2.brand_id AND b2.deleted_at IS NULL
-          WHERE b2.organization_id = $1 AND (${PLAT.replace('{col}', 'u2')}) AND u2.audience_type='follower_demographics'
-            AND ($3::uuid IS NULL OR bsa2.brand_id = $3))
+        AND u.audience_date = (${LATEST_SNAPSHOT})
         AND ($3::uuid IS NULL OR bsa.brand_id = $3)
       GROUP BY u.platform`,
     [orgId, platform, brandId],

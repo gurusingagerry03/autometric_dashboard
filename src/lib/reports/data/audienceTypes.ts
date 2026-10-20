@@ -81,6 +81,19 @@ export interface CloudWord { word: string; sentiment: SentimentKey; frequency: n
 export const AGE_BUCKETS = ['13–17', '18–24', '25–34', '35–44', '45–54', '55–64', '65+'] as const
 export type AgeBucket = (typeof AGE_BUCKETS)[number]
 
+/**
+ * Rows to draw for one platform as [label, key into DemographicPeriod.age].
+ * TikTok has no 13–17 bucket and one open-ended "55+", which the sync stores in
+ * age_65_plus (55–64 stays empty) — so it shows 5 rows, the last relabelled.
+ * Same rule as the Audience dashboard (lib/dashboard/audience.ts).
+ */
+export function ageBucketsFor(platform: string): [label: string, key: AgeBucket][] {
+  if (platform === 'tiktok') {
+    return [['18–24', '18–24'], ['25–34', '25–34'], ['35–44', '35–44'], ['45–54', '45–54'], ['55+', '65+']]
+  }
+  return AGE_BUCKETS.map(b => [b, b])
+}
+
 export interface DemographicPeriod {
   /** Share per age bucket, normalised to 100 across the buckets. */
   age: Record<string, number>

@@ -250,6 +250,8 @@ async function postTypePerf(orgId: string, w: Window, brandId: string | null, t:
       WHERE b.organization_id = $1 AND p.platform = 'instagram'
         AND p.post_date::date BETWEEN $2 AND $3
         AND COALESCE(NULLIF(btrim(p.format), ''), p.post_type) IS NOT NULL
+        -- Apify 'Sidecar' rows (public scrape) carry no reach → a misleading 0 bar
+        AND lower(COALESCE(NULLIF(btrim(p.format), ''), p.post_type)) <> 'sidecar'
         AND ($4::uuid IS NULL OR bsa.brand_id = $4)`,
     [orgId, w.start, w.end, brandId],
   )

@@ -6,7 +6,7 @@ import { SlideChrome, ContentSlide, usesKpiLayout } from '@/lib/reports/data/sli
 import { useReportKpi, useReportKpiTargets, useReportYtd, useReportAI, useReportMetrics, useReportChart, useReportPosts, useReportAudience, useReportMonthly, sectionMetricsFor, competitorSectionFor } from '@/lib/reports/data/metricsContext'
 import { trackerMonthsFor } from '@/lib/reports/data/monthlyTracker'
 import {
-  AGE_BUCKETS, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
+  ageBucketsFor, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
   demographicsFor, sentimentFor, type SourceFilter,
 } from '@/lib/reports/data/audienceTypes'
 import { kpiDefsForChannel, kpiMetricFor, resolveKpiMetric, type KpiMetric } from '@/lib/reports/data/kpiMetrics'
@@ -260,8 +260,8 @@ function gatherSlideData(
       const d = demographicsFor(ctx.audience, p)
       return {
         platform: p,
-        age: AGE_BUCKETS.map(b => ({
-          bucket: b,
+        age: ageBucketsFor(p).map(([label, b]) => ({
+          bucket: label,
           sharePct: d?.current?.age[b] ?? null,
           previousSharePct: d?.previous?.age[b] ?? null,
         })),

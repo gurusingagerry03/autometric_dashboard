@@ -338,7 +338,7 @@ export default function ChartSelectionModal({
                 return (
                   <button key={metric.id} onClick={() => toggleBar(metric.id)} style={PJ}
                     className={`p-3 rounded-lg border flex items-center gap-2 text-left transition-all ${isSel ? selected : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#475569]'}`}>
-                    <span className={`w-5 h-5 rounded border flex items-center justify-center text-[11px] ${isSel ? 'bg-[#2C3079] border-[#2C3079] text-white' : 'border-[#cbd5e1]'}`}>
+                    <span className={`w-5 h-5 flex-shrink-0 rounded border flex items-center justify-center text-[11px] ${isSel ? 'bg-[#2C3079] border-[#2C3079] text-white' : 'border-[#cbd5e1]'}`}>
                       {isSel && '✓'}
                     </span>
                     <span className="text-[12px] font-medium">{metric.label}</span>

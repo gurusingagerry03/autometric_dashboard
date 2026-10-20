@@ -4,7 +4,7 @@ import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide, DemographicView } from '@/lib/reports/data/slideModel'
 import { useReportAudience } from '@/lib/reports/data/metricsContext'
 import {
-  AGE_BUCKETS, demographicChannels, demographicsFor,
+  ageBucketsFor, demographicChannels, demographicsFor,
   type ChannelDemographics, type DemographicPeriod,
 } from '@/lib/reports/data/audienceTypes'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
@@ -133,8 +133,9 @@ function PlatformPanel({ platform, data, view, accent }: {
   if (!cur) return null
 
   // One scale for both months so a bar and its marker are read on the same ruler.
+  const buckets = ageBucketsFor(platform)
   const max = Math.max(
-    ...AGE_BUCKETS.map(b => Math.max(cur.age[b] ?? 0, prev?.age[b] ?? 0)),
+    ...buckets.map(([, k]) => Math.max(cur.age[k] ?? 0, prev?.age[k] ?? 0)),
     1,
   )
   const showAge = view !== 'gender'
@@ -162,9 +163,9 @@ function PlatformPanel({ platform, data, view, accent }: {
                 asks for more. `overflow: hidden` is the last line of defence, so a
                 row can never be painted on top of the gender block below. */}
             <div className="flex flex-col" style={{ flex: 1, minHeight: 0, gap: '0.55cqh', overflow: 'hidden' }}>
-              {AGE_BUCKETS.map(b => (
-                <AgeRow key={b} bucket={b} now={cur.age[b] ?? 0}
-                  before={prev ? (prev.age[b] ?? 0) : null} max={max} accent={accent} />
+              {buckets.map(([label, k]) => (
+                <AgeRow key={label} bucket={label} now={cur.age[k] ?? 0}
+                  before={prev ? (prev.age[k] ?? 0) : null} max={max} accent={accent} />
               ))}
             </div>
           </div>

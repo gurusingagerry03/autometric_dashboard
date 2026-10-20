@@ -73,11 +73,11 @@ function TableView({ config, accent, channel, metrics, sentiment, competitors, p
                 </div>
               )
             }
-            const color = cell.gap ? (cell.positive ? '#16a34a' : '#dc2626') : '#475569'
+            const color = cell.gap ? (cell.flat ? '#0f172a' : cell.positive ? '#16a34a' : '#dc2626') : '#475569'
             return (
               <div key={c.id} className={`flex ${big?.inline ? 'flex-row items-baseline justify-end' : 'flex-col items-end'}`} style={{ flex: 1, minWidth: 0, padding: '0 0.45cqw', lineHeight: 1.15, gap: big?.inline ? '0.4cqw' : undefined, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                 <span className="truncate max-w-full" style={{ fontSize: fs.value, fontWeight: cell.gap || big ? 700 : 500, color: big ? '#1e293b' : color, fontFamily: mono }}>
-                  {cell.gap && cell.positive ? '+' : ''}{cell.text}
+                  {cell.text}
                 </span>
                 {cell.sub && (
                   <span className="truncate max-w-full" style={{ fontSize: fs.sub, fontWeight: 700, color: cell.sub.flat ? '#94a3b8' : cell.sub.positive ? '#16a34a' : '#dc2626' }}>

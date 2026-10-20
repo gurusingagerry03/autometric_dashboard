@@ -6,7 +6,7 @@ tables pull real data, following the ROBZ LAUNCH metrics mapping
 
 - **Source code:** `src/lib/reports/data/metricsQuery.ts` (`getReportTableMetrics`)
 - **API:** `GET /api/organizations/[id]/reports/table-metrics?brand=&year=&month=`
-- **Rows:** `Previous Month` / `Current Month` / `Gap (%)`. Current = the report's
+- **Rows:** `Previous Month` / `Current Month` / `Growth (%)`. Current = the report's
   selected month; Previous = the month before. Gap = `(curr − prev) / prev × 100`.
 - **Scope:** one org + one brand. Content/`Avg.` metrics come from
   `l1_silver.unified_post`; channel profile metrics from

@@ -63,6 +63,8 @@ interface PostRow {
   likes: number | null; reactions: number | null; comments: number | null; shares: number | null; eng: number | null
   reach: number | null; er_sum: number | null; er_cnt: number | null; posts: number | null
   saves: number | null; views: number | null; impressions: number | null
+  erv_sum: number | null; erv_cnt: number | null
+  eng_r: number | null; reach_r: number | null; eng_v: number | null; views_v: number | null
 }
 interface PillarRow {
   platform: string; content_pillar: string; ym: string   // 'YYYY-MM' bucket (report month or the one before)
@@ -88,6 +90,10 @@ type PostVals = {
   likes: number | null; reactions: number | null; comments: number | null; shares: number | null; eng: number | null
   reach: number | null; er_sum: number | null; er_cnt: number | null; posts: number | null
   saves: number | null; views: number | null; impressions: number | null
+  // ER Views per post (mean) + the pooled-ER pairs: engagement & denominator over
+  // only the posts that HAVE that denominator (same rule as metricsQuery.pooledER).
+  erv_sum: number | null; erv_cnt: number | null
+  eng_r: number | null; reach_r: number | null; eng_v: number | null; views_v: number | null
 }
 
 const num = (v: number | null | undefined): number | undefined =>
@@ -356,13 +362,39 @@ function buildBars(
 
     const engagements = monthGroups.map(dates => sumPost(dates, v => v.eng))
     const postsCnt = monthGroups.map(dates => sumPost(dates, v => v.posts))
+    const perPost = (pick: (v: PostVals) => number | null | undefined) =>
+      monthGroups.map((dates, i) => (postsCnt[i] > 0 ? sumPost(dates, pick) / postsCnt[i] : 0))
+    const ratio = (n: (v: PostVals) => number | null | undefined, d: (v: PostVals) => number | null | undefined) =>
+      monthGroups.map(dates => { const den = sumPost(dates, d); return den > 0 ? (sumPost(dates, n) / den) * 100 : 0 })
+    const likesOf = (v: PostVals) => (p === 'facebook' ? v.reactions : v.likes)
     const m: Record<string, number[]> = {}
+    // Same metric set + order as the KPI catalog (lib/kpi/types KPI_METRICS), so a
+    // KPI slide's deep-dive chart can show exactly what the KPI cards measure.
     put(m, 'followers', monthGroups.map(lastFoll))
+    put(m, 'net_followers_growth', monthGroups.map(sumNg))
     put(m, 'followers_growth_pct', monthGroups.map(dates => { const f0 = baseFoll(dates); return f0 > 0 ? (sumNg(dates) / f0) * 100 : 0 }))
-    put(m, 'er_reach', monthGroups.map(dates => { const es = sumPost(dates, v => v.er_sum); const ec = sumPost(dates, v => v.er_cnt); return ec > 0 ? (es / ec) * 100 : 0 }))
+    put(m, 'er_reach_pooled', ratio(v => v.eng_r, v => v.reach_r))
+    put(m, 'er_reach', ratio(v => v.er_sum, v => v.er_cnt))
+    put(m, 'er_views_pooled', ratio(v => v.eng_v, v => v.views_v))
+    put(m, 'avg_er_views', ratio(v => v.erv_sum, v => v.erv_cnt))
     put(m, 'engagements', engagements)
     put(m, 'avg_engagements', engagements.map((e, i) => (postsCnt[i] > 0 ? e / postsCnt[i] : 0)))
     put(m, 'total_reach', monthGroups.map(dates => sumPost(dates, v => v.reach)))
+    put(m, 'avg_reach', perPost(v => v.reach))
+    put(m, 'views', monthGroups.map(dates => sumPost(dates, v => v.views)))
+    put(m, 'avg_views', perPost(v => v.views))
+    put(m, 'likes', monthGroups.map(dates => sumPost(dates, likesOf)))
+    put(m, 'avg_likes', perPost(likesOf))
+    put(m, 'comments', monthGroups.map(dates => sumPost(dates, v => v.comments)))
+    put(m, 'avg_comments', perPost(v => v.comments))
+    put(m, 'shares', monthGroups.map(dates => sumPost(dates, v => v.shares)))
+    put(m, 'avg_shares', perPost(v => v.shares))
+    put(m, 'saves', monthGroups.map(dates => sumPost(dates, v => v.saves)))
+    put(m, 'avg_saves', perPost(v => v.saves))
+    put(m, 'post_count', postsCnt)
+    put(m, 'new_followers', monthGroups.map(dates => dates.reduce((s, d) => s + (num(gold.get(d)?.nf) ?? 0), 0)))
+    put(m, 'profile_views', monthGroups.map(dates => dates.reduce((s, d) => s + (num(gold.get(d)?.pv) ?? 0), 0)))
+    put(m, 'profile_reach', monthGroups.map(dates => dates.reduce((s, d) => s + (num(gold.get(d)?.pr) ?? 0), 0)))
     // custom metrics — per-month value (aggregate-then-combine, matches table + line last3months)
     for (const def of customDefs) {
       put(m, def.id, monthGroups.map(dates => {
@@ -458,7 +490,12 @@ export async function getReportChartMetrics(
               SUM(p.comments)::float comments, SUM(p.shares)::float shares,
               SUM(p.engagement)::float eng, SUM(p.reach)::float reach,
               SUM(p.saves)::float saves, SUM(p.views)::float views, SUM(p.impressions)::float impressions,
-              SUM(p.er_reach)::float er_sum, count(p.er_reach)::int er_cnt, count(*)::int posts
+              SUM(p.er_reach)::float er_sum, count(p.er_reach)::int er_cnt, count(*)::int posts,
+              SUM(p.er_views)::float erv_sum, count(p.er_views)::int erv_cnt,
+              SUM(p.engagement) FILTER (WHERE p.reach > 0)::float eng_r,
+              SUM(p.reach)      FILTER (WHERE p.reach > 0)::float reach_r,
+              SUM(p.engagement) FILTER (WHERE p.views > 0)::float eng_v,
+              SUM(p.views)      FILTER (WHERE p.views > 0)::float views_v
          FROM l1_silver.unified_post p
          JOIN public.brand_social_accounts bsa ON bsa.social_account_id = p.brand_id
          JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL

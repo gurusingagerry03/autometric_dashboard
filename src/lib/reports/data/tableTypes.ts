@@ -455,7 +455,7 @@ const ROW_DEFS: Record<TableRowType, { id: string; label: string; isGap?: boolea
   comparison: [
     { id: 'prev', label: 'Previous Month' },
     { id: 'curr', label: 'Current Month' },
-    { id: 'gap', label: 'Gap (%)', isGap: true },
+    { id: 'gap', label: 'Growth (%)', isGap: true },
   ],
   competitors: [
     { id: 'brand', label: 'Brand' },
@@ -583,6 +583,8 @@ function fmtReal(format: TableFormat, val: number): string {
 
 export interface TableCell {
   text: string; gap?: boolean; positive?: boolean
+  /** Growth row: no change (rounds to 0.0%) → "0%" in neutral black. */
+  flat?: boolean
   /** Baris kedua kecil di bawah angka — perubahan MoM tabel Monthly Tracker. */
   sub?: { text: string; positive: boolean; flat: boolean }
   /** Teks bebas (Key Highlight): rata kiri, bukan font angka. */
@@ -597,7 +599,9 @@ function realCell(rowId: string, col: TableColumn, mv: MetricPair | undefined): 
   if (rowId === 'gap') {
     if (prev != null && curr != null && prev !== 0) {
       const g = ((curr - prev) / prev) * 100
-      return { text: Math.abs(g).toFixed(1) + '%', gap: true, positive: g >= 0 }
+      // "+12.3%" green / "-12.3%" red / "0%" black (anything that rounds to 0.0).
+      if (Math.abs(g) < 0.05) return { text: '0%', gap: true, flat: true }
+      return { text: (g > 0 ? '+' : '-') + Math.abs(g).toFixed(1) + '%', gap: true, positive: g > 0 }
     }
     return { text: '—' } // no data → neutral dash (no gap coloring)
   }

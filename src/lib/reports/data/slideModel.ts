@@ -93,7 +93,7 @@ export interface ContentSlide {
   table: TableConfig | null   // dashboard data table / overview table
   chartA: ChartConfig | null  // comparison left
   chartB: ChartConfig | null  // comparison right
-  metricCount: number             // kpi — number of scorecards (3..6)
+  metricCount: number             // kpi — number of scorecards (1..6)
   /** kpi — per scorecard slot: metric key ('dashboard_overview') atau kpiId ('kpi'). */
   kpiMetrics: (string | null)[]
   /** kpi — angka pembanding yang ditampilkan kartu KPI Overview. */
