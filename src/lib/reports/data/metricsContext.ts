@@ -11,6 +11,7 @@ import type { ReportPostMetrics } from './posts'
 import type { ReportCompetitorPosts } from './competitorPostsQuery'
 import type { ReportAudienceMetrics } from './audienceTypes'
 import type { ReportMonthlyTracker } from './monthlyTracker'
+import type { ImageResolver } from '../images/client'
 
 /**
  * Real table-metric values for the current report (brand + period), provided by
@@ -81,6 +82,17 @@ export const ReportPostContext = createContext<ReportPostMetrics | null>(null)
 
 export function useReportPosts(): ReportPostMetrics | null {
   return useContext(ReportPostContext)
+}
+
+/**
+ * Resolver gambar post report (brand + bulan aktif). Slide Visual Content memakainya
+ * untuk kartu yang cover-nya belum tersimpan permanen — lihat @/lib/reports/images.
+ * Null di luar ReportBuilder (mis. thumbnail library): kartunya tetap memakai URL
+ * yang ada tanpa memicu penyalinan.
+ */
+export const ReportImageResolverContext = createContext<ImageResolver | null>(null)
+export function useReportImageResolver(): ImageResolver | null {
+  return useContext(ReportImageResolverContext)
 }
 
 /** Kumpulan post kompetitor untuk slide Visual Content mode competitive review. */

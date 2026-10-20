@@ -365,6 +365,45 @@ export async function fetchIgPosts(username: string, days: number): Promise<Apif
   return dropErrorItems(items)
 }
 
+// --- Per-post fetchers (scrape ulang dari permalink) ---
+//
+// Dipakai resolver gambar report (@/lib/reports/images/resolve) untuk post yang
+// cover-nya kosong atau URL CDN-nya sudah kedaluwarsa. Satu run untuk semua URL
+// satu platform — jauh lebih murah daripada satu run per post.
+
+export async function fetchIgPostsByUrls(urls: string[]): Promise<ApifyIgPost[]> {
+  if (urls.length === 0) return []
+  const items = await runActor<ApifyIgPost>(IG_ACTOR, {
+    directUrls:   urls,
+    resultsType:  'posts',
+    resultsLimit: 1,
+    addParentData: false,
+  })
+  return dropErrorItems(items)
+}
+
+export async function fetchTiktokPostsByUrls(urls: string[]): Promise<ApifyTiktokPost[]> {
+  if (urls.length === 0) return []
+  return runActor<ApifyTiktokPost>(TIKTOK_ACTOR, {
+    postURLs:              urls,
+    shouldDownloadAvatars: false,
+    shouldDownloadCovers:  false,
+    shouldDownloadVideos:  false,
+    shouldDownloadSubtitles: false,
+    shouldDownloadSlideshowImages: false,
+  })
+}
+
+export async function fetchFbPostsByUrls(urls: string[]): Promise<ApifyFbPost[]> {
+  if (urls.length === 0) return []
+  const items = await runActor<ApifyFbPost>(FB_POSTS_ACTOR, {
+    startUrls:    urls.map(url => ({ url, method: 'GET' })),
+    resultsLimit: urls.length,
+    captionText:  false,
+  })
+  return dropErrorItems(items)
+}
+
 export class ApifyAuthError extends Error {
   constructor() {
     super('Apify token invalid atau tidak punya akses. Cek APIFY_API_TOKEN.')

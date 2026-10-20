@@ -20,6 +20,7 @@
 import pool from '@/lib/db'
 import { normFormat } from './posts'
 import type { PostCandidate } from './posts'
+import { imageKey } from '../images/keys'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -71,19 +72,28 @@ export async function getReportCompetitorPosts(
 
   // Kedua platform diseragamkan ke bentuk yang sama supaya pemetaannya satu jalur.
   const { rows } = await pool.query<Record<string, any>>(
-    `SELECT social_account_id::text acct, 'instagram' platform, media_id post_id,
-            cover_image, caption, media_type, permalink url, posted_at post_date,
-            like_count, comment_count, view_count plays, 0 shares, 0 saves
-       FROM l0_raw.ig_competitor_media
-      WHERE social_account_id = ANY($1::uuid[]) AND posted_at >= $2 AND posted_at < $3
-     UNION ALL
-     SELECT social_account_id::text, 'tiktok', post_id,
-            cover_image, caption, media_type, url, post_date,
-            like_count, comment_count, play_count, share_count, saved_count
-       FROM l0_raw.tiktok_competitor_media
-      WHERE social_account_id = ANY($1::uuid[]) AND post_date >= $2 AND post_date < $3
-     ORDER BY post_date DESC
-     LIMIT 600`,
+    `SELECT m.*, COALESCE(ri.image_url, m.raw_cover) cover_image
+       FROM (
+         SELECT social_account_id::text acct, 'instagram' platform, media_id post_id,
+                cover_image raw_cover, caption, media_type,
+                COALESCE(permalink, CASE WHEN shortcode IS NOT NULL
+                                         THEN 'https://www.instagram.com/p/' || shortcode || '/' END) url,
+                posted_at post_date,
+                like_count, comment_count, view_count plays, 0 shares, 0 saves
+           FROM l0_raw.ig_competitor_media
+          WHERE social_account_id = ANY($1::uuid[]) AND posted_at >= $2 AND posted_at < $3
+         UNION ALL
+         SELECT social_account_id::text, 'tiktok', post_id,
+                cover_image, caption, media_type, url, post_date,
+                like_count, comment_count, play_count, share_count, saved_count
+           FROM l0_raw.tiktok_competitor_media
+          WHERE social_account_id = ANY($1::uuid[]) AND post_date >= $2 AND post_date < $3
+       ) m
+       -- Cover yang sudah disalin untuk report (migration 058) menang atas URL CDN.
+       LEFT JOIN public.report_post_images ri
+              ON ri.platform = m.platform AND ri.post_id = m.post_id AND ri.image_url IS NOT NULL
+      ORDER BY m.post_date DESC
+      LIMIT 600`,
     [ids, start, end],
   )
 
@@ -112,6 +122,7 @@ export async function getReportCompetitorPosts(
       formatId: fmt.id, format: fmt.label,
       ...NO_PILLAR,
       link: r.url || null,
+      imageKey: imageKey('c', r.platform, String(r.post_id)),
       values: {
         likes, comments, shares, saves,
         impressions_views: num(r.plays),

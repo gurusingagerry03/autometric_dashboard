@@ -25,6 +25,7 @@ import {
 } from '../data/ytdMetrics'
 import { trackerMonthsFor, trackerTableSizes, type ReportMonthlyTracker } from '../data/monthlyTracker'
 import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics } from '../data/posts'
+import type { ImageResolver } from '../images/client'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
 import type { ContentSlide, SlideChrome, AiInsight } from '../data/slideModel'
@@ -682,7 +683,7 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad + (w - 2 * pad) * 0.55, y: colY, w: (w - 2 * pad) * 0.45, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacingMultiple: METRIC_LINE, fontFace: MONO })
 }
 
-async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null) {
+async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null, resolveImages?: ImageResolver | null) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
   s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
@@ -729,9 +730,14 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
   // (lihat VisualSlide), jadi filternya dipaksa 'all' di sini juga — kalau tidak,
   // pilihan sisa dari mode Owned akan menyaring di ekspor tapi tidak di pratinjau.
   const pillar = comp ? 'all' : effectiveFilterId(slide.postPillar, availableFilterIds(source, 'pillarId'))
-  const posts = isAct
+  const built = isAct
     ? buildPosts(n, 'top', { sortMetric: 'post_date', source })
     : buildPosts(n, slide.postFilter, { format, pillar, sortMetric, source })
+  // Sama dengan VisualSlide: cover yang belum tersimpan permanen diminta dulu ke
+  // resolver gambar report — termasuk slide yang tidak pernah dibuka di pratinjau.
+  const keys = built.map(p => p.imageKey).filter((k): k is string => !!k)
+  const resolved = resolveImages && keys.length ? await resolveImages(keys) : {}
+  const posts = built.map(p => (p.imageKey && resolved[p.imageKey] ? { ...p, image: resolved[p.imageKey]! } : p))
   const gap = n === 4 ? W(1.2) : n === 6 ? W(0.9) : W(0.7)
   const cw = (hw - gap * (n - 1)) / n
   const gy = H(18), gh = H(49)
@@ -1042,9 +1048,11 @@ export interface ReportExportOptions {
   audienceMetrics?: ReportAudienceMetrics | null
   /** 12 bulan s.d. bulan report + bulan report itu, untuk slide Monthly Tracker. */
   monthlyTracker?: { data: ReportMonthlyTracker | null; year: number; month: number } | null
+  /** Resolver gambar post report — lihat @/lib/reports/images. */
+  resolveImages?: ImageResolver | null
 }
 
-export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
+export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker, resolveImages }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
   PJ = font
   MONTHLY = monthlyTracker ?? null
   const { default: PptxGenJS } = await import('pptxgenjs')
@@ -1060,7 +1068,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     if (slide.type === 'section') await addSectionSlide(pptx, slide, chrome, colors)
     else if (slide.type === 'comparison') await addComparisonSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined)
     else if (usesKpiLayout(slide.type)) await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined, kpiTargets ?? undefined, ytdMetrics ?? undefined)
-    else if (slide.type === 'visual' || slide.type === 'activity') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts)
+    else if (slide.type === 'visual' || slide.type === 'activity') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts, resolveImages)
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)
     else if (slide.type === 'demographic') await addDemographicSlide(pptx, slide, chrome, colors, audienceMetrics)

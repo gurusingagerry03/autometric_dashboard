@@ -2,6 +2,7 @@
 // l1_silver.unified_post (via ReportPostContext / postsQuery). No sample/dummy
 // fallback — when there is no live pool the slide shows a loading / empty state.
 import { groupInt } from './format'
+import { isStoredImage } from '../images/keys'
 
 // Ordered by the Content Performance categories (Acquisition → Awareness →
 // Engagement → Efficiency). "Impressions/Views" is one combined metric (Facebook
@@ -133,6 +134,9 @@ export interface PostRow {
   metrics: Record<string, string>   // display-formatted per POST_METRICS id
   /** Permalink post — foto, #id, dan ikon open_in_new di kartu menaut ke sini. */
   link?: string
+  /** Ada kalau `image` belum tersimpan permanen: slide/exporter memintanya lewat
+   *  resolver gambar report (@/lib/reports/images). */
+  imageKey?: string
 }
 
 // A candidate post carrying numeric metric values, fetched from
@@ -146,6 +150,8 @@ export interface PostCandidate {
   isActivity?: boolean
   /** Permalink post di platform (unified_post.link / permalink kompetitor). */
   link?: string | null
+  /** Kunci resolver gambar report — lihat @/lib/reports/images/keys. */
+  imageKey?: string
   values: Record<string, number>   // numeric per POST_METRICS id (er_* are percent numbers)
   /** Bentuk siap-baca untuk metrik yang bukan angka (tanggal). Kalau ada, dipakai
    *  apa adanya; `values` untuk id yang sama hanya dipakai mengurutkan. */
@@ -246,7 +252,10 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
       // Teks menang untuk metrik tanggal; sisanya diformat dari angkanya.
       metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0)
     })
-    return { id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics, link: safeLink(cand.link) }
+    return {
+      id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics, link: safeLink(cand.link),
+      imageKey: cand.imageKey && !isStoredImage(cand.image) ? cand.imageKey : undefined,
+    }
   })
 }
 

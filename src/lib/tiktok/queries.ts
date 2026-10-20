@@ -1,5 +1,4 @@
 import pool from '@/lib/db'
-import { mirrorImages } from '@/lib/cloudinary/mirror'
 import { PoolClient } from 'pg'
 
 export interface TtProfileSnapshotPayload {
@@ -218,11 +217,8 @@ const VIDEO_UPSERT_SQL = `
 
 export async function saveTtVideoSnapshots(items: TtVideoSnapshotItem[]): Promise<void> {
   if (!items.length) return
-  // URL cover TikTok membawa x-expires — sering hanya berlaku hitungan hari.
-  const mirrored = await mirrorImages(
-    items.map(i => ({ id: i.videoId, url: i.coverImageUrl })),
-    { table: 'tt_video_snapshots', idColumn: 'video_id', urlColumn: 'cover_image_url', folder: 'tt-videos' },
-  )
+  // Cover post TIDAK disalin ke Cloudinary di sini — hanya post yang tampil di report
+  // yang disalin, saat report dibuat (@/lib/reports/images/resolve).
   const client: PoolClient = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -240,7 +236,7 @@ export async function saveTtVideoSnapshots(items: TtVideoSnapshotItem[]): Promis
         v.title,           // $4
         v.description,     // $5
         v.duration,        // $6
-        mirrored.get(v.videoId) ?? v.coverImageUrl,   // $7
+        v.coverImageUrl,   // $7
         v.shareUrl,        // $8
         v.likeCount,       // $9
         v.commentCount,    // $10

@@ -18,7 +18,8 @@ import { ReportYtdMetrics } from '@/lib/reports/data/ytdMetrics'
 import { ReportPostMetrics } from '@/lib/reports/data/posts'
 import { trackerToChartMonthly, type ReportMonthlyTracker } from '@/lib/reports/data/monthlyTracker'
 import type { AvailablePeriod } from '@/lib/reports/data/periodsQuery'
-import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportYtdContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportMonthlyContext, ReportAIContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { ReportMetricsContext, ReportChartContext, ReportKpiContext, ReportKpiTargetContext, ReportYtdContext, ReportPostContext, ReportCompetitorPostContext, ReportAudienceContext, ReportMonthlyContext, ReportAIContext, ReportImageResolverContext, competitorSectionFor } from '@/lib/reports/data/metricsContext'
+import { createImageResolver } from '@/lib/reports/images/client'
 import {
   ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig, makeSlide,
   type MonthlyTrackerSetup,
@@ -390,13 +391,18 @@ export default function ReportBuilder({
 
   const { toast, showToast, clearToast } = useToast()
 
+  // Cover post yang belum tersimpan permanen disalin ke Cloudinary saat tampil di
+  // report (scrape ulang lewat Apify kalau URL CDN-nya sudah mati). Satu resolver per
+  // brand: preview dan export berbagi hasilnya.
+  const imageResolver = useMemo(() => (brandId ? createImageResolver(orgId, brandId) : null), [orgId, brandId])
+
   async function handleExport(exportMode: 'export' | 'export-save' = 'export') {
     setIsExporting(true)
     try {
       const cover = { brandName, title, subtitle, period, logoDataUrl, colors, mode, template, font }
       const { blob, fileName } = slides.length === 0
         ? await exportCoverPptx(cover)
-        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics: chartCtx, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker: monthlyCtx })
+        : await exportReportPptx({ cover, slides, chromes: slides.map((_, i) => chromeFor(i)), colors, brandName, font, metrics: tableMetrics, chartMetrics: chartCtx, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker: monthlyCtx, resolveImages: imageResolver })
 
       downloadBlob(blob, fileName)
 
@@ -479,6 +485,7 @@ export default function ReportBuilder({
     <ReportAudienceContext.Provider value={audienceMetrics}>
     <ReportMonthlyContext.Provider value={monthlyCtx}>
     <ReportPostContext.Provider value={postMetrics}>
+    <ReportImageResolverContext.Provider value={imageResolver}>
     <div className="min-h-screen bg-[#f7f8f9]">
       <ToastHost toast={toast} onClose={clearToast} />
       {/* Off-screen full-size cover — rasterized to a PNG for the history preview */}
@@ -784,6 +791,7 @@ export default function ReportBuilder({
         activeTemplate={activeTemplate}
       />
     </div>
+    </ReportImageResolverContext.Provider>
     </ReportPostContext.Provider>
     </ReportMonthlyContext.Provider>
     </ReportAudienceContext.Provider>

@@ -1115,6 +1115,7 @@ export const ID: Record<string, string> = {
   'Content settings': 'Pengaturan konten',
   'Loading posts…': 'Memuat konten…',
   'No posts match these filters': 'Tidak ada konten yang cocok dengan filter ini',
+  'Loading image…': 'Memuat gambar…',
   'Visual content': 'Konten visual',
   'Order': 'Urutan',
   'Rank by (metric)': 'Urutkan berdasarkan (metrik)',

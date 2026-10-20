@@ -1,10 +1,10 @@
 'use client'
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
 import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
-import { useReportPosts, useReportCompetitorPosts } from '@/lib/reports/data/metricsContext'
+import { useReportPosts, useReportCompetitorPosts, useReportImageResolver } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -40,7 +40,8 @@ function PostLink({ link, className, style, children }: { link?: string; classNa
   )
 }
 
-function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count, link }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number; link?: string }) {
+function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count, link, loading }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number; link?: string; loading?: boolean }) {
+  const t = useT()
   // Pilar boleh kosong (post kompetitor tidak punya), jadi keterangannya dirakit
   // dari bagian yang benar-benar ada — bukan template "format · pilar" yang
   // menyisakan pemisah menggantung. Exporter merakitnya dengan cara yang sama.
@@ -58,8 +59,18 @@ function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count,
           No min-height here on purpose — the photo absorbs any error in HEAD_H
           rather than pushing the list out of the card. */}
       <PostLink link={link} className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden" style={{ background: `linear-gradient(135deg, hsl(${h} 45% 88%), hsl(${(h + 40) % 360} 45% 80%))` }}>
-        <img src={image} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
-        <span className="material-symbols-outlined" style={{ fontSize: '3cqw', color: 'rgba(255,255,255,0.85)' }}>image</span>
+        <img key={image} src={image} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+        {/* Selama resolver gambar report bekerja (bisa semenit lebih kalau post-nya
+            di-scrape ulang lewat Apify), kartu menunjukkan sedang memuat — bukan
+            ikon gambar yang terlihat seperti gagal. */}
+        {loading ? (
+          <span className="relative flex flex-col items-center gap-[0.6cqh] rounded-[0.6cqw] bg-black/35" style={{ padding: '0.9cqh 0.9cqw' }}>
+            <span className="material-symbols-outlined animate-spin" style={{ fontSize: '2.2cqw', color: '#fff' }}>progress_activity</span>
+            <span style={{ fontSize: '0.75cqw', fontWeight: 600, color: '#fff', ...PJ }}>{t('Loading image…')}</span>
+          </span>
+        ) : (
+          <span className="material-symbols-outlined" style={{ fontSize: '3cqw', color: 'rgba(255,255,255,0.85)' }}>image</span>
+        )}
         {tag && (
           <span style={{ position: 'absolute', top: '0.6cqh', left: '0.5cqw', fontSize: '0.8cqw', fontWeight: 800, color: '#fff', padding: '0.2cqh 0.7cqw', borderRadius: '999px', background: tag === 'TOP' ? '#16a34a' : '#e11d48', ...PJ }}>{tag}</span>
         )}
@@ -192,9 +203,25 @@ export default function VisualSlide({
   // Activity: urutan kumpulannya sudah tetap (terbaru dulu) dan tidak ada
   // penyaring — 'top' di sini artinya "ambil N pertama apa adanya", tanpa tag
   // TOP/LOW yang akan mengklaim peringkat yang tidak pernah dihitung.
-  const posts = isAct
+  const builtPosts = isAct
     ? buildPosts(count, 'top', { sortMetric: 'post_date', source })
     : buildPosts(count, slide.postFilter, { format: postFormat, pillar: isComp ? 'all' : postPillar, sortMetric, source })
+
+  // Kartu yang cover-nya belum tersimpan permanen meminta salinan Cloudinary-nya
+  // (scrape ulang lewat Apify kalau URL CDN-nya sudah mati). Selama menunggu, kartu
+  // memakai URL yang ada — atau gradien kalau URL itu sudah mati.
+  const resolveImages = useReportImageResolver()
+  const [resolved, setResolved] = useState<Record<string, string | null>>({})
+  const keySig = builtPosts.map(p => p.imageKey).filter(Boolean).join('\n')
+  useEffect(() => {
+    if (!resolveImages || !keySig) return
+    let alive = true
+    resolveImages(keySig.split('\n')).then(m => { if (alive) setResolved(prev => ({ ...prev, ...m })) })
+    return () => { alive = false }
+  }, [resolveImages, keySig])
+  const posts = builtPosts.map(p => (p.imageKey && resolved[p.imageKey] ? { ...p, image: resolved[p.imageKey]! } : p))
+  // Masih menunggu jawaban resolver untuk kartu ini (null = sudah dijawab, gagal).
+  const isLoadingImage = (key?: string) => !!resolveImages && !!key && !(key in resolved)
   const cols = count === 4 ? 'repeat(4, 1fr)' : count === 6 ? 'repeat(6, 1fr)' : 'repeat(8, 1fr)'
 
   const toggleMetric = (id: string) => {
@@ -236,7 +263,7 @@ export default function VisualSlide({
         ) : (
           <div className="h-full" style={{ display: 'grid', gridTemplateColumns: cols, gap: count === 4 ? '1.2cqw' : count === 6 ? '0.9cqw' : '0.7cqw' }}>
             {posts.map((p, i) => (
-              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} link={p.link} />
+              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} link={p.link} loading={isLoadingImage(p.imageKey)} />
             ))}
           </div>
         )}

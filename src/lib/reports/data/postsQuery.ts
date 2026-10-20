@@ -3,6 +3,7 @@
 // content_pillar, per-post metrics, cover image). Sibling of kpiQuery / chartQuery.
 import pool from '@/lib/db'
 import { normFormat, normPillar, type PostCandidate, type ReportPostMetrics } from './posts'
+import { imageKey } from '../images/keys'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -58,7 +59,8 @@ export async function getReportPostMetrics(
   const end = monthEndExcl(year, month)
 
   const { rows } = await pool.query<Record<string, any>>(
-    `SELECT p.id, p.platform, p.cover_image, p.format, p.content_pillar,
+    `SELECT p.id, p.platform, p.post_id,
+            COALESCE(ri.image_url, p.cover_image) cover_image, p.format, p.content_pillar,
             p.post_type, p.link, COALESCE(p.duration_s,0)::float duration_s,
             EXTRACT(EPOCH FROM p.post_date)::float           post_epoch,
             to_char(p.post_date, 'DD Mon YYYY')              post_date_txt,
@@ -83,6 +85,9 @@ export async function getReportPostMetrics(
        FROM l1_silver.unified_post p
        JOIN public.brand_social_accounts bsa ON bsa.social_account_id = p.brand_id
        JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
+       -- Cover yang sudah disalin untuk report (migration 058) menang atas URL CDN.
+       LEFT JOIN public.report_post_images ri
+              ON ri.platform = p.platform AND ri.post_id = p.post_id AND ri.image_url IS NOT NULL
        LEFT JOIN (${EXTRA_ACTIVITY}) e
               ON e.brand_id = p.brand_id AND e.post_id = p.post_id AND e.platform = p.platform
       WHERE b.organization_id = $1 AND bsa.brand_id = $2
@@ -106,6 +111,7 @@ export async function getReportPostMetrics(
       pillarId: pil.id, pillar: pil.label,
       isActivity: r.is_activity === true,
       link: r.link || null,
+      imageKey: r.post_id ? imageKey('b', r.platform, String(r.post_id)) : undefined,
       values: {
         new_follow: num(r.follows),
         submission: num(r.submission),

@@ -1,5 +1,4 @@
 import pool from '@/lib/db'
-import { mirrorImages } from '@/lib/cloudinary/mirror'
 import type {
   ApifyFbProfile, ApifyFbPost, ApifyFbPostMedia,
   ApifyTiktokAuthorMeta, ApifyTiktokPost,
@@ -205,12 +204,8 @@ export async function saveTiktokCompetitorMedias(
 ): Promise<void> {
   if (posts.length === 0) return
 
-  // Cover kompetitor ikut disalin: section Visual Content sisi competitive review
-  // membacanya dari sini, dan URL TikTok membawa x-expires.
-  const mirrored = await mirrorImages(
-    posts.map(x => ({ id: String(x.id ?? ''), url: x.videoMeta?.coverUrl ?? null })).filter(x => x.id),
-    { table: 'tiktok_competitor_media', idColumn: 'post_id', urlColumn: 'cover_image', folder: 'tt-competitor' },
-  )
+  // Cover post TIDAK disalin ke Cloudinary di sini — hanya post yang tampil di report
+  // yang disalin, saat report dibuat (@/lib/reports/images/resolve).
 
   for (const post of posts) {
     const postId = post.id
@@ -269,7 +264,7 @@ export async function saveTiktokCompetitorMedias(
         mediaType, slideCount, post.diggCount ?? null, post.commentCount ?? null, post.playCount ?? null,
         post.collectCount ?? null, post.shareCount ?? null, post.videoMeta?.duration ?? null, hashtags, hashtags.length,
         mentions, post.webVideoUrl ?? null,
-        mirrored.get(postId) ?? post.videoMeta?.coverUrl ?? null,
+        post.videoMeta?.coverUrl ?? null,
         post.isPinned ?? null, post.isSponsored ?? null, post.isAd ?? null,
         post.musicMeta?.musicName ?? null, post.musicMeta?.musicAuthor ?? null,
       ],
@@ -357,10 +352,8 @@ export async function saveIgCompetitorMedias(
 ): Promise<void> {
   if (posts.length === 0) return
 
-  const mirrored = await mirrorImages(
-    posts.map(x => ({ id: String(x.id ?? ''), url: x.displayUrl ?? null })).filter(x => x.id),
-    { table: 'ig_competitor_media', idColumn: 'media_id', urlColumn: 'cover_image', folder: 'ig-competitor' },
-  )
+  // Cover post TIDAK disalin ke Cloudinary di sini — hanya post yang tampil di report
+  // yang disalin, saat report dibuat (@/lib/reports/images/resolve).
 
   for (const post of posts) {
     const mediaId = post.id
@@ -418,7 +411,7 @@ export async function saveIgCompetitorMedias(
          fetched_at          = NOW()`,
       [
         socialAccountId, mediaId, postedAt, caption, mediaType,
-        shortcode, permalink, mirrored.get(mediaId) ?? coverImage,
+        shortcode, permalink, coverImage,
         slideCount, videoDuration,
         hashtags, hashtags.length, mentions,
         isCollaborator, isSponsored, isCommentDisabled, isPinned,

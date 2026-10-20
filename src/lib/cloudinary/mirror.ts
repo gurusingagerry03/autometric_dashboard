@@ -5,6 +5,13 @@ import cloudinary from './client'
  * Menyalin gambar post ke Cloudinary saat data mentah ditarik, lalu menyimpan URL
  * Cloudinary-nya — bukan URL asli dari CDN platform.
  *
+ * CAKUPANNYA
+ *   Dipakai untuk post milik brand dari Meta (Instagram, Facebook) beserta story
+ *   dan tagged post IG — story tidak bisa ditarik ulang setelah 24 jam. Cover post
+ *   kompetitor dan video TikTok milik brand TIDAK disalin saat sync: yang tampil di
+ *   report disalin saat report dibuat, lewat @/lib/reports/images/resolve, yang
+ *   juga menjadi jaring pengaman untuk post Meta yang penyalinannya di sini gagal.
+ *
  * KENAPA PERLU
  *   URL cover dari Meta dan TikTok MEMBAWA MASA BERLAKU. Instagram menyisipkan
  *   parameter `oe=`, TikTok `x-expires=`; lewat beberapa hari gambarnya berhenti
