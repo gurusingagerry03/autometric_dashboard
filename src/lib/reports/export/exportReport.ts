@@ -666,18 +666,25 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   // post's permalink. The photo is covered by a fully transparent rect carrying the
   // link, so it also works when the image failed to load (gradient only).
   const link = post.link ? { url: post.link, tooltip: post.link } : undefined
-  if (link) slide.addShape('rect', { x, y, w, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { width: 0 }, hyperlink: link })
+  if (link) slide.addShape('rect', { x, y, w, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { type: 'none' }, hyperlink: link })
   if (post.tag) slide.addText(post.tag, { x: x + W(0.4), y: y + H(0.6), w: W(5), h: H(2.2), fontSize: FS(0.8), bold: true, color: 'FFFFFF', fill: { color: post.tag === 'TOP' ? '16A34A' : 'E11D48' }, align: 'center', valign: 'middle', fontFace: PJ })
   const capFs = Math.max(6, Math.round(baseFs * 0.82 * 10) / 10)
-  const idBox = { x: x + pad, y: y + imgH + H(0.4), w: w - 2 * pad, h: H(2.0), fontSize: baseFs, bold: true, color: '334155', fontFace: PJ }
+  // The ↗ mark sits in its own box at the right edge. Sharing the #id box (as it
+  // once did) stacked an empty text box over "#1", and that box swallowed the click.
+  const arrowW = W(1.6)
+  const idBox = { x: x + pad, y: y + imgH + H(0.4), w: w - 2 * pad - arrowW, h: H(2.0), fontSize: baseFs, bold: true, color: '334155', fontFace: PJ }
+  const arrowBox = { x: x + w - pad - arrowW, y: idBox.y, w: arrowW, h: idBox.h, fontSize: baseFs, bold: true, align: 'right' as const, fontFace: PJ }
   if (link) {
-    slide.addText([{ text: `#${post.id}`, options: { hyperlink: link } }], idBox)
-    slide.addText([{ text: '↗', options: { hyperlink: link } }], { ...idBox, align: 'right', color: '94A3B8' })
+    slide.addText([{ text: `#${post.id}`, options: { hyperlink: link, color: '334155' } }], idBox)
+    slide.addText([{ text: '↗', options: { hyperlink: link, color: '2C3079' } }], arrowBox)
   } else {
     slide.addText(`#${post.id}`, idBox)
+    slide.addText('↗', { ...arrowBox, color: 'CBD5E1' })
   }
   const caption = [post.format, post.pillar].filter(Boolean).join('  ·  ')
   if (caption) slide.addText(caption, { x: x + pad, y: y + imgH + H(2.5), w: w - 2 * pad, h: H(1.8), fontSize: capFs, color: '94A3B8', valign: 'top', fontFace: PJ })
+  // Jangan menaruh shape (mis. area klik transparan) di atas #id / ↗: shape itu
+  // menelan klik ke hyperlink teks di bawahnya — di WPS link-nya jadi mati.
   const colY = y + imgH + H(4.4), colH = h - imgH - POST_HEAD_H
   slide.addText(postMetrics.map(m => postMetricLabel(m)).join('\n'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, color: '94A3B8', align: 'left', valign: 'top', lineSpacingMultiple: METRIC_LINE, fontFace: PJ })
   slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad + (w - 2 * pad) * 0.55, y: colY, w: (w - 2 * pad) * 0.45, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacingMultiple: METRIC_LINE, fontFace: MONO })
@@ -1078,6 +1085,24 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
 
   const safe = (brandName || 'report').replace(/[^a-z0-9]+/gi, '-').toLowerCase()
   const fileName = `${safe}-report.pptx`
-  const blob = (await pptx.write({ outputType: 'blob' })) as Blob
+  const blob = await fixTextHyperlinksForWps((await pptx.write({ outputType: 'arraybuffer' })) as ArrayBuffer)
   return { blob, fileName }
+}
+
+/**
+ * pptxgenjs menulis hyperlink teks dengan `invalidUrl="" action="" tgtFrame=""`.
+ * PowerPoint mengabaikan atribut kosong itu, tapi WPS membaca `action=""` sebagai
+ * "tanpa aksi" dan membuang link-nya — #id dan ikon ↗ di kartu post jadi tidak bisa
+ * diklik. Hyperlink pada shape tidak terkena (pptxgenjs tidak menulis atribut itu
+ * di sana), jadi yang dibersihkan cukup run teks di XML slide.
+ */
+async function fixTextHyperlinksForWps(buf: ArrayBuffer): Promise<Blob> {
+  const { default: JSZip } = await import('jszip')
+  const zip = await JSZip.loadAsync(buf)
+  const slides = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p))
+  for (const path of slides) {
+    const xml = await zip.file(path)!.async('string')
+    if (xml.includes(' action="" ')) zip.file(path, xml.replaceAll(' invalidUrl="" action="" tgtFrame=""', ''))
+  }
+  return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE' })
 }
