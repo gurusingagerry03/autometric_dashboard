@@ -664,7 +664,7 @@ const POST_IMG_MIN = 0.34         // …and the least it may shrink to for long 
  * once it hits POST_IMG_MIN the type shrinks. Mirrors the preview, where the
  * photo is `flex-1` above a `shrink-0` stats block.
  */
-function postCardFit(rows: number, baseFs: number, h: number, labelW: number, longestLabel: number, valueW = Infinity, longestValue = 0) {
+function postCardFit(rows: number, baseFs: number, h: number, labelW: number, longestLabel: number, innerW = Infinity, longestRow = 0) {
   const lineIn = (pt: number) => (pt * METRIC_LINE) / 72
   const need = Math.max(1, rows) * lineIn(baseFs)
   const imgH = Math.min(h * POST_IMG_MAX, Math.max(h * POST_IMG_MIN, h - POST_HEAD_H - need))
@@ -673,10 +673,11 @@ function postCardFit(rows: number, baseFs: number, h: number, labelW: number, lo
   // would push the label column out of step with the value column.
   const byHeight = ((avail / Math.max(1, rows)) * 72) / METRIC_LINE
   const byWidth = (labelW * 72) / (Math.max(1, longestLabel) * 0.5)   // ~0.5em average char
-  // …and the longest value too (mono ≈ 0.62em): a wrapped value pushes every value
-  // under it one line down, out of step with its label (Post-UAT brief "Overlap
-  // Table in Content Slide").
-  const byValue = longestValue ? ((valueW - 0.1) * 72) / (longestValue * 0.62) : Infinity
+  // …and every row's label + value side by side across the card's full inner width
+  // (`longestRow` is in em): a value that does not fit used to wrap — "29 Sep" /
+  // "2026" — and push every value under it one line down, out of step with its
+  // label (Post-UAT brief "Overlap Table in Content Slide").
+  const byValue = longestRow ? ((innerW - 0.08) * 72) / longestRow : Infinity
   const fs = Math.max(6, Math.floor(Math.min(baseFs, byHeight, byWidth, byValue) * 10) / 10)   // floor: rounding up could re-introduce a wrap
   return { imgH, fs }
 }
@@ -687,9 +688,13 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   const baseFs = n === 4 ? FS(1.05) : n === 6 ? FS(0.9) : FS(0.78)
   const labelW = (w - 2 * pad) * 0.62   // values are right-aligned in the box beside it, so the slight overlap is safe
   const longest = postMetrics.reduce((mx, m) => Math.max(mx, cardMetricLabel(m).length), 0)
-  const valueW = (w - 2 * pad) * 0.45
-  const longestValue = postMetrics.reduce((mx, m) => Math.max(mx, (post.metrics[m] ?? '—').length), 0)
-  const { imgH, fs } = postCardFit(postMetrics.length, baseFs, h, labelW, longest, valueW, longestValue)
+  // The value box spans the card's full inner width, right-aligned, so a long value
+  // (Post Date & Time) has the whole row instead of the right 45%. The only real
+  // limit is a label and its value colliding — sized per row below.
+  const innerW = w - 2 * pad
+  const longestRow = postMetrics.reduce((mx, m) =>
+    Math.max(mx, cardMetricLabel(m).length * 0.5 + (post.metrics[m] ?? '—').length * 0.62 + 1), 0)   // em; +1 em gap
+  const { imgH, fs } = postCardFit(postMetrics.length, baseFs, h, labelW, longest, innerW, longestRow)
 
   slide.addShape('rect', { x, y, w, h: imgH, fill: { color: hslToHex((post.id * 47) % 360, 0.42, 0.85) }, line: { width: 0 } })
   // Embedded link content (Post-UAT brief "Embedded Link Content"): the photo, #id
@@ -724,8 +729,10 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   // tinggi barisnya beda dan nilai makin melenceng dari labelnya ke bawah. Spasi
   // baris ABSOLUT (pt) membuat kedua kolom berbaris di tinggi yang sama persis.
   const lineSpacing = Math.round(fs * METRIC_LINE * 10) / 10
-  slide.addText(postMetrics.map(m => cardMetricLabel(m)).join('\n'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, color: '94A3B8', align: 'left', valign: 'top', lineSpacing, fontFace: PJ })
-  slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad + (w - 2 * pad) * 0.55, y: colY, w: valueW, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacing, fontFace: MONO })
+  // wrap: false + margin 0 — a line never breaks, so label n and value n always sit
+  // on line n together, whatever the renderer's (PowerPoint/WPS) text metrics.
+  slide.addText(postMetrics.map(m => cardMetricLabel(m)).join('\n'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, color: '94A3B8', align: 'left', valign: 'top', lineSpacing, margin: 0, wrap: false, fontFace: PJ })
+  slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad, y: colY, w: innerW, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacing, margin: 0, wrap: false, fontFace: MONO })
 }
 
 async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null, resolveImages?: ImageResolver | null) {
