@@ -52,11 +52,13 @@ function HourBars({ hours, primeFrom, primeTo }: { hours: number[]; primeFrom: n
   )
 }
 
-const LB_COLS = 'grid-cols-[48px_minmax(150px,2fr)_72px_90px_120px_96px_96px]'
+const LB_COLS = 'grid-cols-[48px_minmax(150px,2fr)_72px_72px_90px_120px_96px_96px]'
 const LB_HEADS = [
   { label: 'Rank',           metricKey: 'community_contributors.rank_in_window' },
   { label: 'Username',       metricKey: 'ugc_tagged_posts.username' },
   { label: 'Platform' },
+  // Angka yang menentukan urutan — tanpa kolom ini peringkatnya tidak bisa dibaca.
+  { label: 'Score',          metricKey: 'community_contributors.composite_score' },
   { label: 'Comments',       metricKey: 'community_contributors.comments_count' },
   { label: 'Likes Received', metricKey: 'community_contributors.likes_received' },
   { label: 'Avg Replies',    metricKey: 'derived.replies_per_comment' },
@@ -166,9 +168,9 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
 
       <SectionHeader icon="leaderboard">{t('Top Commenters — Community Leaderboard')}</SectionHeader>
       <Card area="community_contributors" skeleton="table" className="overflow-hidden">
-        <CardHead title={t('Top Commenters — Community Leaderboard')} metricKey="community_contributors.composite_score" sub={t('Ranked by comments, likes received and replies')} />
+        <CardHead title={t('Top Commenters — Community Leaderboard')} metricKey="community_contributors.composite_score" sub={t('Ranked by score: comment volume vs. the top commenter on the same platform, plus comment relevance')} />
         <div className="overflow-x-auto">
-          <div className="min-w-[720px]">
+          <div className="min-w-[800px]">
             <TableHeadRow className={`grid ${LB_COLS}`} cols={LB_HEADS} />
             {data.contributors.map((c, i) => (
               <div key={c.username}
@@ -179,6 +181,7 @@ function CommunityBody({ orgId, brandId, platform, period, start, end }: { orgId
                 <span className="font-medium text-[#374151] truncate">{c.username}</span>
                 <span className="inline-flex items-center justify-center text-[10px] font-bold text-white rounded px-1.5 py-0.5 w-fit"
                   style={{ background: PLATFORM_META[c.platform].color }}>{PLATFORM_META[c.platform].short}</span>
+                <span style={PJ} className="font-bold text-[#6c4cd6] tabular-nums">{c.score.toFixed(1)}</span>
                 <NumCell value={c.comments} className="font-semibold text-[#111827] tabular-nums" />
                 <NumCell value={c.likes} className="text-[#374151] tabular-nums" />
                 <span className="text-[#374151] tabular-nums">{c.daily}</span>

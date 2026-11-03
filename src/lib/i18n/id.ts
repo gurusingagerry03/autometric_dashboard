@@ -447,8 +447,9 @@ export const ID: Record<string, string> = {
   'No hourly data.': 'Tidak ada data per jam.',
   'Prime Window': 'Window Utama',
   'Top Commenters — Community Leaderboard': 'Komentator Teratas — Papan Peringkat Komunitas',
-  'Ranked by comments, likes received and replies':
-    'Diurutkan berdasarkan komentar, suka diterima, dan balasan',
+  'Ranked by score: comment volume vs. the top commenter on the same platform, plus comment relevance':
+    'Diurutkan berdasarkan skor: jumlah komentar dibanding komentator teratas di platform yang sama, ditambah relevansi komentar',
+  'Score': 'Skor',
   'No contributor data in this period.': 'Belum ada data kontributor pada periode ini.',
   'No community data for this filter yet.': 'Belum ada data komunitas untuk filter ini.',
   'Comments peak {from}:00–{to}:00 WIB ({pct}% of the total). Replying inside this window deepens the reply threads.':

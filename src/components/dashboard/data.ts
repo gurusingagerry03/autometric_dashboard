@@ -208,6 +208,8 @@ export interface ContributorRow {
   likes: number
   daily: number
   relevance: number
+  /** composite_score (0–100) — urutan leaderboard; lihat glosarium community_contributors.composite_score. */
+  score: number
   tier: 'Super Fan' | 'Active' | 'Casual'
   color: string
 }

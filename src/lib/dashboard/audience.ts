@@ -404,12 +404,11 @@ async function contributors(orgId: string, platform: PlatformParam, days: number
   const windowDays = [7, 30, 90].includes(days) ? days : 30
   const { rows } = await pool.query<{
     uname: string; platform: DashPlatform; comments: number; likes: number
-    relevance: number | null; tier: string
+    relevance: number | null; score: number | null; tier: string
   }>(
-    // composite_score orders the rows but is never selected — see ContributorRow.
     `SELECT cc.normalized_username uname, cc.platform,
             cc.comments_count::int comments, cc.likes_received::int likes,
-            cc.avg_relevance::float relevance, cc.tier
+            cc.avg_relevance::float relevance, cc.composite_score::float score, cc.tier
        FROM l2_gold.community_contributors cc
        JOIN public.brands b ON b.id = cc.brand_id AND b.deleted_at IS NULL
       WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'cc')})
@@ -428,6 +427,7 @@ async function contributors(orgId: string, platform: PlatformParam, days: number
     likes: r.likes,
     daily: +(r.comments / windowDays).toFixed(1),
     relevance: Math.round(r.relevance ?? 0),
+    score: Math.round((r.score ?? 0) * 10) / 10,
     tier: TIER_LABEL[r.tier] ?? 'Casual',
     color: PALETTE[i % PALETTE.length],
   }))
