@@ -21,7 +21,10 @@ export interface KpiTarget {
   /** null = capaiannya gagal dihitung (metrik di luar katalog, atau query error). */
   achieved: number | null
   achievementRate: number | null   // achieved / target × 100
-  runRate: number | null           // hari berjalan / total hari × 100
+  /** Capaian dibanding target pro-rata waktu — lihat kpiRunRate. */
+  runRate: number | null
+  /** Porsi periode yang sudah lewat: hari berjalan / total hari × 100. */
+  timeGone: number | null
   startDate: string                // YYYY-MM-DD
   endDate: string                  // YYYY-MM-DD
   /** Hari terakhir yang ikut dihitung: LEAST(hari ini, endDate, akhir bulan report). */
@@ -121,18 +124,37 @@ export const fmtKpiRate = (n: number | null): string => {
 }
 
 /**
- * Capaian sudah mengejar waktu yang terpakai?
+ * Run rate (Post-UAT Revision Brief, "Report Maker - KPI Slide"):
+ *
+ *   Run Rate = Current / ((Target / 12) × Time Gone)
+ *            = Achievement Rate / Time Gone × 100
+ *
+ * Dulu "run rate" di slide ini sebenarnya time gone (porsi periode yang sudah
+ * lewat); itu sekarang punya baris sendiri. Run rate 100% = tepat di jadwal,
+ * di atas 100% = di depan jadwal.
+ *
+ * Pro-rata waktu hanya berlaku untuk metrik yang BERAKUMULASI (unit 'count').
+ * ER dan rata-rata per post tidak tumbuh seiring waktu — ER 1.8% di bulan ketiga
+ * sudah 1.8%, bukan seperempat target — jadi run rate-nya = achievement rate.
+ */
+export function kpiRunRate(metric: KpiMetric, achievementRate: number | null, timeGone: number | null): number | null {
+  if (achievementRate == null) return null
+  if (kpiMetricUnit(metric) !== 'count') return achievementRate
+  if (!timeGone) return null
+  return Math.round((achievementRate / timeGone) * 100 * 100) / 100
+}
+
+/**
+ * Capaian sudah mengejar waktu yang terpakai? = run rate ≥ 100%.
  *
  * Inilah yang menggantikan "vs last period": KPI tidak punya periode sebelumnya
  * untuk dibandingkan — yang bisa dibandingkan hanya seberapa jauh capaiannya
- * terhadap seberapa jauh periodenya sudah berjalan. Achievement 40% di run rate
- * 30% berarti di depan jadwal; 40% di run rate 90% berarti tertinggal.
+ * terhadap seberapa jauh periodenya sudah berjalan.
  *
- * null (procedure belum jalan) dianggap BELUM on pace — tidak ada bukti bahwa
- * targetnya terkejar, dan hijau tanpa bukti lebih menyesatkan daripada abu-abu.
+ * null dianggap BELUM on pace — tidak ada bukti bahwa targetnya terkejar, dan
+ * hijau tanpa bukti lebih menyesatkan daripada abu-abu.
  */
-export const kpiOnPace = (t: KpiTarget): boolean =>
-  t.achievementRate != null && t.runRate != null && t.achievementRate >= t.runRate
+export const kpiOnPace = (t: KpiTarget): boolean => t.runRate != null && t.runRate >= 100
 
 // Bulan ditulis pendek dalam bahasa Inggris — sama seperti di seluruh report,
 // yang memang berbahasa Inggris apa pun bahasa antarmukanya.

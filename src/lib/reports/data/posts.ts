@@ -1,7 +1,7 @@
 // Post data for the Visual Analysis slide. Live-only: values come from
 // l1_silver.unified_post (via ReportPostContext / postsQuery). No sample/dummy
 // fallback — when there is no live pool the slide shows a loading / empty state.
-import { groupInt } from './format'
+import { compactNum, groupInt, shortMetricLabel } from './format'
 import { isStoredImage } from '../images/keys'
 
 // Ordered by the Content Performance categories (Acquisition → Awareness →
@@ -200,10 +200,10 @@ export function normPillar(raw?: string | null): { id: string; label: string } {
   return { id: t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''), label: t }
 }
 
-const fmtValue = (id: string, v: number) =>
+const fmtValue = (id: string, v: number, compact = false) =>
   isErMetric(id) || id === 'completion_rate' ? v.toFixed(2) + '%'
   : id === 'watch_time' ? v.toFixed(1) + 's'
-  : groupInt(v)
+  : compact ? compactNum(v) : groupInt(v)
 
 // Only http(s) permalinks become hyperlinks — the value comes from scraped data
 // and ends up as an <a href> in the preview and a click target in the PPTX.
@@ -217,6 +217,8 @@ export interface PostOptions {
   pillar?: string
   sortMetric?: string
   source?: PostCandidate[]   // live pool; empty/absent ⇒ no posts (no sample fallback)
+  /** Angka ringkas (1.23M) — ContentSlide.postNumbers === 'compact'. */
+  compact?: boolean
 }
 
 // Filter (format + pillar) → rank by the chosen metric → apply top/low/mixed → slice.
@@ -250,7 +252,7 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
     const metrics: Record<string, string> = {}
     POST_METRICS.forEach(m => {
       // Teks menang untuk metrik tanggal; sisanya diformat dari angkanya.
-      metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0)
+      metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0, opts.compact)
     })
     return {
       id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics, link: safeLink(cand.link),
@@ -260,6 +262,9 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
 }
 
 export const metricLabel = (id: string) => POST_METRICS.find(m => m.id === id)?.label ?? id
+/** Label di KARTU post — disingkat (Imprs./Views) supaya sejajar dengan nilainya.
+ *  Pemilih metrik tetap memakai metricLabel lengkap. */
+export const cardMetricLabel = (id: string) => shortMetricLabel(metricLabel(id))
 
 /* ── Activity Performance ─────────────────────────────────────────────────────
  * Slide ini memakai layout kartu yang sama persis dengan Visual Analysis. Yang

@@ -184,12 +184,15 @@ function TargetCard({
         {t('Target')} {target.operation} {fmtKpiValue(target.metric, target.target)} · {fmtKpiPeriod(target.startDate, target.endDate)}
       </div>
 
-      <div className="flex flex-col" style={{ gap: '0.35cqh' }}>
+      <div className="flex flex-col" style={{ gap: '0.2cqh' }}>
         {compare !== 'run' && (
           <RateRow label={t('Achievement')} value={fmtKpiRate(target.achievementRate)} size={s.rate} color={rateColor} strong />
         )}
         {compare !== 'achievement' && (
-          <RateRow label={t('Run rate')} value={fmtKpiRate(target.runRate)} size={s.rate} color="#475569" strong={compare === 'run'} />
+          <RateRow label={t('Run rate')} value={fmtKpiRate(target.runRate)} size={s.rate} color={compare === 'run' ? rateColor : '#475569'} strong={compare === 'run'} />
+        )}
+        {compare !== 'achievement' && (
+          <RateRow label={t('Time gone')} value={fmtKpiRate(target.timeGone)} size={s.rate} color="#94a3b8" />
         )}
       </div>
     </div>

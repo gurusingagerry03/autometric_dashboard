@@ -63,8 +63,10 @@ export async function getReportPostMetrics(
             COALESCE(ri.image_url, p.cover_image) cover_image, p.format, p.content_pillar,
             p.post_type, p.link, COALESCE(p.duration_s,0)::float duration_s,
             EXTRACT(EPOCH FROM p.post_date)::float           post_epoch,
-            to_char(p.post_date, 'DD Mon YYYY')              post_date_txt,
-            to_char(p.post_date, 'DD Mon YYYY, HH24:MI')     post_datetime_txt,
+            -- "26 Sep '26" (Post-UAT brief "Overlap Table in Content Slide"): tahun
+            -- penuh membuat nilai ini terlalu lebar untuk kolom nilai kartu post.
+            to_char(p.post_date, 'FMDD Mon ''YY')            post_date_txt,
+            to_char(p.post_date, 'FMDD Mon ''YY, HH24:MI')   post_datetime_txt,
             COALESCE(p.avg_watch_time,0)::float              avg_watch_time,
             p.completion_rate,
             COALESCE(p.follows,0)::float      follows,

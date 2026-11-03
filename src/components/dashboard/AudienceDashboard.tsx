@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Card, CardHead, SectionHeader, FlexKpiCard, Callout, Badge, PostLink, TableHeadRow, KpiGrid } from './ui'
 import { HBars, MultiLineChart, SERIES } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
-import { ChartTooltip, useChartTooltip } from '@/components/ui/ChartTooltip'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import ExactValue, { NumCell } from '@/components/ui/ExactValue'
 import { PLATFORM_META, fmtInt, type PlatformFilter, type Period, shownFor, shownExcept } from './data'
@@ -110,7 +109,6 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
 
   // The gender bars are hand-drawn rather than an HBars/Donut, so they need their
   // own tooltip to answer the question the printed % can't: how many people.
-  const genderTip = useChartTooltip()
 
   // Final revision: a section with no data is removed rather than shown empty. While a
   // new brand's table is still being built the card stays, so its skeleton can show.
@@ -200,12 +198,11 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
       {showDemographics && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
         <Card area="audience_demographics_daily" skeleton="chart" className="flex flex-col">
-          <CardHead title={t('Audience Age Distribution')} metricKey="audience_demographics_daily.age" sub={t('Share of followers by age group')} />
+          <CardHead title={t('Audience Age Distribution')} sub={t('Share of followers by age group')} />
           <div className="px-4 pb-4 pt-3">
             {data.age.some(a => a.value > 0)
-              ? <HBars showShare={false} items={data.age.map(a => ({
+              ? <HBars hover={false} items={data.age.map(a => ({
                   label: a.bucket, value: a.value, display: fmtPct(a.value),
-                  exact: fmtInt(a.count), exactLabel: t('Followers'),
                 }))} />
               : <div className="py-10 text-center text-[12px] text-[#9ca3af]">{t('No audience age data.')}</div>}
           </div>
@@ -215,7 +212,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
         </Card>
 
         <Card area="audience_demographics_daily" skeleton="chart" className="flex flex-col">
-          <CardHead title={t('Gender Split by Platform')} metricKey="audience_demographics_daily.gender" sub={t('Female vs. male share per channel')} />
+          <CardHead title={t('Gender Split by Platform')} sub={t('Female vs. male share per channel')} />
           <div className="flex items-center justify-center gap-6 pt-1 pb-3">
             <Badge text={t('Female')} color={FEMALE} />
             <Badge text={t('Male')} color={MALE} />
@@ -226,14 +223,8 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
             )}
             {data.gender.map(g => {
               const label = PLATFORM_META[g.platform].label
-              const half = (pctShare: number, count: number, name: string, bg: string) => (
-                <div
-                  className="flex items-center justify-center cursor-pointer transition-opacity hover:opacity-85"
-                  style={{ width: `${pctShare}%`, background: bg }}
-                  onMouseEnter={e => genderTip.show(e, label, [{ label: name, value: fmtInt(count), color: bg }])}
-                  onMouseMove={e => genderTip.show(e, label, [{ label: name, value: fmtInt(count), color: bg }])}
-                  onMouseLeave={genderTip.hide}
-                >
+              const half = (pctShare: number, bg: string) => (
+                <div className="flex items-center justify-center" style={{ width: `${pctShare}%`, background: bg }}>
                   <span className="text-[11.5px] font-bold text-white">{fmtPct(pctShare)}</span>
                 </div>
               )
@@ -241,8 +232,8 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                 <div key={g.platform} className="flex items-center gap-3">
                   <span className="w-[72px] flex-shrink-0 text-right text-[12.5px] font-medium text-[#374151]">{label}</span>
                   <div className="flex-1 flex h-10 rounded-lg overflow-hidden">
-                    {half(g.female, g.femaleCount, t('Female'), FEMALE)}
-                    {half(g.male, g.maleCount, t('Male'), MALE)}
+                    {half(g.female, FEMALE)}
+                    {half(g.male, MALE)}
                   </div>
                 </div>
               )
@@ -257,7 +248,6 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                 </div>
               </div>
             )}
-            <ChartTooltip tip={genderTip.tip} />
           </div>
         </Card>
       </div>

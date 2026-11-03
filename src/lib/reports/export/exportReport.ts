@@ -10,7 +10,7 @@ import { TableColumn, TableConfig, TABLE_TYPES, SectionMetrics, SentimentTable, 
 import { cloudWordsFrom, type ReportChartMetrics, type CloudWordData } from '../data/chartTypes'
 import {
   ageBucketsFor, SENTIMENT_COLOR, SENTIMENT_KEYS, SENTIMENT_LABEL, SOURCE_LABEL,
-  audienceWordsFor, biggestShift, demographicChannels, demographicsFor, sentimentFor,
+  audienceWordsFor, biggestShift, demographicChannels, demographicHeading, demographicsFor, sentimentFor,
   type ReportAudienceMetrics, type SentimentBlock, type SourceFilter,
 } from '../data/audienceTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
@@ -24,7 +24,7 @@ import {
   ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor,
 } from '../data/ytdMetrics'
 import { trackerMonthsFor, trackerTableSizes, type ReportMonthlyTracker } from '../data/monthlyTracker'
-import { buildPosts, metricLabel as postMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics } from '../data/posts'
+import { buildPosts, cardMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics } from '../data/posts'
 import type { ImageResolver } from '../images/client'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
@@ -281,7 +281,27 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   const big = config.type === 'monthly_tracker'
     ? trackerTableSizes(rows.length, (h / S.h) * 100, columns.filter(c => c.format !== 'text').length, columns.some(c => c.format === 'text'))
     : null
+  const tw = w - 2 * pad
+  const firstW = tw * (big ? 0.12 : 0.18)
+  // Kolom teks (Key Highlight) 1.8× lebar kolom angka — sama dengan preview.
+  const weight = (c: TableColumn) => (c.format === 'text' ? 1.8 : 1)
+  const totalWeight = columns.reduce((a, c) => a + weight(c), 0) || 1
+  const colW = [firstW, ...columns.map(c => ((tw - firstW) * weight(c)) / totalWeight)]
   const fsz = { head: FS(big?.head ?? 1.0), first: FS(big?.month ?? 1.05), value: FS(big?.value ?? 1.0), sub: FS(big?.sub ?? 0.75), note: FS(big?.note ?? 0.95) }
+  // Auto-fit (Post-UAT brief "Overlap Shapes in Table Slide"): PowerPoint memecah
+  // angka yang tidak muat di tengah ("15,242, / 236") dan kata header di tengah
+  // ("Comment / s"). Huruf diperkecil sampai angka terpanjang muat satu baris dan
+  // kata header terpanjang tidak terpotong. Header tetap boleh dua baris antar kata.
+  const numCols = columns.map((c, i) => ({ c, w: colW[i + 1] })).filter(({ c }) => c.format !== 'text')
+  if (numCols.length) {
+    const fitPt = (widthIn: number, chars: number, em: number) => ((widthIn - 0.1) * 72) / (Math.max(1, chars) * em)
+    const valueFit = Math.min(...numCols.map(({ c, w: cw }) =>
+      fitPt(cw, Math.max(...rows.map(r => (r.cells[c.id]?.text ?? '').length)), 0.62)))   // mono ≈ 0.6em
+    const headFit = Math.min(...numCols.map(({ c, w: cw }) =>
+      fitPt(cw, Math.max(...c.label.split(/[\s]+/).map(word => word.length)), 0.68)))     // caps bold ≈ 0.68em
+    fsz.value = Math.max(6, Math.floor(Math.min(fsz.value, valueFit) * 10) / 10)
+    fsz.head = Math.max(6, Math.floor(Math.min(fsz.head, headFit) * 10) / 10)
+  }
   const headOpt = { bold: true, color: '94A3B8', fontSize: fsz.head, fill: { color: 'F8FAFB' }, valign: 'middle' as const }
   const headRow = [
     { text: header, options: { ...headOpt, align: 'left' as const } },
@@ -310,12 +330,6 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
     }),
   ])
 
-  const tw = w - 2 * pad
-  const firstW = tw * (big ? 0.12 : 0.18)
-  // Kolom teks (Key Highlight) 1.8× lebar kolom angka — sama dengan preview.
-  const weight = (c: TableColumn) => (c.format === 'text' ? 1.8 : 1)
-  const totalWeight = columns.reduce((a, c) => a + weight(c), 0) || 1
-  const colW = [firstW, ...columns.map(c => ((tw - firstW) * weight(c)) / totalWeight)]
   slide.addTable([headRow, ...bodyRows], {
     x: x + pad, y: y + H(4.8), w: tw, h: h - H(6),
     colW, fontFace: PJ, autoPage: false,
@@ -483,11 +497,13 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
   const rateColor = target.achievementRate == null ? '94A3B8' : kpiOnPace(target) ? '16A34A' : 'DC2626'
   const all: [string, string, string, boolean][] = [
     ['Achievement', fmtKpiRate(target.achievementRate), rateColor, true],
-    ['Run rate', fmtKpiRate(target.runRate), '475569', compare === 'run'],
+    ['Run rate', fmtKpiRate(target.runRate), compare === 'run' ? rateColor : '475569', compare === 'run'],
+    ['Time gone', fmtKpiRate(target.timeGone), '94A3B8', false],
   ]
-  const rows = compare === 'achievement' ? [all[0]] : compare === 'run' ? [all[1]] : all
+  const rows = compare === 'achievement' ? [all[0]] : compare === 'run' ? all.slice(1) : all
+  // Tiga baris harus muat di kartu H(20): 12.6 + 3 × 2.35 = 19.65.
   rows.forEach(([label, value, color, bold], i) => {
-    const ry = y + H(13.2) + i * H(2.6)
+    const ry = y + H(12.6) + i * H(2.35)
     slide.addText(label, { x: x + pad, y: ry, w: bw, h: H(2.4), fontSize: rateFs, color: '94A3B8', align: 'left', fontFace: PJ })
     slide.addText(value, { x: x + pad, y: ry, w: bw, h: H(2.4), fontSize: rateFs, bold, color, align: 'right', fontFace: PJ })
   })
@@ -638,7 +654,7 @@ const POST_IMG_MIN = 0.34         // …and the least it may shrink to for long 
  * once it hits POST_IMG_MIN the type shrinks. Mirrors the preview, where the
  * photo is `flex-1` above a `shrink-0` stats block.
  */
-function postCardFit(rows: number, baseFs: number, h: number, labelW: number, longestLabel: number) {
+function postCardFit(rows: number, baseFs: number, h: number, labelW: number, longestLabel: number, valueW = Infinity, longestValue = 0) {
   const lineIn = (pt: number) => (pt * METRIC_LINE) / 72
   const need = Math.max(1, rows) * lineIn(baseFs)
   const imgH = Math.min(h * POST_IMG_MAX, Math.max(h * POST_IMG_MIN, h - POST_HEAD_H - need))
@@ -647,7 +663,11 @@ function postCardFit(rows: number, baseFs: number, h: number, labelW: number, lo
   // would push the label column out of step with the value column.
   const byHeight = ((avail / Math.max(1, rows)) * 72) / METRIC_LINE
   const byWidth = (labelW * 72) / (Math.max(1, longestLabel) * 0.5)   // ~0.5em average char
-  const fs = Math.max(6, Math.floor(Math.min(baseFs, byHeight, byWidth) * 10) / 10)   // floor: rounding up could re-introduce a wrap
+  // …and the longest value too (mono ≈ 0.62em): a wrapped value pushes every value
+  // under it one line down, out of step with its label (Post-UAT brief "Overlap
+  // Table in Content Slide").
+  const byValue = longestValue ? ((valueW - 0.1) * 72) / (longestValue * 0.62) : Infinity
+  const fs = Math.max(6, Math.floor(Math.min(baseFs, byHeight, byWidth, byValue) * 10) / 10)   // floor: rounding up could re-introduce a wrap
   return { imgH, fs }
 }
 
@@ -656,17 +676,20 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   const pad = W(0.6)
   const baseFs = n === 4 ? FS(1.05) : n === 6 ? FS(0.9) : FS(0.78)
   const labelW = (w - 2 * pad) * 0.62   // values are right-aligned in the box beside it, so the slight overlap is safe
-  const longest = postMetrics.reduce((mx, m) => Math.max(mx, postMetricLabel(m).length), 0)
-  const { imgH, fs } = postCardFit(postMetrics.length, baseFs, h, labelW, longest)
+  const longest = postMetrics.reduce((mx, m) => Math.max(mx, cardMetricLabel(m).length), 0)
+  const valueW = (w - 2 * pad) * 0.45
+  const longestValue = postMetrics.reduce((mx, m) => Math.max(mx, (post.metrics[m] ?? '—').length), 0)
+  const { imgH, fs } = postCardFit(postMetrics.length, baseFs, h, labelW, longest, valueW, longestValue)
 
   slide.addShape('rect', { x, y, w, h: imgH, fill: { color: hslToHex((post.id * 47) % 360, 0.42, 0.85) }, line: { width: 0 } })
-  const imgData = post.image ? await toDataUrl(post.image) : null
-  if (imgData) await addCoverImage(slide, imgData, x, y, w, imgH)
-  // Embedded link content (deck slide 13): the photo, #id and the ↗ mark open the
-  // post's permalink. The photo is covered by a fully transparent rect carrying the
-  // link, so it also works when the image failed to load (gradient only).
+  // Embedded link content (Post-UAT brief "Embedded Link Content"): the photo, #id
+  // and the ↗ mark open the post's permalink. The link rides on the picture itself;
+  // only when there is no picture (load failed → gradient only) does a transparent
+  // rect carry it instead.
   const link = post.link ? { url: post.link, tooltip: post.link } : undefined
-  if (link) slide.addShape('rect', { x, y, w, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { type: 'none' }, hyperlink: link })
+  const imgData = post.image ? await toDataUrl(post.image) : null
+  const imgLinked = imgData ? await addCoverImage(slide, imgData, x, y, w, imgH, link) : false
+  if (link && !imgLinked) slide.addShape('rect', { x, y, w, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { type: 'none' }, hyperlink: link })
   if (post.tag) slide.addText(post.tag, { x: x + W(0.4), y: y + H(0.6), w: W(5), h: H(2.2), fontSize: FS(0.8), bold: true, color: 'FFFFFF', fill: { color: post.tag === 'TOP' ? '16A34A' : 'E11D48' }, align: 'center', valign: 'middle', fontFace: PJ })
   const capFs = Math.max(6, Math.round(baseFs * 0.82 * 10) / 10)
   // The ↗ mark sits in its own box at the right edge. Sharing the #id box (as it
@@ -686,8 +709,13 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   // Jangan menaruh shape (mis. area klik transparan) di atas #id / ↗: shape itu
   // menelan klik ke hyperlink teks di bawahnya — di WPS link-nya jadi mati.
   const colY = y + imgH + H(4.4), colH = h - imgH - POST_HEAD_H
-  slide.addText(postMetrics.map(m => postMetricLabel(m)).join('\n'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, color: '94A3B8', align: 'left', valign: 'top', lineSpacingMultiple: METRIC_LINE, fontFace: PJ })
-  slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad + (w - 2 * pad) * 0.55, y: colY, w: (w - 2 * pad) * 0.45, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacingMultiple: METRIC_LINE, fontFace: MONO })
+  // Label & nilai = dua kotak teks dengan font berbeda (PJ vs mono). Spasi baris
+  // RELATIF (lineSpacingMultiple) dihitung dari metrik font masing-masing, jadi
+  // tinggi barisnya beda dan nilai makin melenceng dari labelnya ke bawah. Spasi
+  // baris ABSOLUT (pt) membuat kedua kolom berbaris di tinggi yang sama persis.
+  const lineSpacing = Math.round(fs * METRIC_LINE * 10) / 10
+  slide.addText(postMetrics.map(m => cardMetricLabel(m)).join('\n'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, color: '94A3B8', align: 'left', valign: 'top', lineSpacing, fontFace: PJ })
+  slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad + (w - 2 * pad) * 0.55, y: colY, w: valueW, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacing, fontFace: MONO })
 }
 
 async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null, resolveImages?: ImageResolver | null) {
@@ -738,8 +766,8 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
   // pilihan sisa dari mode Owned akan menyaring di ekspor tapi tidak di pratinjau.
   const pillar = comp ? 'all' : effectiveFilterId(slide.postPillar, availableFilterIds(source, 'pillarId'))
   const built = isAct
-    ? buildPosts(n, 'top', { sortMetric: 'post_date', source })
-    : buildPosts(n, slide.postFilter, { format, pillar, sortMetric, source })
+    ? buildPosts(n, 'top', { sortMetric: 'post_date', source, compact: slide.postNumbers === 'compact' })
+    : buildPosts(n, slide.postFilter, { format, pillar, sortMetric, source, compact: slide.postNumbers === 'compact' })
   // Sama dengan VisualSlide: cover yang belum tersimpan permanen diminta dulu ke
   // resolver gambar report — termasuk slide yang tidak pernah dibuka di pratinjau.
   const keys = built.map(p => p.imageKey).filter((k): k is string => !!k)
@@ -915,7 +943,13 @@ function demographicPanel(
   if (!cur) return
   card(s, x, y, w, h)
   const meta = PLATFORM_META[platform]
-  s.addText(meta.label, { x: x + W(1), y: y + H(1), w: w - W(2), h: H(3.4), fontSize: FS(1.25), bold: true, color: '0F172A', fontFace: PJ })
+  s.addText(
+    prev ? meta.label : [
+      { text: meta.label, options: { bold: true, color: '0F172A', fontSize: FS(1.25) } },
+      { text: '   NO PRIOR MONTH', options: { bold: true, color: 'B8915A', fontSize: FS(0.85) } },
+    ],
+    { x: x + W(1), y: y + H(1), w: w - W(2), h: H(3.4), fontSize: FS(1.25), bold: true, color: '0F172A', fontFace: PJ },
+  )
 
   const showAge = view !== 'gender'
   const showGender = view !== 'age'
@@ -930,7 +964,8 @@ function demographicPanel(
     // Wide enough for "100.0%" / "+12.3" at three panels per slide; with the old
     // 3.2/2.8 widths PowerPoint wrapped the % and the sign onto their own lines.
     // Every text box in these rows is margin 0 + no wrap for the same reason.
-    const labelW = W(4.4), valW = W(4.6), deltaW = W(3.8)
+    // Tanpa bulan pembanding kolom delta hanya berisi "—"; ruangnya dikembalikan ke bar.
+    const labelW = W(4.4), valW = W(4.6), deltaW = prev ? W(3.8) : 0
     const barW = Math.max(w - W(2) - labelW - valW - deltaW - W(1), W(4))
     const tight = { margin: 0, wrap: false, valign: 'middle' as const, fontFace: PJ }
     for (const [label, b] of buckets) {
@@ -946,10 +981,12 @@ function demographicPanel(
       }
       s.addText(`${now.toFixed(1)}%`, { ...tight, x: bx + barW + W(0.5), y: cursor, w: valW, h: rowH, align: 'right', fontSize: FS(1), bold: true, color: '0F172A' })
       const d = before === null ? null : +(now - before).toFixed(1)
-      s.addText(d === null ? '—' : Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''), {
-        ...tight, x: bx + barW + W(0.5) + valW, y: cursor, w: deltaW, h: rowH, align: 'right',
-        fontSize: FS(0.95), bold: true, color: d === null ? 'CBD5E1' : Math.abs(d) < 0.05 ? 'A3ADBA' : d > 0 ? '15803D' : 'B91C1C',
-      })
+      if (d !== null) {
+        s.addText(Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''), {
+          ...tight, x: bx + barW + W(0.5) + valW, y: cursor, w: deltaW, h: rowH, align: 'right',
+          fontSize: FS(0.95), bold: true, color: Math.abs(d) < 0.05 ? 'A3ADBA' : d > 0 ? '15803D' : 'B91C1C',
+        })
+      }
       cursor += rowH
     }
     cursor += H(1.2)
@@ -986,11 +1023,17 @@ async function addDemographicSlide(
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
   const channels = demographicChannels(audience, slide.channel)
-  const bodyY = H(18), bodyH = H(47)
+  // Header kartu berakhir di H(16). Label dulu ditaruh di H(14.6) — menimpa tepi
+  // bawah header (Post-UAT brief "Audience Demographics Slide"). Sekarang label
+  // punya jalurnya sendiri di antara header dan panel, tanpa margin bawaan.
+  const labelY = H(16.6), bodyY = H(20), bodyH = H(45.5)
 
+  const heading = demographicHeading(audience, channels)
   s.addText(
-    `FOLLOWER DEMOGRAPHICS — ${(audience?.meta.monthLabel ?? '—').toUpperCase()} VS ${(audience?.meta.prevMonthLabel ?? '—').toUpperCase()}`,
-    { x: hx, y: bodyY - H(3.4), w: hw, h: H(3), fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ },
+    (heading.hasPrevious
+      ? `FOLLOWER DEMOGRAPHICS — ${heading.cur} VS ${heading.prev}`
+      : `FOLLOWER DEMOGRAPHICS — ${heading.cur} (NO ${heading.prev} DATA TO COMPARE)`).toUpperCase(),
+    { x: hx, y: labelY, w: hw, h: H(2.8), margin: 0, valign: 'middle', fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ },
   )
 
   if (channels.length === 0) {

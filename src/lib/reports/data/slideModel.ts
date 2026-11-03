@@ -64,7 +64,7 @@ export const KPI_COMPARES: readonly KpiCompare[] = ['both', 'achievement', 'run'
 export const KPI_COMPARE_LABEL: Record<KpiCompare, string> = {
   both: 'Achievement & run rate',
   achievement: 'Achievement rate only',
-  run: 'Run rate only',
+  run: 'Run rate & time gone',
 }
 /**
  * Bentuk baris YTD Performance.
@@ -103,6 +103,8 @@ export interface ContentSlide {
   postFormat: string         // visual — format filter: 'all' | 'reel' | 'video' | 'carousel' | 'image'
   postPillar: string         // visual — content-pillar filter: 'all' | '<pillar id>'
   postSortMetric: string     // visual — metric the top/low ranking is based on
+  /** visual — angka di kartu post: 'full' (default) = 1,234,567, 'compact' = 1.23M. */
+  postNumbers?: 'full' | 'compact'
   postMetrics: string[]      // visual — which post metrics to show
   /** visual — 'owned' (default) atau 'competitor'. Layout & pengaturannya sama;
    *  yang berbeda hanya kumpulan post dan metrik yang tersedia. */

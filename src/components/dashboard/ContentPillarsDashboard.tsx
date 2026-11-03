@@ -18,7 +18,7 @@ const platformParam = (p: PlatformFilter) => (p === 'All' ? 'all' : p)
 export default function ContentPillarsDashboard({ orgId }: { orgId: string }) {
   const t = useT()
   return (
-    <DashboardChrome title={t('Content Pillars')} subtitle={t('Define & compare your content pillars')}>
+    <DashboardChrome title={t('Content Pillars & Tagging')} subtitle={t('Define & compare your content pillars')}>
       {(state) => (
         <PillarsBody orgId={orgId} brandId={state.brand.id}
           platform={state.platform} start={state.start} end={state.end} />

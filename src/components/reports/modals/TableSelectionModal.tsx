@@ -67,6 +67,9 @@ export default function TableSelectionModal({
   // Chosen competitors (Brand-vs-Competitor table only). Default = all available.
   const allCompIds = availableCompetitors.map(c => c.id)
   const [competitorIds, setCompetitorIds] = useState<string[]>(initial?.competitorIds ?? allCompIds)
+  // Tampilan header & angka (Post-UAT brief "Overlap Shapes in Table Slide").
+  const [labels, setLabels] = useState<'short' | 'full'>(initial?.labels ?? 'short')
+  const [numbers, setNumbers] = useState<'full' | 'compact'>(initial?.numbers ?? 'full')
 
   // Org custom-metric library (loaded from the per-organization store). The builder modal
   // creates/edits these; selected ones ride in `columns` like any other column.
@@ -88,6 +91,8 @@ export default function TableSelectionModal({
         ? initial!.competitorIds.filter(id => allCompIds.includes(id))
         : allCompIds,
     )
+    setLabels(initial?.labels ?? 'short')
+    setNumbers(initial?.numbers ?? 'full')
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
@@ -261,10 +266,28 @@ export default function TableSelectionModal({
           </div>
         </div>
 
-        <div className="p-4 px-6 border-t border-[#f0f1f2] flex justify-end gap-2">
+        <div className="p-4 px-6 border-t border-[#f0f1f2] flex items-center justify-end gap-2">
+          <div className="mr-auto flex items-center gap-4">
+            {([
+              ['labels', t('Metric names'), [['short', t('Short')], ['full', t('Full')]], labels, setLabels],
+              ['numbers', t('Numbers'), [['full', '1,234,567'], ['compact', '1.23M']], numbers, setNumbers],
+            ] as const).map(([key, title, opts, value, set]) => (
+              <div key={key} className="flex items-center gap-1.5">
+                <span style={PJ} className="text-[10.5px] font-bold uppercase tracking-wider text-[#94a3b8]">{title}</span>
+                <div className="flex rounded-lg border border-[#e5e7eb] p-0.5">
+                  {opts.map(([id, label]) => (
+                    <button key={id} type="button" onClick={() => (set as (v: string) => void)(id)} style={PJ}
+                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition-colors ${value === id ? 'bg-[#2C3079] text-white' : 'text-[#64748b] hover:bg-[#f3f4f6]'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
           <button onClick={onClose} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">{t('Cancel')}</button>
           <button
-            onClick={() => onConfirm(isCompetitor ? { type, columns, competitorIds } : { type, columns })}
+            onClick={() => onConfirm(isCompetitor ? { type, columns, competitorIds, labels, numbers } : { type, columns, labels, numbers })}
             disabled={columns.length === 0}
             style={PJ}
             className="px-5 py-2.5 bg-[#2C3079] text-white text-[12.5px] font-bold rounded-lg hover:bg-[#20224F] disabled:opacity-50 transition-colors"

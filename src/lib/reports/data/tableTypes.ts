@@ -5,7 +5,7 @@
 // their columns are filtered by the slide's channel (metrics are per-platform).
 // Values are REAL DB numbers (via metricsQuery); no data renders "—", never dummy.
 import type { DashPlatform } from '@/components/dashboard/data'
-import { groupInt } from './format'
+import { compactNum, groupInt, shortMetricLabel } from './format'
 import { TABLE_COLUMN_TO_TRACKER, fmtTrackerMom, fmtTrackerMonth, fmtTrackerValue, trackerMom, type TrackerMetric, type TrackerMonth } from './monthlyTracker'
 
 export type TableFormat = 'compact' | 'number' | 'percent' | 'time' | 'text'
@@ -52,6 +52,10 @@ export interface TableConfig {
   highlights?: Record<string, string>
   /** 'monthly_tracker' only — bulan mulai (YYYY-MM); kosong = Januari tahun report. */
   fromMonth?: string
+  /** Nama metrik di header: 'short' (default) = disingkat (Eng. Owned), 'full' = apa adanya. */
+  labels?: 'short' | 'full'
+  /** Angka: 'full' (default) = 1,234,567, 'compact' = 1.23M. Persen & waktu tidak terpengaruh. */
+  numbers?: 'full' | 'compact'
 }
 
 /** Real metric value for a comparison table: previous vs current period. */
@@ -575,10 +579,10 @@ export function typeChannelHint(typeId: string): string {
 
 // Real DB values: percent keeps up to 2 decimals; time is already in seconds
 // (metricsQuery normalizes avg_watch_time to seconds), shown to 1 decimal.
-function fmtReal(format: TableFormat, val: number): string {
+function fmtReal(format: TableFormat, val: number, compact = false): string {
   if (format === 'percent') return (Math.round(val * 100) / 100) + '%'
   if (format === 'time') return (Math.round(val * 10) / 10) + 's'
-  return groupInt(val)
+  return compact ? compactNum(val) : groupInt(val)
 }
 
 export interface TableCell {
@@ -593,7 +597,7 @@ export interface TableCell {
 export interface TableRow { id: string; label: string; isGap?: boolean; cells: Record<string, TableCell> }
 
 // Real cell from DB metrics. Null values (missing/ambiguous data) render "—".
-function realCell(rowId: string, col: TableColumn, mv: MetricPair | undefined): TableCell {
+function realCell(rowId: string, col: TableColumn, mv: MetricPair | undefined, cx = false): TableCell {
   const prev = mv?.prev ?? null
   const curr = mv?.curr ?? null
   if (rowId === 'gap') {
@@ -606,22 +610,22 @@ function realCell(rowId: string, col: TableColumn, mv: MetricPair | undefined): 
     return { text: '—' } // no data → neutral dash (no gap coloring)
   }
   const v = rowId === 'prev' ? prev : curr
-  return { text: v == null ? '—' : fmtReal(col.format, v) }
+  return { text: v == null ? '—' : fmtReal(col.format, v, cx) }
 }
 
 // Real cell for the Sentiments table (row = sentiment, col = posts / percentage).
-function sentimentCell(rowId: string, col: TableColumn, s: SentimentTable): TableCell {
+function sentimentCell(rowId: string, col: TableColumn, s: SentimentTable, cx = false): TableCell {
   const row = s[rowId as keyof SentimentTable]
   if (!row) return { text: '—' }
-  if (col.id === 'number_of_posts') return { text: fmtReal('number', row.number_of_posts) }
+  if (col.id === 'number_of_posts') return { text: fmtReal('number', row.number_of_posts, cx) }
   if (col.id === 'percentage') return { text: fmtReal('percent', row.percentage) }
   return { text: '—' }
 }
 
 // Real cell for a Brand-vs-Competitor row (value keyed by column id; null → "—").
-function competitorCell(entity: CompetitorEntity, col: TableColumn): TableCell {
+function competitorCell(entity: CompetitorEntity, col: TableColumn, cx = false): TableCell {
   const v = entity.values[col.id]
-  return { text: v == null ? '—' : fmtReal(col.format, v) }
+  return { text: v == null ? '—' : fmtReal(col.format, v, cx) }
 }
 
 // Row order + labels for the per-platform comparison tables.
@@ -638,7 +642,15 @@ const PLATFORM_ROW_LABEL: Record<DashPlatform, string> = {
  * — null values render "—". Without a real source (or while data loads) rows
  * render "—" too: no seeded numbers.
  */
-export function buildTable(
+export function buildTable(...args: Parameters<typeof buildTableRaw>): ReturnType<typeof buildTableRaw> {
+  const out = buildTableRaw(...args)
+  // Singkatan nama metrik hanya di header tabel; id & label asli di picker tidak
+  // berubah, jadi konfigurasi tersimpan tetap terbaca apa pun pilihan labelnya.
+  if (args[0].labels === 'full') return out
+  return { ...out, columns: out.columns.map(c => ({ ...c, label: shortMetricLabel(c.label) })) }
+}
+
+function buildTableRaw(
   config: TableConfig,
   availableColumns: TableColumn[],
   metrics?: SectionMetrics | null,
@@ -650,6 +662,7 @@ export function buildTable(
   months?: TrackerMonth[] | null,
 ): { header: string; columns: TableColumn[]; rows: TableRow[] } {
   const def = TABLE_TYPES[config.type] ?? TABLE_TYPES.content_level
+  const cx = config.numbers === 'compact'
   // Selections saved before a column was renamed still carry the old id.
   const selected = normalizeColumnIds(config.columns)
   // Custom metrics attach to the comparison metric tables only (content/channel level).
@@ -672,7 +685,7 @@ export function buildTable(
       const entities = [competitors.brand, ...chosen]
       rows = entities.map(e => {
         const cells: Record<string, TableCell> = {}
-        columns.forEach(col => { cells[col.id] = competitorCell(e, col) })
+        columns.forEach(col => { cells[col.id] = competitorCell(e, col, cx) })
         return { id: e.id, label: e.label, cells }
       })
     } else {
@@ -721,7 +734,7 @@ export function buildTable(
       const cells: Record<string, TableCell> = {}
       columns.forEach(col => {
         const v = vals ? vals[col.id] ?? null : null
-        cells[col.id] = { text: v == null ? '—' : fmtReal(col.format, v) }
+        cells[col.id] = { text: v == null ? '—' : fmtReal(col.format, v, cx) }
       })
       return { id: p, label: PLATFORM_ROW_LABEL[p], cells }
     })
@@ -733,8 +746,8 @@ export function buildTable(
   const rows: TableRow[] = ROW_DEFS[def.rowType].map(r => {
     const cells: Record<string, TableCell> = {}
     columns.forEach(col => {
-      cells[col.id] = useReal ? realCell(r.id, col, metrics![col.id])
-        : useSent ? sentimentCell(r.id, col, sentiment!)
+      cells[col.id] = useReal ? realCell(r.id, col, metrics![col.id], cx)
+        : useSent ? sentimentCell(r.id, col, sentiment!, cx)
         : { text: '—' }
     })
     return { id: r.id, label: r.label, isGap: r.isGap, cells }

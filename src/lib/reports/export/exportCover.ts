@@ -110,10 +110,17 @@ function cropToAspect(src: string, targetAr: number): Promise<string | null> {
  * letterboxing and no stretch. Crops on a canvas instead of using pptxgenjs
  * `sizing`, which is unreliable for base64 data URLs.
  */
-export async function addCoverImage(slide: AnySlide, data: string, bx: number, by: number, bw: number, bh: number): Promise<void> {
+export async function addCoverImage(
+  slide: AnySlide, data: string, bx: number, by: number, bw: number, bh: number,
+  hyperlink?: { url: string; tooltip?: string },
+): Promise<boolean> {
   const cropped = await cropToAspect(data, bw / bh)
-  if (cropped) slide.addImage({ data: cropped, x: bx, y: by, w: bw, h: bh })
-  else await addContainImage(slide, data, bx, by, bw, bh, 'center')
+  // Link dipasang di gambarnya sendiri (hlinkClick pada <p:pic>), bukan di shape
+  // transparan di atasnya: WPS tidak meneruskan klik dari shape tanpa isi.
+  // true = gambar membawa link-nya; false = pemanggil harus menyediakan area klik.
+  if (cropped) { slide.addImage({ data: cropped, x: bx, y: by, w: bw, h: bh, ...(hyperlink ? { hyperlink } : {}) }); return !!hyperlink }
+  await addContainImage(slide, data, bx, by, bw, bh, 'center')
+  return false
 }
 
 const txtOpts = (box: TextBox, color: string, font: string) => ({

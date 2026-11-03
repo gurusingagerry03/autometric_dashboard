@@ -4,7 +4,7 @@ import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide, DemographicView } from '@/lib/reports/data/slideModel'
 import { useReportAudience } from '@/lib/reports/data/metricsContext'
 import {
-  ageBucketsFor, demographicChannels, demographicsFor,
+  ageBucketsFor, demographicChannels, demographicHeading, demographicsFor,
   type ChannelDemographics, type DemographicPeriod,
 } from '@/lib/reports/data/audienceTypes'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
@@ -83,9 +83,13 @@ function AgeRow({ bucket, now, before, max, accent }: {
       <span style={{ width: '3.2cqw', flexShrink: 0, fontSize: '1cqw', lineHeight: 1, fontWeight: 700, color: '#0f172a', textAlign: 'right', ...PJ }}>
         {now.toFixed(1)}%
       </span>
-      <span style={{ width: '2.8cqw', flexShrink: 0, textAlign: 'right' }}>
-        <Delta now={now} before={before} />
-      </span>
+      {/* Tanpa bulan pembanding kolom ini hanya berisi "—" di setiap baris; badge
+          "no prior month" di judul panel sudah menyebutnya sekali. */}
+      {before !== null && (
+        <span style={{ width: '2.8cqw', flexShrink: 0, textAlign: 'right' }}>
+          <Delta now={now} before={before} />
+        </span>
+      )}
     </div>
   )
 }
@@ -211,16 +215,16 @@ export default function DemographicSlide({
   const view = (slide.demographicView ?? 'both') as DemographicView
   const channels = demographicChannels(audience, slide.channel)
   const loading = audience === null
+  const heading = demographicHeading(audience, channels)
 
   return (
     <>
       <div className="flex flex-col min-h-0" style={{ flex: 1, gap: '0.8cqh' }}>
         <div className="flex items-center justify-between" style={{ flexShrink: 0 }}>
           <CardLabel icon="groups" accent={colors.primary}>
-            {t('Follower demographics — {cur} vs {prev}', {
-              cur: audience?.meta.monthLabel ?? '—',
-              prev: audience?.meta.prevMonthLabel ?? '—',
-            })}
+            {heading.hasPrevious || loading
+              ? t('Follower demographics — {cur} vs {prev}', { cur: heading.cur, prev: heading.prev })
+              : t('Follower demographics — {cur} (no {prev} data to compare)', { cur: heading.cur, prev: heading.prev })}
           </CardLabel>
           <div className="flex" style={{ gap: '0.4cqw' }}>
             {VIEWS.map(v => (

@@ -19,7 +19,7 @@ export const ORG_NAV_ITEMS: OrgNavItem[] = [
       { label: 'TikTok Deep',        path: 'dashboard/tiktok',    icon: 'music_note' },
       { label: 'Community',          path: 'dashboard/community', icon: 'diversity_3' },
       { label: 'Campaign Analysis',  path: 'dashboard/campaign',  icon: 'campaign' },
-      { label: 'Content Pillars',    path: 'dashboard/pillars',   icon: 'dashboard_customize' },
+      { label: 'Content Pillars & Tagging', path: 'dashboard/pillars',   icon: 'dashboard_customize' },
     ],
   },
   { label: 'Brands',     path: 'brands',     icon: 'store' },

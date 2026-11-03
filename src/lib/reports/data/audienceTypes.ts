@@ -285,3 +285,23 @@ export function demographicChannels(
   if (channel === 'all') return available
   return available.filter(p => p === channel)
 }
+
+/**
+ * Judul blok demografi (Post-UAT brief "Audience Demographics Slide").
+ *
+ * "September 2026 vs August 2026" hanya ditulis kalau minimal satu panel memang
+ * punya data bulan pembanding. Snapshot demografi baru dikumpulkan sejak
+ * September 2026 untuk hampir semua brand dan API platform hanya memberi kondisi
+ * saat ini — bulan sebelumnya tidak bisa diisi mundur. Menulis "vs August" di
+ * atas kolom pertumbuhan yang semuanya "—" membuat pembaca mengira datanya
+ * hilang; judul ini menyebutnya terus terang.
+ */
+export function demographicHeading(
+  m: ReportAudienceMetrics | null | undefined,
+  channels: DashPlatform[],
+): { cur: string; prev: string; hasPrevious: boolean } {
+  const cur = m?.meta.monthLabel ?? '—'
+  const prev = m?.meta.prevMonthLabel ?? '—'
+  const hasPrevious = channels.some(p => !!demographicsFor(m, p)?.previous)
+  return { cur, prev, hasPrevious }
+}

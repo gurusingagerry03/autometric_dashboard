@@ -5,7 +5,7 @@ import pool from '@/lib/db'
 import type { DashPlatform } from '@/components/dashboard/data'
 import type { KpiMetric } from '@/lib/kpi/types'
 import { EOD_GROWTH, PREV_EOD_JOIN } from '@/lib/metrics/followerGrowth'
-import type { KpiTarget, ReportKpiTargets } from './kpiTargets'
+import { kpiRunRate, type KpiTarget, type ReportKpiTargets } from './kpiTargets'
 
 const PLATFORMS: readonly string[] = ['instagram', 'facebook', 'tiktok']
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -121,8 +121,9 @@ async function achievedFor(r: Row): Promise<number | null> {
  *   memuat capaian Oktober. Karena itu capaiannya tidak dibaca dari
  *   `l2_gold.kpi_achievement` — procedure-nya hanya mengenal current_date dan
  *   menyimpan satu baris per KPI, jadi tidak bisa menjawab "per akhir bulan X"
- *   tanpa menimpa angka yang dipakai tab KPI. Run rate ikut batas yang sama:
- *   porsi WAKTU yang sudah lewat per akhir periode report.
+ *   tanpa menimpa angka yang dipakai tab KPI. Time gone ikut batas yang sama:
+ *   porsi WAKTU yang sudah lewat per akhir periode report. Run rate = capaian
+ *   dibanding target pro-rata waktu itu (lihat kpiRunRate).
  */
 export async function getReportKpiTargets(
   orgId: string, brandId: string, year: number, month: number,
@@ -142,6 +143,8 @@ export async function getReportKpiTargets(
     const platform = r.platform as DashPlatform
     const target = Number(r.value_target)
     const a = achieved[i]
+    const achievementRate = a != null && target ? round2((a / target) * 100) : null
+    const timeGone = r.total_days > 0 ? round2((r.days_elapsed / r.total_days) * 100) : null
     const kpi: KpiTarget = {
       kpiId: r.kpi_id,
       platform,
@@ -149,8 +152,9 @@ export async function getReportKpiTargets(
       operation: r.operation,
       target,
       achieved: a,
-      achievementRate: a != null && target ? round2((a / target) * 100) : null,
-      runRate: r.total_days > 0 ? round2((r.days_elapsed / r.total_days) * 100) : null,
+      achievementRate,
+      runRate: kpiRunRate(r.metrics_target as KpiMetric, achievementRate, timeGone),
+      timeGone,
       startDate: r.start_date,
       endDate: r.end_date,
       asOf: r.period_end,

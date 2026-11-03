@@ -67,6 +67,9 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
     return () => { cancelled = true }
   }, [orgId, brandId, platform, period, start, end, lang])
 
+  const range = start && end ? `&start=${start}&end=${end}` : ''
+  const exportUrl = `/api/organizations/${orgId}/dashboard/content/export?platform=${platformParam(platform)}&period=${encodeURIComponent(period)}${range}&brand=${encodeURIComponent(brandId)}`
+
   const rows = useMemo(
     () => (!data ? [] : format === 'All Formats' ? data.topPosts : data.topPosts.filter(r => r.format === format)),
     [data, format],
@@ -174,6 +177,15 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
             </h3>
             <p className="text-[11px] text-[#9ca3af] mt-0.5">{t('Ranked by engagement rate · all platforms combined')}</p>
           </div>
+          <div className="flex items-center gap-2">
+          {/* Raw data untuk pihak eksternal (Post-UAT brief "RAW Data Page"): SEMUA
+              post di periode & filter ini, bukan hanya 10 teratas di tabel. */}
+          <a href={exportUrl} download
+            className="h-8 px-2.5 inline-flex items-center gap-1 rounded-lg border border-[#e5e7eb] text-[11px] font-semibold text-[#374151] hover:border-[#2C3079] hover:text-[#2C3079] transition-colors" style={PJ}
+            title={t('Download every post in this period as CSV')}>
+            <span className="material-symbols-outlined text-[15px]">download</span>
+            {t('Export CSV')}
+          </a>
           <div className="flex items-center bg-[#f3f4f6] rounded-lg p-0.5">
             {FORMATS.map(f => (
               <button key={f} onClick={() => setFormat(f)} style={PJ}
@@ -181,6 +193,7 @@ function ContentBody({ orgId, brandId, platform, period, start, end }: { orgId: 
                   format === f ? 'bg-white text-[#2C3079] shadow-sm' : 'text-[#6b7280] hover:text-[#374151]'
                 }`}>{t(f)}</button>
             ))}
+          </div>
           </div>
         </div>
         <div className="overflow-x-auto">

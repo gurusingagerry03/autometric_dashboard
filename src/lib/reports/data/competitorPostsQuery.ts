@@ -104,8 +104,9 @@ export async function getReportCompetitorPosts(
     const d = r.post_date ? new Date(r.post_date) : null
     const txt = d
       ? {
-          post_date: `${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
-          post_datetime: `${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
+          // "26 Sep '26" — sama dengan postsQuery (tahun penuh tidak muat di kartu).
+          post_date: `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`,
+          post_datetime: `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`,
         }
       : { post_date: '—', post_datetime: '—' }
 

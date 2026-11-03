@@ -226,6 +226,7 @@ function gatherSlideData(
       achieved: t.achieved,
       achievementRatePct: t.achievementRate,
       runRatePct: t.runRate,
+      timeGonePct: t.timeGone,
       period: fmtKpiPeriod(t.startDate, t.endDate),
     }))
   } else if (usesKpiLayout(slide.type)) {

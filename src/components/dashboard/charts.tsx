@@ -546,7 +546,7 @@ export function ShareBar({ value, color, track = '#f3f4f6', label, display }: {
 
 /* ---------- Labeled horizontal bars ---------- */
 
-export function HBars({ items, color = SERIES, showShare = true }: {
+export function HBars({ items, color = SERIES, showShare = true, hover = true }: {
   /**
    * `display` is what sits next to the bar; `exact` is the fuller figure the
    * hover adds — the headcount behind a share, or the unrounded number behind a
@@ -570,6 +570,8 @@ export function HBars({ items, color = SERIES, showShare = true }: {
    * they hovered to find.
    */
   showShare?: boolean
+  /** false = tidak ada tooltip dan efek hover sama sekali. */
+  hover?: boolean
 }) {
   const max = Math.max(...items.map(i => i.value)) || 1
   const { tip, show, hide } = useChartTooltip()
@@ -587,10 +589,10 @@ export function HBars({ items, color = SERIES, showShare = true }: {
         const c = it.color ?? color
         return (
           <div
-            key={it.label} className="cursor-pointer"
-            onMouseEnter={e => show(e, it.label, lines(it))}
-            onMouseMove={e => show(e, it.label, lines(it))}
-            onMouseLeave={hide}
+            key={it.label} className={hover ? 'cursor-pointer' : undefined}
+            onMouseEnter={hover ? e => show(e, it.label, lines(it)) : undefined}
+            onMouseMove={hover ? e => show(e, it.label, lines(it)) : undefined}
+            onMouseLeave={hover ? hide : undefined}
           >
             <div className="flex items-center justify-between mb-1.5">
               <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#374151]">
@@ -600,7 +602,7 @@ export function HBars({ items, color = SERIES, showShare = true }: {
               <span className="text-[12px] font-bold text-[#111827]">{it.display}</span>
             </div>
             <div className="w-full h-2 rounded-full bg-[#f3f4f6] overflow-hidden">
-              <div className="h-full rounded-full transition-all hover:opacity-80" style={{ width: `${(it.value / max) * 100}%`, background: c }} />
+              <div className={`h-full rounded-full transition-all${hover ? ' hover:opacity-80' : ''}`} style={{ width: `${(it.value / max) * 100}%`, background: c }} />
             </div>
           </div>
         )

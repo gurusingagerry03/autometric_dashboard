@@ -463,3 +463,65 @@ export async function getContentOverviewData(
     empty: false,
   }
 }
+
+// ── Raw post export (Post-UAT brief "RAW Data Page" — external usage) ────────
+/**
+ * Semua post di periode & filter yang sama dengan tabel Top Posts, sebagai baris
+ * siap-CSV untuk pihak eksternal: performa channel + konten yang sederhana.
+ *
+ * Tabel di layar hanya 10 teratas; ekspor ini sengaja TIDAK dibatasi dan tidak
+ * diperingkat — urut tanggal tayang, terbaru dulu, supaya bisa dicocokkan
+ * dengan kalender konten. Angka mentah (tanpa pemisah ribuan) supaya langsung
+ * terbaca sebagai angka di Excel/Sheets; ER dalam persen.
+ */
+export interface ContentExport { window: Window; header: string[]; rows: (string | number)[][] }
+
+export async function exportContentPosts(
+  orgId: string, platform: PlatformParam, days: number, brandId: string | null,
+  custom: CustomRange | null = null,
+): Promise<ContentExport | null> {
+  const win = await resolveWindows(orgId, platform, days, brandId, custom)
+  if (!win) return null
+  const { rows } = await pool.query<{
+    post_date: string; brand: string; platform: string; format: string | null; post_type: string | null
+    content_pillar: string | null; caption: string | null; link: string | null
+    reach: number; views: number; impressions: number; likes: number; comments: number; shares: number
+    saves: number; reposts: number; engagement: number; er_reach: number | null; er_views: number | null
+    er_followers: number | null; boosted: boolean
+  }>(
+    `SELECT to_char(p.post_date, 'YYYY-MM-DD HH24:MI') post_date, b.name brand, p.platform,
+            p.format, p.post_type, p.content_pillar, p.caption, p.link,
+            COALESCE(p.reach,0)::bigint reach, COALESCE(p.views,0)::bigint views,
+            COALESCE(p.impressions,0)::bigint impressions,
+            COALESCE(p.likes,0)::bigint likes, COALESCE(p.comments,0)::bigint comments,
+            COALESCE(p.shares,0)::bigint shares, COALESCE(p.saves,0)::bigint saves,
+            COALESCE(p.reposts,0)::bigint reposts, COALESCE(p.engagement_owned,0)::bigint engagement,
+            (p.er_reach * 100)::float er_reach, (p.er_views * 100)::float er_views,
+            (p.er_followers * 100)::float er_followers,
+            COALESCE(p.is_boosted,false) boosted
+       FROM l2_gold.post_metric p
+       JOIN public.brand_social_accounts bsa ON bsa.social_account_id = p.brand_id
+       JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
+      WHERE b.organization_id = $1 AND (${PLAT.replace('{col}', 'p')})
+        AND p.post_date::date BETWEEN $3 AND $4
+        AND ($5::uuid IS NULL OR bsa.brand_id = $5)
+      ORDER BY p.post_date DESC`,
+    [orgId, platform, win.cur.start, win.cur.end, brandId],
+  )
+  const er = (v: number | null) => (v == null ? '' : round2(v))
+  return {
+    window: win.cur,
+    header: [
+      'Post Date', 'Brand', 'Platform', 'Format', 'Content Pillar', 'Caption', 'Link',
+      'Reach', 'Views', 'Impressions', 'Likes', 'Comments', 'Shares', 'Saves', 'Reposts',
+      'Engagement', 'ER Reach (%)', 'ER Views (%)', 'ER Followers (%)', 'Tag',
+    ],
+    rows: rows.map(r => [
+      r.post_date, r.brand, r.platform, postFormatLabel(r.format, r.post_type), r.content_pillar ?? '',
+      (r.caption ?? '').replace(/\s+/g, ' ').trim(), r.link ?? '',
+      Number(r.reach), Number(r.views), Number(r.impressions), Number(r.likes), Number(r.comments),
+      Number(r.shares), Number(r.saves), Number(r.reposts), Number(r.engagement),
+      er(r.er_reach), er(r.er_views), er(r.er_followers), r.boosted ? 'Boosted' : 'Organic',
+    ]),
+  }
+}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
-import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, metricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
+import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, cardMetricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
 import { useReportPosts, useReportCompetitorPosts, useReportImageResolver } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -95,7 +95,7 @@ function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count,
             const v = metrics[mid] ?? '—'
             return (
               <span key={mid} className="contents">
-                <span className="truncate" style={{ fontSize: metricFs, fontWeight: 500, color: '#94a3b8', ...PJ }}>{metricLabel(mid)}</span>
+                <span className="truncate" style={{ fontSize: metricFs, fontWeight: 500, color: '#94a3b8', ...PJ }}>{cardMetricLabel(mid)}</span>
                 <span style={{ fontSize: metricFs, fontWeight: isER ? 800 : 600, textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: isER ? (parseFloat(v) > 2.5 ? '#16a34a' : '#f59e0b') : '#334155' }}>{v}</span>
               </span>
             )
@@ -145,6 +145,7 @@ export default function VisualSlide({
   const [cfgOpen, setCfgOpen] = useState(false)
   const ctx = useReportPosts()
   const count = slide.postCount
+  const compact = slide.postNumbers === 'compact'
 
   // Live pool for this slide's channel. No sample fallback: null ctx = still
   // loading; an empty pool = no posts for this channel/period.
@@ -204,8 +205,8 @@ export default function VisualSlide({
   // penyaring — 'top' di sini artinya "ambil N pertama apa adanya", tanpa tag
   // TOP/LOW yang akan mengklaim peringkat yang tidak pernah dihitung.
   const builtPosts = isAct
-    ? buildPosts(count, 'top', { sortMetric: 'post_date', source })
-    : buildPosts(count, slide.postFilter, { format: postFormat, pillar: isComp ? 'all' : postPillar, sortMetric, source })
+    ? buildPosts(count, 'top', { sortMetric: 'post_date', source, compact })
+    : buildPosts(count, slide.postFilter, { format: postFormat, pillar: isComp ? 'all' : postPillar, sortMetric, source, compact })
 
   // Kartu yang cover-nya belum tersimpan permanen meminta salinan Cloudinary-nya
   // (scrape ulang lewat Apify kalau URL CDN-nya sudah mati). Selama menunggu, kartu
@@ -372,6 +373,16 @@ export default function VisualSlide({
                 <button key={n} onClick={() => onChange?.({ ...slide, postCount: n })} style={PJ}
                   className={`py-2.5 rounded-lg border text-[13px] font-bold transition-all ${count === n ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}>
                   {n}
+                </button>
+              ))}
+            </div>
+
+            <p style={PJ} className="text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] mb-2">{t('Numbers')}</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {([['full', '1,234,567'], ['compact', '1.23M']] as const).map(([id, label]) => (
+                <button key={id} onClick={() => onChange?.({ ...slide, postNumbers: id })} style={PJ}
+                  className={`py-2.5 rounded-lg border text-[12px] font-semibold transition-all ${(slide.postNumbers ?? 'full') === id ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}>
+                  {label}
                 </button>
               ))}
             </div>
