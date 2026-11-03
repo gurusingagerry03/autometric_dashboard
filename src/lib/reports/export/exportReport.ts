@@ -1150,6 +1150,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
 }
 
 /**
+ * Perbaikan XML hasil pptxgenjs supaya terbaca WPS (lihat dua langkah di bawah).
  * pptxgenjs menulis hyperlink teks dengan `invalidUrl="" action="" tgtFrame=""`.
  * PowerPoint mengabaikan atribut kosong itu, tapi WPS membaca `action=""` sebagai
  * "tanpa aksi" dan membuang link-nya — #id dan ikon ↗ di kartu post jadi tidak bisa
@@ -1163,6 +1164,18 @@ async function fixTextHyperlinksForWps(buf: ArrayBuffer): Promise<Blob> {
   for (const path of slides) {
     const xml = await zip.file(path)!.async('string')
     if (xml.includes(' action="" ')) zip.file(path, xml.replaceAll(' invalidUrl="" action="" tgtFrame=""', ''))
+  }
+  // pptxgenjs juga menulis URL hyperlink ke .rels slide TANPA escape XML. Link
+  // TikTok membawa query `?utm_campaign=…&utm_source=…`; `&` mentah itu membuat
+  // .rels tidak valid, dan WPS lalu membuang SEMUA gambar slide itu — cover post,
+  // logo channel, logo brand (report Fitbar Oktober 2026, slide TikTok). Link
+  // Instagram tanpa query tidak terkena, makanya hanya slide TikTok yang kosong.
+  const rels = Object.keys(zip.files).filter(p => /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(p))
+  for (const path of rels) {
+    const xml = await zip.file(path)!.async('string')
+    const fixed = xml.replace(/Target="([^"]*)"/g, (_, t: string) =>
+      `Target="${t.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, '&amp;')}"`)
+    if (fixed !== xml) zip.file(path, fixed)
   }
   return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE' })
 }
