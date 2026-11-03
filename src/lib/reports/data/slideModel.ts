@@ -64,7 +64,26 @@ export const KPI_COMPARES: readonly KpiCompare[] = ['both', 'achievement', 'run'
 export const KPI_COMPARE_LABEL: Record<KpiCompare, string> = {
   both: 'Achievement & run rate',
   achievement: 'Achievement rate only',
-  run: 'Run rate & time gone',
+  run: 'Run rate only',
+}
+
+/**
+ * Baris tingkat di kartu KPI Overview — dipilih satu per satu (feedback Post-UAT:
+ * Time gone hanya muncul kalau memang dicentang). Menggantikan `kpiCompare`;
+ * slide lama tanpa `kpiRates` dibaca dari `kpiCompare`, dan Time gone tidak
+ * pernah menyala tanpa diminta.
+ */
+export type KpiRate = 'achievement' | 'run' | 'time'
+export const KPI_RATES: readonly KpiRate[] = ['achievement', 'run', 'time']
+export const KPI_RATE_LABEL: Record<KpiRate, string> = {
+  achievement: 'Achievement',
+  run: 'Run rate',
+  time: 'Time gone',
+}
+export function kpiRatesFor(slide: { kpiRates?: KpiRate[]; kpiCompare?: KpiCompare }): KpiRate[] {
+  if (slide.kpiRates) return KPI_RATES.filter(r => slide.kpiRates!.includes(r))
+  const c = slide.kpiCompare ?? 'both'
+  return c === 'achievement' ? ['achievement'] : c === 'run' ? ['run'] : ['achievement', 'run']
 }
 /**
  * Bentuk baris YTD Performance.
@@ -98,6 +117,8 @@ export interface ContentSlide {
   kpiMetrics: (string | null)[]
   /** kpi — angka pembanding yang ditampilkan kartu KPI Overview. */
   kpiCompare: KpiCompare
+  /** kpi — baris tingkat yang ditampilkan kartu; menggantikan kpiCompare (lihat kpiRatesFor). */
+  kpiRates?: KpiRate[]
   postCount: number          // visual — number of post cards (4/6/8)
   postFilter: string         // visual — 'top' | 'low' | 'mixed'
   postFormat: string         // visual — format filter: 'all' | 'reel' | 'video' | 'carousel' | 'image'

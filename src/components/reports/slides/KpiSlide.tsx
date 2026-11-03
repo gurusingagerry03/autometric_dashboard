@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import {
-  ContentSlide, ConfigBlock, KPI_COMPARES, KPI_COMPARE_LABEL, type KpiCompare,
+  ContentSlide, ConfigBlock, KPI_RATES, KPI_RATE_LABEL, kpiRatesFor, type KpiRate,
 } from '@/lib/reports/data/slideModel'
 import { KpiMetric, deltaIsGood, resolveKpiMetric } from '@/lib/reports/data/kpiMetrics'
 import {
@@ -126,10 +126,10 @@ function RateRow({ label, value, size, color, strong }: { label: string; value: 
  * tertinggal dari jadwal (lihat kpiOnPace).
  */
 function TargetCard({
-  target, accent, count, compare, editable, onClick,
+  target, accent, count, rates, editable, onClick,
 }: {
   target: KpiTarget | undefined; accent: string; count: number
-  compare: KpiCompare; editable: boolean; onClick?: () => void
+  rates: KpiRate[]; editable: boolean; onClick?: () => void
 }) {
   const t = useT()
   const s = targetSizesFor(count)
@@ -185,13 +185,13 @@ function TargetCard({
       </div>
 
       <div className="flex flex-col" style={{ gap: '0.2cqh' }}>
-        {compare !== 'run' && (
+        {rates.includes('achievement') && (
           <RateRow label={t('Achievement')} value={fmtKpiRate(target.achievementRate)} size={s.rate} color={rateColor} strong />
         )}
-        {compare !== 'achievement' && (
-          <RateRow label={t('Run rate')} value={fmtKpiRate(target.runRate)} size={s.rate} color={compare === 'run' ? rateColor : '#475569'} strong={compare === 'run'} />
+        {rates.includes('run') && (
+          <RateRow label={t('Run rate')} value={fmtKpiRate(target.runRate)} size={s.rate} color={rates.includes('achievement') ? '#475569' : rateColor} strong={!rates.includes('achievement')} />
         )}
-        {compare !== 'achievement' && (
+        {rates.includes('time') && (
           <RateRow label={t('Time gone')} value={fmtKpiRate(target.timeGone)} size={s.rate} color="#94a3b8" />
         )}
       </div>
@@ -214,7 +214,7 @@ function TargetRow({
   const t = useT()
   const targets = useReportKpiTargets()
   const count = Math.min(Math.max(1, slide.metricCount), KPI_TARGET_MAX)
-  const compare = slide.kpiCompare ?? 'both'
+  const rates = kpiRatesFor(slide)
 
   // Belum ada satu pun KPI aktif: kartu kosong yang bisa diklik tidak menolong
   // di sini — pemilihnya juga akan kosong — jadi barisnya menyebut di mana
@@ -243,7 +243,7 @@ function TargetRow({
             target={kpiTargetById(targets, slide.channel, slide.kpiMetrics[i] ?? null)}
             accent={accent}
             count={count}
-            compare={compare}
+            rates={rates}
             editable={editable}
             onClick={() => onConfigure?.(`kpi-${i}`)}
           />
@@ -525,21 +525,26 @@ export default function KpiSlide({
             {isTargets && (
               <div className="mt-5 pt-4 border-t border-[#f0f1f2]">
                 <h3 style={PJ} className="text-[14px] font-bold text-[#0f172a]">{t('Comparison')}</h3>
-                <p className="text-[12px] text-[#94a3b8] mt-0.5 mb-3">{t('Which rate each card shows under its value.')}</p>
+                <p className="text-[12px] text-[#94a3b8] mt-0.5 mb-3">{t('Which rates each card shows under its value.')}</p>
                 <div className="flex flex-col gap-2">
-                  {KPI_COMPARES.map(mode => {
-                    const on = (slide.kpiCompare ?? 'both') === mode
+                  {KPI_RATES.map(rate => {
+                    const current = kpiRatesFor(slide)
+                    const on = current.includes(rate)
+                    // Minimal satu baris tetap menyala: kartu tanpa tingkat sama
+                    // sekali tidak bisa dinilai terhadap targetnya.
+                    const locked = on && current.length === 1
                     return (
                       <button
-                        key={mode}
-                        onClick={() => { onChange?.({ ...slide, kpiCompare: mode }); setCountOpen(false) }}
+                        key={rate}
+                        disabled={locked}
+                        onClick={() => onChange?.({ ...slide, kpiRates: on ? current.filter(r => r !== rate) : [...current, rate] })}
                         style={PJ}
-                        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all ${on ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'}`}
+                        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all ${on ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#334155]'} ${locked ? 'cursor-not-allowed' : ''}`}
                       >
                         <span className={`material-symbols-outlined text-[18px] ${on ? 'text-[#2C3079]' : 'text-[#cbd5e1]'}`}>
-                          {on ? 'radio_button_checked' : 'radio_button_unchecked'}
+                          {on ? 'check_box' : 'check_box_outline_blank'}
                         </span>
-                        <span className="text-[12.5px] font-semibold">{t(KPI_COMPARE_LABEL[mode])}</span>
+                        <span className="text-[12.5px] font-semibold">{t(KPI_RATE_LABEL[rate])}</span>
                       </button>
                     )
                   })}

@@ -29,7 +29,7 @@ import type { ImageResolver } from '../images/client'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
 import type { ContentSlide, SlideChrome, AiInsight } from '../data/slideModel'
-import { usesKpiLayout, type KpiCompare } from '../data/slideModel'
+import { usesKpiLayout, kpiRatesFor, type KpiRate } from '../data/slideModel'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Slide = any
@@ -476,7 +476,7 @@ function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, 
  * periodenya, lalu achievement & run rate — tanpa delta "vs periode lalu", yang
  * tidak punya arti untuk sebuah target (lihat kpiTargets.ts).
  */
-function targetCard(slide: Slide, target: KpiTarget, accent: string, count: number, compare: KpiCompare, x: number, y: number, w: number, h: number) {
+function targetCard(slide: Slide, target: KpiTarget, accent: string, count: number, rates: KpiRate[], x: number, y: number, w: number, h: number) {
   card(slide, x, y, w, h)
   slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { width: 0 } })
   const pad = W(1.2)
@@ -495,12 +495,13 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
   // Dua baris "label — nilai"; labelnya rata kiri, angkanya rata kanan di kotak
   // yang sama lebarnya, supaya keduanya sejajar seperti di preview.
   const rateColor = target.achievementRate == null ? '94A3B8' : kpiOnPace(target) ? '16A34A' : 'DC2626'
-  const all: [string, string, string, boolean][] = [
-    ['Achievement', fmtKpiRate(target.achievementRate), rateColor, true],
-    ['Run rate', fmtKpiRate(target.runRate), compare === 'run' ? rateColor : '475569', compare === 'run'],
-    ['Time gone', fmtKpiRate(target.timeGone), '94A3B8', false],
+  const solo = !rates.includes('achievement')
+  const all: [KpiRate, string, string, string, boolean][] = [
+    ['achievement', 'Achievement', fmtKpiRate(target.achievementRate), rateColor, true],
+    ['run', 'Run rate', fmtKpiRate(target.runRate), solo ? rateColor : '475569', solo],
+    ['time', 'Time gone', fmtKpiRate(target.timeGone), '94A3B8', false],
   ]
-  const rows = compare === 'achievement' ? [all[0]] : compare === 'run' ? all.slice(1) : all
+  const rows = all.filter(([id]) => rates.includes(id)).map(([, ...rest]) => rest)
   // Tiga baris harus muat di kartu H(20): 12.6 + 3 × 2.35 = 19.65.
   rows.forEach(([label, value, color, bold], i) => {
     const ry = y + H(12.6) + i * H(2.35)
@@ -558,14 +559,14 @@ async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, 
     if (kpiTargetsFor(kpiTargets ?? null, slide.channel).length === 0) {
       placeholder(s, hx, ry, hw, rh, 'NO ACTIVE KPI FOR THIS CHANNEL')
     } else {
-      const compare: KpiCompare = slide.kpiCompare ?? 'both'
+      const rates = kpiRatesFor(slide)
       const n = Math.min(Math.max(1, slide.metricCount), KPI_TARGET_MAX)
       const gap = n >= 6 ? W(1) : W(1.6)
       const cardW = (hw - gap * (n - 1)) / n
       for (let i = 0; i < n; i++) {
         const target = kpiTargetById(kpiTargets ?? null, slide.channel, slide.kpiMetrics[i] ?? null)
         const x = hx + i * (cardW + gap)
-        if (target) targetCard(s, target, colors.primary, n, compare, x, ry, cardW, rh)
+        if (target) targetCard(s, target, colors.primary, n, rates, x, ry, cardW, rh)
         else placeholder(s, x, ry, cardW, rh, 'ADD KPI')
       }
     }
