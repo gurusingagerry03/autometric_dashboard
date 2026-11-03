@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import {
   TABLE_TYPES, TableConfig, TableColumn,
-  columnsForChannel, defaultColumnsFor, isTypeEnabledForChannel, normalizeColumnIds, typeChannelHint,
+  columnsForChannel, defaultColumnsFor, isTypeEnabledForChannel, normalizeColumnIds, supportsGrowthOption, typeChannelHint,
 } from '@/lib/reports/data/tableTypes'
 import type { CustomMetricDef } from '@/lib/reports/data/customMetrics'
 import MetricInfo from '@/components/ui/MetricInfo'
@@ -70,6 +70,7 @@ export default function TableSelectionModal({
   // Tampilan header & angka (Post-UAT brief "Overlap Shapes in Table Slide").
   const [labels, setLabels] = useState<'short' | 'full'>(initial?.labels ?? 'short')
   const [numbers, setNumbers] = useState<'full' | 'compact'>(initial?.numbers ?? 'full')
+  const [showGrowth, setShowGrowth] = useState<boolean>(initial?.showGrowth ?? false)
 
   // Org custom-metric library (loaded from the per-organization store). The builder modal
   // creates/edits these; selected ones ride in `columns` like any other column.
@@ -93,6 +94,7 @@ export default function TableSelectionModal({
     )
     setLabels(initial?.labels ?? 'short')
     setNumbers(initial?.numbers ?? 'full')
+    setShowGrowth(initial?.showGrowth ?? false)
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null
@@ -198,6 +200,18 @@ export default function TableSelectionModal({
                 )}
               </div>
             )}
+            {/* Growth Options on Table (Post-UAT brief): angka growth vs periode
+                sebelumnya di samping tiap nilai. Hanya tabel per-platform — tabel
+                perbandingan sudah punya baris Growth (%) sendiri. */}
+            {supportsGrowthOption(type) && (
+              <label className={`mb-4 flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer select-none transition-all ${showGrowth ? 'bg-[#F1F2FB] border-[#bcd9cf]' : 'border-[#eef0f2] hover:bg-[#f9fafb]'}`}>
+                <span className={`w-4 h-4 rounded border flex items-center justify-center ${showGrowth ? 'bg-[#2C3079] border-[#2C3079]' : 'border-[#cbd5e1] bg-white'}`}>
+                  {showGrowth && <span className="material-symbols-outlined text-[12px] text-white">check</span>}
+                </span>
+                <input type="checkbox" className="hidden" checked={showGrowth} onChange={() => setShowGrowth(v => !v)} />
+                <span style={PJ} className={`text-[12px] font-semibold ${showGrowth ? 'text-[#2C3079]' : 'text-[#64748b]'}`}>{t('Show growth vs previous period')}</span>
+              </label>
+            )}
             <div className="flex justify-between items-center mb-3">
               <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Visible Columns')}</h4>
               <button onClick={() => setColumns(defaultColumnsFor(type, channel))} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold">
@@ -287,7 +301,11 @@ export default function TableSelectionModal({
           </div>
           <button onClick={onClose} style={PJ} className="px-4 py-2.5 text-[12.5px] font-semibold text-[#6b7280] hover:bg-[#f3f4f6] rounded-lg transition-colors">{t('Cancel')}</button>
           <button
-            onClick={() => onConfirm(isCompetitor ? { type, columns, competitorIds, labels, numbers } : { type, columns, labels, numbers })}
+            onClick={() => onConfirm({
+              type, columns, labels, numbers,
+              ...(isCompetitor ? { competitorIds } : {}),
+              ...(supportsGrowthOption(type) ? { showGrowth } : {}),
+            })}
             disabled={columns.length === 0}
             style={PJ}
             className="px-5 py-2.5 bg-[#2C3079] text-white text-[12.5px] font-bold rounded-lg hover:bg-[#20224F] disabled:opacity-50 transition-colors"

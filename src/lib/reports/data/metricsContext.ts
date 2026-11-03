@@ -172,20 +172,24 @@ export function competitorSectionFor(
   return metrics.competitors[channel as DashPlatform] ?? null
 }
 
-/** The per-platform values for a comparison table (content/channel by platform), or null. */
+/** The per-platform values for a comparison table (content/channel by platform), or null.
+ *  `period: 'prev'` returns the previous period's — the table's growth option. */
 export function platformMetricsFor(
   metrics: ReportTableMetrics | null | undefined,
   tableType: string,
+  period: 'cur' | 'prev' = 'cur',
 ): PlatformMetrics | null {
   if (!metrics) return null
-  if (tableType === 'content_by_platform') return metrics.contentByPlatform ?? null
-  if (tableType === 'channel_by_platform') return metrics.channelByPlatform ?? null
+  const ctSrc = period === 'prev' ? metrics.contentByPlatformPrev : metrics.contentByPlatform
+  const chSrc = period === 'prev' ? metrics.channelByPlatformPrev : metrics.channelByPlatform
+  if (tableType === 'content_by_platform') return ctSrc ?? null
+  if (tableType === 'channel_by_platform') return chSrc ?? null
   // Cross-level: nilai kedua level dirakit jadi satu, dengan awalan id yang sama
   // dengan kolomnya di tableTypes ('ct:' / 'ch:'). Tanpa awalan, metrik yang
   // namanya sama di dua level akan saling menimpa tanpa ada yang menyadari.
   if (tableType === 'cross_by_platform') {
-    const ct = metrics.contentByPlatform ?? {}
-    const ch = metrics.channelByPlatform ?? {}
+    const ct = ctSrc ?? {}
+    const ch = chSrc ?? {}
     const platforms = new Set([...Object.keys(ct), ...Object.keys(ch)]) as Set<DashPlatform>
     if (platforms.size === 0) return null
     const merged: PlatformMetrics = {}

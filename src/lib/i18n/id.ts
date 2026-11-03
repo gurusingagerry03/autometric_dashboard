@@ -1083,6 +1083,7 @@ export const ID: Record<string, string> = {
   'Export CSV': 'Ekspor CSV',
   'Download every post in this period as CSV': 'Unduh semua post pada periode ini sebagai CSV',
   'Metric names': 'Nama metrik',
+  'Show growth vs previous period': 'Tampilkan growth vs periode sebelumnya',
   'Short': 'Singkat',
   'Full': 'Lengkap',
   'Numbers': 'Angka',

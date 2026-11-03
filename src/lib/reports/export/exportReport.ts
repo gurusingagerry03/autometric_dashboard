@@ -264,8 +264,13 @@ function platformFor(metrics: ReportTableMetrics | undefined, config: TableConfi
   if (!metrics || !config) return null
   return platformMetricsFor(metrics, config.type)
 }
+// Nilai periode sebelumnya — hanya kalau opsi growth tabel menyala.
+function platformPrevFor(metrics: ReportTableMetrics | undefined, config: TableConfig | null): PlatformMetrics | null {
+  if (!metrics || !config?.showGrowth) return null
+  return platformMetricsFor(metrics, config.type, 'prev')
+}
 
-function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors, channel: string, x: number, y: number, w: number, h: number, sm: SectionMetrics | null = null, sent: SentimentTable | null = null, comp: CompetitorSection | null = null, customCols: TableColumn[] = [], platform: PlatformMetrics | null = null) {
+function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors, channel: string, x: number, y: number, w: number, h: number, sm: SectionMetrics | null = null, sent: SentimentTable | null = null, comp: CompetitorSection | null = null, customCols: TableColumn[] = [], platform: PlatformMetrics | null = null, platformPrev: PlatformMetrics | null = null) {
   if (!config) { placeholder(slide, x, y, w, h, 'CONFIGURE DATA TABLE'); return }
   card(slide, x, y, w, h)
   const pad = W(1.6)
@@ -275,7 +280,7 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   const months = config.type === 'monthly_tracker' && MONTHLY?.data
     ? trackerMonthsFor(MONTHLY.data, channel, MONTHLY.year, MONTHLY.month, config.fromMonth)
     : null
-  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), sm, sent, comp, customCols, platform, months)
+  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), sm, sent, comp, customCols, platform, months, platformPrev)
   if (config.type === 'monthly_tracker' && rows.length === 0) { noDataText(slide, x + pad, y + H(4.8), w - 2 * pad, h - H(6)); return }
   // Huruf tabel bulanan = ukuran preview (trackerTableSizes), selain itu ukuran tabel biasa.
   const big = config.type === 'monthly_tracker'
@@ -296,7 +301,11 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   if (numCols.length) {
     const fitPt = (widthIn: number, chars: number, em: number) => ((widthIn - 0.1) * 72) / (Math.max(1, chars) * em)
     const valueFit = Math.min(...numCols.map(({ c, w: cw }) =>
-      fitPt(cw, Math.max(...rows.map(r => (r.cells[c.id]?.text ?? '').length)), 0.62)))   // mono ≈ 0.6em
+      fitPt(cw, Math.max(...rows.map(r => {
+        const cell = r.cells[c.id]
+        // Growth di samping angka ikut memakan lebar baris yang sama.
+        return (cell?.text ?? '').length + (cell?.sub?.inline ? cell.sub.text.length + 1 : 0)
+      })), 0.62)))   // mono ≈ 0.6em
     const headFit = Math.min(...numCols.map(({ c, w: cw }) =>
       fitPt(cw, Math.max(...c.label.split(/[\s]+/).map(word => word.length)), 0.68)))     // caps bold ≈ 0.68em
     fsz.value = Math.max(6, Math.floor(Math.min(fsz.value, valueFit) * 10) / 10)
@@ -320,7 +329,7 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
         const subColor = cell.sub.flat ? '94A3B8' : cell.sub.positive ? '16A34A' : 'DC2626'
         return {
           text: [
-            { text: big?.inline ? `${value}  ` : value, options: { color: big ? '1E293B' : color, bold: !!big, fontSize: fsz.value, fontFace: MONO, breakLine: !big?.inline } },
+            { text: big?.inline || cell.sub.inline ? `${value} ` : value, options: { color: big ? '1E293B' : color, bold: !!big, fontSize: fsz.value, fontFace: MONO, breakLine: !(big?.inline || cell.sub.inline) } },
             { text: cell.sub.text, options: { color: subColor, bold: true, fontSize: fsz.sub } },
           ],
           options: { align: 'right' as const, valign: 'middle' as const },
@@ -429,7 +438,7 @@ async function addDashboardSlide(pptx: any, slide: ContentSlide, chrome: SlideCh
   const chartW = W(58.4), insW = W(31.6)
   await chartCard(pptx, s, slide.chart, colors, hx, ry, chartW, rh, 'MAIN CHART AREA', chartMetrics, slide.channel)
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx + chartW + W(2), ry, insW, rh, 'KEY INSIGHTS')
-  tableCard(s, slide.table, colors, slide.channel, hx, H(57), hw, H(30), sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table))
+  tableCard(s, slide.table, colors, slide.channel, hx, H(57), hw, H(30), sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table), platformPrevFor(metrics, slide.table))
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 
@@ -799,7 +808,7 @@ async function addOverviewSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
 
   const vy = H(18), vh = H(47)
   if (slide.visualMode === 'chart') await chartCard(pptx, s, slide.chart, colors, hx, vy, hw, vh, 'SELECT VISUALIZATION', chartMetrics, slide.channel)
-  else if (slide.visualMode === 'table') tableCard(s, slide.table, colors, slide.channel, hx, vy, hw, vh, sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table))
+  else if (slide.visualMode === 'table') tableCard(s, slide.table, colors, slide.channel, hx, vy, hw, vh, sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table), platformPrevFor(metrics, slide.table))
   else placeholder(s, hx, vy, hw, vh, 'SELECT A CHART OR TABLE')
 
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(67), hw, H(20), 'COMPARATIVE ANALYSIS & NOTES')
@@ -1074,7 +1083,7 @@ async function addMonthlyTrackerSlide(pptx: any, slide: ContentSlide, chrome: Sl
     insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx + chartW + W(2), ty, hw - chartW - W(2), rh, 'SUMMARY')
     ty += rh + H(2)
   }
-  tableCard(s, slide.table, colors, slide.channel, hx, ty, hw, H(87) - ty, sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table))
+  tableCard(s, slide.table, colors, slide.channel, hx, ty, hw, H(87) - ty, sectionFor(metrics, slide.table, slide.channel), sentimentTableFor(metrics?.sentiment, slide.channel), competitorFor(metrics, slide.table, slide.channel), customColumnsFrom(metrics), platformFor(metrics, slide.table), platformPrevFor(metrics, slide.table))
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 

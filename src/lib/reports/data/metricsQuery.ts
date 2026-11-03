@@ -695,6 +695,10 @@ export async function getReportTableMetrics(
   // metrics as the "all" aggregate, computed on each platform's own rows.
   const contentByPlatform: PlatformMetrics = {}
   const channelByPlatform: PlatformMetrics = {}
+  // Same values for the PREVIOUS period — the "growth vs previous period" option
+  // on the per-platform tables (Post-UAT brief "Growth Options on Table").
+  const contentByPlatformPrev: PlatformMetrics = {}
+  const channelByPlatformPrev: PlatformMetrics = {}
 
   // Per-channel followers summed for the "all" total (each channel's own EOD count).
   let allCurFoll = 0, allPrevFoll = 0, hasCurFoll = false, hasPrevFoll = false
@@ -719,6 +723,12 @@ export async function getReportTableMetrics(
     if (curPostRows.length > 0) contentByPlatform[ch] = allContentValues(curPostRows)
     if (curGoldRows.length > 0) {
       channelByPlatform[ch] = allChannelValues(curGold, curPosts, new Set(curGoldRows.map(r => r.metric_date)).size)
+    }
+    const prevPostRows = pRows.filter(r => r.post_date < curStart)
+    const prevGoldRows = gRows.filter(r => r.metric_date < curStart)
+    if (prevPostRows.length > 0) contentByPlatformPrev[ch] = allContentValues(prevPostRows)
+    if (prevGoldRows.length > 0) {
+      channelByPlatformPrev[ch] = allChannelValues(prevGold, prevPosts, new Set(prevGoldRows.map(r => r.metric_date)).size)
     }
   }
 
@@ -837,5 +847,5 @@ export async function getReportTableMetrics(
   // Column defs for the selected-column picker + table headers (id/label/format).
   const customMetrics: CustomMetricColumn[] = customDefs.map(d => ({ id: d.id, label: d.name, format: d.format }))
 
-  return { content, channel, contentByPlatform, channelByPlatform, sentiment, competitors, customMetrics }
+  return { content, channel, contentByPlatform, channelByPlatform, contentByPlatformPrev, channelByPlatformPrev, sentiment, competitors, customMetrics }
 }

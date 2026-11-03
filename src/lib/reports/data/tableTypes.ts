@@ -56,7 +56,12 @@ export interface TableConfig {
   labels?: 'short' | 'full'
   /** Angka: 'full' (default) = 1,234,567, 'compact' = 1.23M. Persen & waktu tidak terpengaruh. */
   numbers?: 'full' | 'compact'
+  /** Tabel per-platform: tampilkan growth vs periode sebelumnya di samping tiap angka. */
+  showGrowth?: boolean
 }
+
+/** Tabel yang punya opsi growth vs periode sebelumnya (baris = platform). */
+export const supportsGrowthOption = (typeId: string) => TABLE_TYPES[typeId]?.rowType === 'platforms'
 
 /** Real metric value for a comparison table: previous vs current period. */
 export interface MetricPair { prev: number | null; curr: number | null }
@@ -100,6 +105,8 @@ export interface ReportTableMetrics {
   channel: Partial<Record<TableChannel, SectionMetrics>>   // per channel + 'all'
   contentByPlatform?: PlatformMetrics   // current-period content values per platform (Content by Platform table)
   channelByPlatform?: PlatformMetrics   // current-period channel values per platform (Channel by Platform table)
+  contentByPlatformPrev?: PlatformMetrics   // previous-period counterpart — growth option on the by-platform tables
+  channelByPlatformPrev?: PlatformMetrics
   sentiment?: Partial<Record<DashPlatform, SentimentTable>>   // per channel (comment_sentiment_post by dominant sentiment)
   competitors?: Partial<Record<DashPlatform, CompetitorSection>>  // per channel (l2_gold.competitor_*)
   customMetrics?: CustomMetricColumn[]   // org custom metrics (selectable columns)
@@ -589,8 +596,10 @@ export interface TableCell {
   text: string; gap?: boolean; positive?: boolean
   /** Growth row: no change (rounds to 0.0%) → "0%" in neutral black. */
   flat?: boolean
-  /** Baris kedua kecil di bawah angka — perubahan MoM tabel Monthly Tracker. */
-  sub?: { text: string; positive: boolean; flat: boolean }
+  /** Baris kedua kecil di bawah angka — perubahan MoM tabel Monthly Tracker, atau
+   *  growth vs periode sebelumnya di tabel per-platform. `inline` = di samping
+   *  angka, bukan di bawahnya. */
+  sub?: { text: string; positive: boolean; flat: boolean; inline?: boolean }
   /** Teks bebas (Key Highlight): rata kiri, bukan font angka. */
   note?: boolean
 }
@@ -660,6 +669,8 @@ function buildTableRaw(
   platformMetrics?: PlatformMetrics | null,
   /** 'monthly_tracker' — bulan-bulan yang ditampilkan (lihat trackerMonthsFor). */
   months?: TrackerMonth[] | null,
+  /** Tabel per-platform — nilai periode sebelumnya, untuk opsi showGrowth. */
+  platformPrev?: PlatformMetrics | null,
 ): { header: string; columns: TableColumn[]; rows: TableRow[] } {
   const def = TABLE_TYPES[config.type] ?? TABLE_TYPES.content_level
   const cx = config.numbers === 'compact'
@@ -729,12 +740,28 @@ function buildTableRaw(
   if (def.rowType === 'platforms') {
     const present = platformMetrics ? PLATFORM_ROW_ORDER.filter(p => platformMetrics[p]) : []
     const shown = present.length ? present : PLATFORM_ROW_ORDER
+    // Growth di samping angka kalau kolomnya sedikit (seperti contoh di brief:
+    // "5,381 (+73%)"); di bawahnya kalau kolomnya banyak, supaya tidak terpotong.
+    const inline = columns.length <= 6
     const rows: TableRow[] = shown.map(p => {
       const vals = platformMetrics?.[p]
+      const prevVals = platformPrev?.[p]
       const cells: Record<string, TableCell> = {}
       columns.forEach(col => {
         const v = vals ? vals[col.id] ?? null : null
-        cells[col.id] = { text: v == null ? '—' : fmtReal(col.format, v, cx) }
+        const cell: TableCell = { text: v == null ? '—' : fmtReal(col.format, v, cx) }
+        const pv = prevVals ? prevVals[col.id] ?? null : null
+        if (config.showGrowth && v != null && pv != null && pv !== 0) {
+          // Pembagi |prev|: metrik yang bisa negatif (Followers Nett Growth) tetap
+          // bertanda benar — naik dari -50 ke -10 adalah perbaikan, bukan penurunan.
+          const g = ((v - pv) / Math.abs(pv)) * 100
+          const flat = Math.abs(g) < 0.5
+          cell.sub = {
+            text: flat ? '(0%)' : `(${g > 0 ? '+' : '-'}${groupInt(Math.abs(g))}%)`,
+            positive: g > 0, flat, inline,
+          }
+        }
+        cells[col.id] = cell
       })
       return { id: p, label: PLATFORM_ROW_LABEL[p], cells }
     })

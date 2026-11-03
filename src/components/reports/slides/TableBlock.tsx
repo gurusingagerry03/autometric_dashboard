@@ -12,15 +12,15 @@ const NOTE_FLEX = 1.8
 
 // Renders a configured table, matching report_2's SmartTableBlock layout: sticky
 // first column (Period/Channel/…), metric columns, mono values, green/red Gap row.
-function TableView({ config, accent, channel, metrics, sentiment, competitors, platform, customCols, months, editable, onChange, areaCqh }: {
+function TableView({ config, accent, channel, metrics, sentiment, competitors, platform, platformPrev, customCols, months, editable, onChange, areaCqh }: {
   config: TableConfig; accent: string; channel: string; metrics: SectionMetrics | null; sentiment: SentimentTable | null
-  competitors: CompetitorSection | null; platform: PlatformMetrics | null; customCols: TableColumn[]
+  competitors: CompetitorSection | null; platform: PlatformMetrics | null; platformPrev: PlatformMetrics | null; customCols: TableColumn[]
   months: TrackerMonth[] | null; editable: boolean; onChange?: (next: TableConfig) => void
   /** Tinggi kartu tabel dalam % tinggi slide — dasar ukuran huruf tabel bulanan. */
   areaCqh?: number
 }) {
   const t = useT()
-  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), metrics, sentiment, competitors, customCols, platform, months)
+  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), metrics, sentiment, competitors, customCols, platform, months, platformPrev)
   const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
   const flexOf = (c: TableColumn) => (c.format === 'text' ? NOTE_FLEX : 1)
   const setHighlight = (month: string, text: string) =>
@@ -74,8 +74,9 @@ function TableView({ config, accent, channel, metrics, sentiment, competitors, p
               )
             }
             const color = cell.gap ? (cell.flat ? '#0f172a' : cell.positive ? '#16a34a' : '#dc2626') : '#475569'
+            const inline = big?.inline || cell.sub?.inline
             return (
-              <div key={c.id} className={`flex ${big?.inline ? 'flex-row items-baseline justify-end' : 'flex-col items-end'}`} style={{ flex: 1, minWidth: 0, padding: '0 0.45cqw', lineHeight: 1.15, gap: big?.inline ? '0.4cqw' : undefined, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              <div key={c.id} className={`flex ${inline ? 'flex-row items-baseline justify-end' : 'flex-col items-end'}`} style={{ flex: 1, minWidth: 0, padding: '0 0.45cqw', lineHeight: 1.15, gap: inline ? '0.4cqw' : undefined, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                 <span className="truncate max-w-full" style={{ fontSize: fs.value, fontWeight: cell.gap || big ? 700 : 500, color: big ? '#1e293b' : color, fontFamily: mono }}>
                   {cell.text}
                 </span>
@@ -109,11 +110,12 @@ export function TableBlock({ config, colors, channel, editable, onConfigure, onC
   const sentiment = sentimentTableFor(metrics?.sentiment, channel)
   const competitors = competitorSectionFor(metrics, channel)
   const platform = platformMetricsFor(metrics, config.type)
+  const platformPrev = config.showGrowth ? platformMetricsFor(metrics, config.type, 'prev') : null
   const months = monthly?.data ? trackerMonthsFor(monthly.data, channel, monthly.year, monthly.month, config.fromMonth) : null
   return (
     <Card style={{ padding: '1.8cqh 1.8cqw', display: 'flex', flexDirection: 'column', gap: '1cqh' }}>
       <CardLabel icon={def?.icon ?? 'table_chart'} accent={colors.primary} onEdit={editable ? onConfigure : undefined}>{def?.label ?? 'Data table'}</CardLabel>
-      <TableView config={config} accent={colors.primary} channel={channel} metrics={sm} sentiment={sentiment} competitors={competitors} platform={platform} customCols={customColumnsFrom(metrics)} months={months} editable={editable && !!onChange} onChange={onChange} areaCqh={areaCqh} />
+      <TableView config={config} accent={colors.primary} channel={channel} metrics={sm} sentiment={sentiment} competitors={competitors} platform={platform} platformPrev={platformPrev} customCols={customColumnsFrom(metrics)} months={months} editable={editable && !!onChange} onChange={onChange} areaCqh={areaCqh} />
     </Card>
   )
 }

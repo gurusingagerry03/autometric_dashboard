@@ -6,7 +6,7 @@ import { HBars, MultiLineChart, SERIES } from './charts'
 import MetricInfo from '@/components/ui/MetricInfo'
 import DashboardChrome, { type ChromeState } from './DashboardChrome'
 import ExactValue, { NumCell } from '@/components/ui/ExactValue'
-import { PLATFORM_META, fmtInt, type PlatformFilter, type Period, shownFor, shownExcept } from './data'
+import { PLATFORM_META, type PlatformFilter, type Period, shownFor, shownExcept } from './data'
 import { useLanguage, useT } from '@/lib/i18n/LanguageContext'
 import { fmtPct, pct2 } from '@/lib/dashboard/format'
 import { TabSkeleton, useAnyBuilding, useAreaState } from './dataReadiness'
@@ -41,11 +41,13 @@ function Select({ value, onChange, options }: {
   )
 }
 
-const CONTRIB_COLS = 'grid-cols-[34px_minmax(150px,1.8fr)_52px_84px_64px_60px_84px_96px]'
+const CONTRIB_COLS = 'grid-cols-[34px_minmax(150px,1.8fr)_52px_64px_84px_64px_60px_84px_96px]'
 const CONTRIB_HEADS = [
   { label: '#' },
   { label: 'User',      metricKey: 'ugc_tagged_posts.username' },
   { label: '' },
+  // Angka yang menentukan urutan — tanpa kolom ini peringkatnya tidak bisa dibaca.
+  { label: 'Score',     metricKey: 'community_contributors.composite_score' },
   { label: 'Comments',  metricKey: 'community_contributors.comments_count' },
   { label: 'Likes',     metricKey: 'community_contributors.likes_received' },
   { label: 'Daily',     metricKey: 'derived.comments_per_day' },
@@ -260,11 +262,10 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
       <div className="grid grid-cols-12 gap-3 mb-3">
         {showCities && (
           <Card area="audience_geo_daily" skeleton="table" span="col-span-12 lg:col-span-5">
-            <CardHead title={t('Top Audience Cities')} metricKey="audience_geo_daily.geo" sub={t('Share of followers by city')} />
+            <CardHead title={t('Top Audience Cities')} sub={t('Share of followers by city')} />
             <div className="px-4 pb-4 pt-3">
-              <HBars items={data.cities.map(c => ({
+              <HBars hover={false} items={data.cities.map(c => ({
                 label: c.city, value: c.value, display: fmtPct(c.value),
-                exact: fmtInt(c.count), exactLabel: t('Followers'),
               }))} />
             </div>
           </Card>
@@ -406,7 +407,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
           </div>
         </div>
         <div className="overflow-x-auto">
-          <div className="min-w-[760px]">
+          <div className="min-w-[830px]">
             <TableHeadRow className={`grid ${CONTRIB_COLS}`} cols={CONTRIB_HEADS} />
             {contributors.map((c, i) => (
               <div key={c.username}
@@ -419,6 +420,7 @@ function AudienceBody({ orgId, brandId, platform, period, start, end }: { orgId:
                   <span className="font-medium text-[#374151] truncate">{c.username}</span>
                 </div>
                 <img src={PLATFORM_META[c.platform].logo} alt={PLATFORM_META[c.platform].label} className="w-[18px] h-[18px] object-contain" />
+                <span style={PJ} className="font-bold text-[#2C3079] tabular-nums">{c.score.toFixed(1)}</span>
                 <NumCell value={c.comments} className="text-[#374151] tabular-nums" />
                 <NumCell value={c.likes} className="text-[#374151] tabular-nums" />
                 <span className="text-[#374151] tabular-nums">{c.daily}</span>
