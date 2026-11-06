@@ -453,9 +453,11 @@ function brandCompetitorValues(pRows: PostRow[], gRows: GoldRow[]): Record<strin
     engagement:           eng,
     engagement_public:    engPub,
     avg_engagement_public: perPost(engPub, cnt),
-    // ER by followers = avg engagement PER POST ÷ followers (comparable to the
-    // brand's channel-level ER), not total monthly engagement ÷ followers.
-    er_followers:         eng != null && cnt > 0 && last ? (eng / cnt / last) * 100 : null,
+    // Post-UAT brief (ER Followers Metrics): ER Followers = total engagement ÷
+    // followers; Avg. ER Followers per Post = rata-rata per post (engagement per
+    // post ÷ followers). Dulu kolom ER Followers berisi yang kedua.
+    er_followers:         eng != null && last ? (eng / last) * 100 : null,
+    avg_er_followers:     eng != null && cnt > 0 && last ? (eng / cnt / last) * 100 : null,
     post_reach:           sumOrNull(pRows, 'reach'),
     profile_reach:        goldSumPos(gRows, 'profile_reach_sum'),
 
@@ -496,8 +498,9 @@ function competitorRowValues(r: CompRow): Record<string, number | null> {
     // its Engagement Public is its Engagement.
     engagement_public:    eng,
     avg_engagement_public: perPost(eng, cnt),
-    // ER by followers = avg engagement PER POST ÷ followers (see brand row).
-    er_followers:         eng != null && cnt && last ? (eng / cnt / last) * 100 : null,
+    // ER Followers & Avg. ER Followers per Post — definisi sama dengan baris brand.
+    er_followers:         eng != null && last ? (eng / last) * 100 : null,
+    avg_er_followers:     eng != null && cnt && last ? (eng / cnt / last) * 100 : null,
     // Never published for a competitor — no public surface exposes reach.
     post_reach:           null,
     profile_reach:        null,
@@ -638,7 +641,7 @@ export async function getReportTableMetrics(
   // biggest-first. Source is 100% l2_gold (never l0_raw). `first_foll` is the
   // growth baseline: the last count BEFORE the month (Followers 31 Agu), falling
   // back to the first count in it for a competitor tracked only since this month.
-  const compRows = await pool.query<CompRow>(
+  const compQuery = (from: string, to: string) => pool.query<CompRow>(
     `WITH comp AS (
        SELECT csa.id AS sid, csa.username, cp.key AS platform
          FROM public.brand_competitors bc
@@ -679,8 +682,14 @@ export async function getReportTableMetrics(
        LEFT JOIN agg ON agg.sid = comp.sid AND agg.platform = comp.platform
        LEFT JOIN base ON base.sid = comp.sid AND base.platform = comp.platform
       ORDER BY comp.platform, agg.last_foll DESC NULLS LAST, comp.username`,
-    [brandId, curStart, rangeEnd],
+    [brandId, from, to],
   )
+  // Bulan berjalan + bulan sebelumnya — yang kedua untuk opsi "growth vs previous
+  // period" di tabel Brand vs Competitor (Post-UAT brief, komentar kompetitor).
+  const [compRows, compRowsPrev] = await Promise.all([
+    compQuery(curStart, rangeEnd),
+    compQuery(rangeStart, curStart),
+  ])
 
   // Org custom metrics (free expressions over l1/l2 fields) — evaluated per channel below.
   // Period metrics run over the report window; YTD metrics over their own longer window.
@@ -783,10 +792,20 @@ export async function getReportTableMetrics(
     if (rowsForCh.length === 0) continue
     const pRowsCur = posts.filter(r => r.platform === ch && r.post_date >= curStart)
     const gRowsCur = gold.filter(r => r.platform === ch && r.metric_date >= curStart)
-    const brand: CompetitorEntity = { id: 'brand', label: brandName, values: brandCompetitorValues(pRowsCur, gRowsCur) }
-    const comps: CompetitorEntity[] = rowsForCh.map(r => ({
-      id: r.sid, label: '@' + r.username, values: competitorRowValues(r),
-    }))
+    const pRowsPrev = posts.filter(r => r.platform === ch && r.post_date < curStart)
+    const gRowsPrev = gold.filter(r => r.platform === ch && r.metric_date < curStart)
+    const brand: CompetitorEntity = {
+      id: 'brand', label: brandName,
+      values: brandCompetitorValues(pRowsCur, gRowsCur),
+      prevValues: brandCompetitorValues(pRowsPrev, gRowsPrev),
+    }
+    const comps: CompetitorEntity[] = rowsForCh.map(r => {
+      const prev = compRowsPrev.rows.find(p => p.sid === r.sid && p.platform === r.platform)
+      return {
+        id: r.sid, label: '@' + r.username, values: competitorRowValues(r),
+        ...(prev ? { prevValues: competitorRowValues(prev) } : {}),
+      }
+    })
     competitors[ch] = { brand, competitors: comps }
   }
 
@@ -804,32 +823,37 @@ export async function getReportTableMetrics(
       'post_reach', 'profile_reach',
     ] as const
 
-    const brandAll: Record<string, number | null> = {}
-    for (const key of SUMMABLE) {
-      let total = 0, seen = false
-      for (const ch of presentChans) {
-        const v = competitors[ch]!.brand.values[key]
-        if (v != null) { total += v; seen = true }
+    // Dihitung dua kali — periode ini dan periode sebelumnya (opsi growth).
+    const sumBrand = (pick: (e: CompetitorEntity) => Record<string, number | null> | undefined) => {
+      const brandAll: Record<string, number | null> = {}
+      for (const key of SUMMABLE) {
+        let total = 0, seen = false
+        for (const ch of presentChans) {
+          const v = pick(competitors[ch]!.brand)?.[key]
+          if (v != null) { total += v; seen = true }
+        }
+        brandAll[key] = seen ? total : null
       }
-      brandAll[key] = seen ? total : null
-    }
 
-    const posts = brandAll.post_count
-    const foll = brandAll.followers
-    const eng = brandAll.engagement
-    const per = (v: number | null) => (v != null && posts ? v / posts : null)
-    brandAll.followers_growth_pct =
-      brandAll.followers_growth != null && foll && foll - brandAll.followers_growth !== 0
-        ? (brandAll.followers_growth / (foll - brandAll.followers_growth)) * 100 : null
-    brandAll.avg_engagement = per(eng)
-    brandAll.avg_engagement_public = per(brandAll.engagement_public)
-    brandAll.avg_likes = per(brandAll.likes)
-    brandAll.avg_comments = per(brandAll.comments)
-    brandAll.avg_shares = per(brandAll.shares)
-    brandAll.avg_views = per(brandAll.views)
-    brandAll.avg_saves = per(brandAll.saves)
-    brandAll.er_followers = eng != null && posts && foll ? (eng / posts / foll) * 100 : null
-    brandAll.views_per_follower = per(brandAll.views) != null && foll ? per(brandAll.views)! / foll : null
+      const posts = brandAll.post_count
+      const foll = brandAll.followers
+      const eng = brandAll.engagement
+      const per = (v: number | null) => (v != null && posts ? v / posts : null)
+      brandAll.followers_growth_pct =
+        brandAll.followers_growth != null && foll && foll - brandAll.followers_growth !== 0
+          ? (brandAll.followers_growth / (foll - brandAll.followers_growth)) * 100 : null
+      brandAll.avg_engagement = per(eng)
+      brandAll.avg_engagement_public = per(brandAll.engagement_public)
+      brandAll.avg_likes = per(brandAll.likes)
+      brandAll.avg_comments = per(brandAll.comments)
+      brandAll.avg_shares = per(brandAll.shares)
+      brandAll.avg_views = per(brandAll.views)
+      brandAll.avg_saves = per(brandAll.saves)
+      brandAll.er_followers = eng != null && foll ? (eng / foll) * 100 : null
+      brandAll.avg_er_followers = eng != null && posts && foll ? (eng / posts / foll) * 100 : null
+      brandAll.views_per_follower = per(brandAll.views) != null && foll ? per(brandAll.views)! / foll : null
+      return brandAll
+    }
 
     const allComps: CompetitorEntity[] = []
     for (const ch of presentChans) {
@@ -839,7 +863,7 @@ export async function getReportTableMetrics(
     }
 
     competitors['all' as DashPlatform] = {
-      brand: { id: 'brand', label: brandName, values: brandAll },
+      brand: { id: 'brand', label: brandName, values: sumBrand(e => e.values), prevValues: sumBrand(e => e.prevValues) },
       competitors: allComps,
     }
   }

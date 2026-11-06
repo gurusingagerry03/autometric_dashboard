@@ -248,17 +248,19 @@ export function buildPosts(count: number, filter: string, opts: PostOptions = {}
     ]
   } else picked = sorted.slice(0, count).map(cand => ({ cand }))
 
-  return picked.map(({ cand, tag }, i) => {
-    const metrics: Record<string, string> = {}
-    POST_METRICS.forEach(m => {
-      // Teks menang untuk metrik tanggal; sisanya diformat dari angkanya.
-      metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0, opts.compact)
-    })
-    return {
-      id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics, link: safeLink(cand.link),
-      imageKey: cand.imageKey && !isStoredImage(cand.image) ? cand.imageKey : undefined,
-    }
+  return picked.map(({ cand, tag }, i) => toPostRow(cand, i, tag, opts.compact))
+}
+
+function toPostRow(cand: PostCandidate, i: number, tag?: 'TOP' | 'LOW', compact?: boolean): PostRow {
+  const metrics: Record<string, string> = {}
+  POST_METRICS.forEach(m => {
+    // Teks menang untuk metrik tanggal; sisanya diformat dari angkanya.
+    metrics[m.id] = cand.text?.[m.id] ?? fmtValue(m.id, cand.values[m.id] ?? 0, compact)
   })
+  return {
+    id: i + 1, tag, image: cand.image ?? '', format: cand.format, pillar: cand.pillar, metrics, link: safeLink(cand.link),
+    imageKey: cand.imageKey && !isStoredImage(cand.image) ? cand.imageKey : undefined,
+  }
 }
 
 export const metricLabel = (id: string) => POST_METRICS.find(m => m.id === id)?.label ?? id
@@ -336,3 +338,154 @@ export function effectiveFilterId(selected: string | undefined, availableIds: st
   const v = selected ?? 'all'
   return v === 'all' || availableIds.includes(v) ? v : 'all'
 }
+
+/* ── Format / Pillar Showcase ─────────────────────────────────────────────────
+ * Post-UAT brief "All Format/Pillar Showcase": satu baris per format (atau per
+ * pilar), post di tiap baris diurutkan dari yang terendah ke yang tertinggi
+ * menurut metrik pilihan, dengan rata-rata metrik itu per kelompok di kiri dan
+ * catatan per kelompok di kanan. Dipakai bersama ShowcaseSlide dan exporter.
+ */
+export type ShowcaseGroupBy = 'format' | 'pillar'
+/** Paling banyak lima baris — lebih dari itu fotonya terlalu kecil untuk dibaca. */
+export const SHOWCASE_MAX_GROUPS = 5
+export const SHOWCASE_PER_ROW = [3, 4, 5]
+/** Paling banyak empat metrik di kotak samping foto. */
+export const SHOWCASE_MAX_METRICS = 4
+
+export interface ShowcaseGroup {
+  id: string
+  label: string
+  /** Rata-rata metrik pengurut di kelompok ini (angka mentah). */
+  avg: number
+  avgText: string
+  count: number
+  /** Kiri → kanan = terendah → tertinggi. */
+  posts: PostRow[]
+}
+
+/** Kelompok yang ada di pool, urut abjad ("Other"/"No pillar" di belakang). */
+export function showcaseGroupOptions(source: PostCandidate[] | undefined, by: ShowcaseGroupBy): { id: string; label: string; count: number }[] {
+  const m = new Map<string, { id: string; label: string; count: number }>()
+  for (const p of source ?? []) {
+    const id = by === 'format' ? p.formatId : p.pillarId
+    const label = by === 'format' ? p.format : p.pillar
+    const e = m.get(id) ?? { id, label, count: 0 }
+    e.count++
+    m.set(id, e)
+  }
+  const last = (id: string) => (id === 'other' || id === 'none' ? 1 : 0)
+  return [...m.values()].sort((a, b) => last(a.id) - last(b.id) || a.label.localeCompare(b.label))
+}
+
+/**
+ * Kelompok yang ditampilkan: pilihan tersimpan yang masih ada datanya, atau —
+ * tanpa pilihan — kelompok dengan post terbanyak, maksimal SHOWCASE_MAX_GROUPS.
+ * Urutan tampil selalu urutan showcaseGroupOptions, bukan urutan klik.
+ */
+export function effectiveShowcaseGroups(source: PostCandidate[] | undefined, by: ShowcaseGroupBy, selected: string[] | undefined): string[] {
+  const opts = showcaseGroupOptions(source, by)
+  const valid = (selected ?? []).filter(id => opts.some(o => o.id === id))
+  const pick = valid.length ? new Set(valid)
+    : new Set([...opts].sort((a, b) => b.count - a.count).slice(0, SHOWCASE_MAX_GROUPS).map(o => o.id))
+  return opts.filter(o => pick.has(o.id)).map(o => o.id).slice(0, SHOWCASE_MAX_GROUPS)
+}
+
+export function buildShowcase(
+  source: PostCandidate[] | undefined, by: ShowcaseGroupBy, groupIds: string[],
+  sortMetric: string, perRow: number, compact = false,
+): ShowcaseGroup[] {
+  const opts = showcaseGroupOptions(source, by)
+  return groupIds.map(gid => {
+    const label = opts.find(o => o.id === gid)?.label ?? gid
+    const pool = (source ?? []).filter(p => (by === 'format' ? p.formatId : p.pillarId) === gid)
+    const key = (p: PostCandidate) => p.values[sortMetric] ?? 0
+    const asc = [...pool].sort((a, b) => key(a) - key(b))
+    const avg = pool.length ? pool.reduce((s, p) => s + key(p), 0) / pool.length : 0
+    // Lebih banyak post daripada slot: ambil yang tersebar rata dari terendah sampai
+    // tertinggi, supaya baris tetap memperlihatkan rentangnya — bukan cuma ujung atas.
+    const picked = asc.length <= perRow ? asc
+      : perRow === 1 ? [asc[asc.length - 1]]
+      : Array.from({ length: perRow }, (_, i) => asc[Math.round((i * (asc.length - 1)) / (perRow - 1))])
+    return {
+      id: gid, label, count: pool.length, avg,
+      avgText: fmtValue(sortMetric, avg, compact),
+      posts: picked.map((c, i) => toPostRow(c, i, undefined, compact)),
+    }
+  })
+}
+
+/**
+ * Metrik di kotak samping foto showcase: pilihan (urutan katalog), maks. empat.
+ * Metrik pengurut SELALU ikut, paling atas — baris diurutkan menurutnya, jadi
+ * kartu tanpa angka itu tidak menjelaskan kenapa post-nya ada di posisi itu.
+ */
+export function showcaseShownMetrics(selected: string[], populated: string[], sortMetric?: string): string[] {
+  const rest = effectiveShownMetrics(selected, populated).filter(m => m !== sortMetric)
+  return (sortMetric ? [sortMetric, ...rest] : rest).slice(0, SHOWCASE_MAX_METRICS)
+}
+
+/**
+ * Geometri showcase dalam satuan slide (cqw = % lebar, cqh = % tinggi), dipakai
+ * pratinjau DAN exporter supaya ukuran foto & kotak metriknya sama persis.
+ * Area isi: lebar 92cqw (padding 4cqw), tinggi 69cqh (18 → 87).
+ */
+export const SHOWCASE_GEOM = { bodyW: 92, bodyH: 69, leftW: 15, rightW: 21, gap: 1.2, headH: 3, rowGap: 0.8, stripW: 2.2, trackPad: 0.6, slotGap: 0.6, rowPad: 0.6, boxGap: 0.3 }
+const CQW_PER_CQH = 7.5 / 13.333   // slide 16:9 — 1cqh = 0.5625cqw
+
+export function showcaseGeometry(perRow: number, groups: number) {
+  const g = SHOWCASE_GEOM
+  const midW = g.bodyW - g.leftW - g.rightW - 2 * g.gap
+  const trackW = midW - g.stripW - 2 * g.trackPad
+  const slotW = (trackW - g.slotGap * (perRow - 1)) / perRow
+  const n = Math.max(1, groups)
+  const rowH = (g.bodyH - g.headH - g.rowGap * (n - 1)) / n            // cqh
+  const imgH = rowH - 2 * g.rowPad                                      // cqh
+  const imgW = Math.min(imgH * CQW_PER_CQH * 0.8, slotW * 0.45)         // cqw, foto 4:5
+  const boxW = slotW - imgW - g.boxGap                                  // cqw
+  return { midW, trackW, slotW, rowH, imgH, imgW, boxW }
+}
+
+/**
+ * Ukuran huruf kotak metrik (cqw). Tiap metrik = DUA baris (label, lalu angka) —
+ * "Imprs./Views: 12,121,090" dalam satu baris hanya muat di 4–5pt pada slot 4–5
+ * post per baris. Sebesar mungkin sampai 0.8cqw, asal teks terpanjang muat
+ * selebar kotak dan semua baris muat setinggi foto.
+ */
+export function showcaseMetricFs(geom: ReturnType<typeof showcaseGeometry>, metrics: number, longestChars: number): number {
+  const byW = (geom.boxW - 0.5) / (Math.max(1, longestChars) * 0.58)
+  const byH = (geom.imgH - 0.8) * CQW_PER_CQH / (Math.max(1, metrics * 2) * 1.2)
+  return Math.max(0.45, Math.min(0.8, byW, byH))
+}
+
+/**
+ * Label vertikal di strip kiri tiap baris ("PRODUCT EDUCATION"). Satu baris
+ * kalau muat setinggi baris; kalau tidak, dipecah dua di spasi paling tengah
+ * (strip 2.2cqw muat dua kolom huruf 0.8cqw), dan baru kecilkan huruf kalau
+ * dua baris pun belum muat. Dulu `nowrap` + overflow:hidden → "PRODUCT EDUCATI".
+ */
+export function showcaseLabel(label: string, groups: number): { lines: string[]; fs: number } {
+  const g = SHOWCASE_GEOM
+  const n = Math.max(1, groups)
+  const avail = ((g.bodyH - g.headH - g.rowGap * (n - 1)) / n) * CQW_PER_CQH * 0.9   // cqw sepanjang strip
+  const text = label.toUpperCase().trim()
+  const em = 0.78                                   // lebar rata-rata huruf kapital tebal + letter-spacing
+  const fsFor = (len: number) => avail / (Math.max(1, len) * em)
+  if (fsFor(text.length) >= 0.8) return { lines: [text], fs: 0.8 }
+  const words = text.split(/\s+/)
+  let lines = [text]
+  if (words.length > 1) {
+    let best = Infinity
+    for (let i = 1; i < words.length; i++) {
+      const a = words.slice(0, i).join(' '), b = words.slice(i).join(' ')
+      const len = Math.max(a.length, b.length)
+      if (len < best) { best = len; lines = [a, b] }
+    }
+  }
+  const longest = Math.max(...lines.map(l => l.length))
+  return { lines, fs: Math.max(0.45, Math.min(0.8, fsFor(longest))) }
+}
+
+/** Panjang teks terpanjang di kotak metrik (label atau angka), untuk showcaseMetricFs. */
+export const showcaseLongest = (groups: ShowcaseGroup[], shown: string[]): number =>
+  Math.max(1, ...shown.map(m => cardMetricLabel(m).length),
+    ...groups.flatMap(g => g.posts.flatMap(p => shown.map(m => (p.metrics[m] ?? '—').length))))

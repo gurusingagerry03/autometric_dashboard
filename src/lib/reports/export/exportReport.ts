@@ -17,14 +17,14 @@ import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
 import { KpiMetric, ReportKpiMetrics, deltaIsGood, resolveKpiMetric } from '../data/kpiMetrics'
 import {
   KPI_TARGET_MAX, KpiTarget, ReportKpiTargets, fmtKpiValue, fmtKpiPeriod, fmtKpiRate,
-  kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
+  kpiCardTitle, kpiOnPace, kpiTargetById, kpiTargetLabel, kpiTargetsFor,
 } from '../data/kpiTargets'
 import {
   ReportYtdMetrics, fmtYtdGrowth, fmtYtdPct, fmtYtdPrior, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow,
   ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor,
 } from '../data/ytdMetrics'
 import { trackerMonthsFor, trackerTableSizes, type ReportMonthlyTracker } from '../data/monthlyTracker'
-import { buildPosts, cardMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics } from '../data/posts'
+import { buildPosts, cardMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, availableFilterIds, effectiveFilterId, competitorPoolFor, type ReportPostMetrics, type CompetitorPostPool, activityPool, effectiveActivityMetrics, SHOWCASE_GEOM, SHOWCASE_PER_ROW, buildShowcase, effectiveShowcaseGroups, metricLabel, showcaseGeometry, showcaseLabel, showcaseLongest, showcaseMetricFs, showcaseShownMetrics } from '../data/posts'
 import type { ImageResolver } from '../images/client'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { sectionMetricsFor, platformMetricsFor } from '../data/metricsContext'
@@ -40,7 +40,12 @@ let PJ = 'Calibri'          // report font (set per export); MONO stays for tabl
 // tableCard membacanya langsung supaya semua slide yang memasang tabel bulanan —
 // Dashboard, Overview, Monthly Tracker — tidak perlu parameter tambahan satu per satu.
 let MONTHLY: { data: ReportMonthlyTracker | null; year: number; month: number } | null = null
+/** Data YTD report — untuk tabel 'YTD Metric' di slide mana pun (diisi di exportReportPptx). */
+let YTD: ReportYtdMetrics | null = null
 const MONO = 'Consolas'
+/** Margin sel tabel data (inci: atas, kanan, bawah, kiri) — lebih sempit dari bawaan
+ *  pptxgenjs (0.1" kiri-kanan) supaya angka panjang muat tanpa huruf jadi terlalu kecil. */
+const CELL_MARGIN: [number, number, number, number] = [0.04, 0.06, 0.04, 0.06]
 
 // cq → inches / points (slide is 13.333in × 7.5in = 960pt × 540pt)
 const W = (cqw: number) => (cqw / 100) * S.w
@@ -62,6 +67,11 @@ async function toDataUrl(url: string): Promise<string | null> {
     return null
   }
 }
+
+
+// Sumbu nilai seperti pratinjau ("150K", "1.2M"); dulu angka mentah "140000".
+// Bagian ketiga General supaya sumbu persen/rasio kecil (2.5) tidak dibulatkan.
+const AXIS_FMT = '[>=1000000]0.0,,"M";[>=1000]0,"K";General'
 
 function card(slide: Slide, x: number, y: number, w: number, h: number) {
   slide.addShape('roundRect', { x, y, w, h, rectRadius: 0.07, fill: { color: 'FFFFFF' }, line: { color: 'E8EBEE', width: 0.75 } })
@@ -155,7 +165,7 @@ async function chartCard(
         showTitle: false, ...catAxis, chartColors: g.series.map(s => noHash(s.color)),
         valAxisMinVal: g.series[0].scale.min, valAxisMaxVal: g.series[0].scale.max,
         valGridLine: { style: 'solid', size: 1, color: 'F1F3F5' }, catGridLine: { style: 'none' },
-        valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ,
+        valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ, valAxisLabelFormatCode: AXIS_FMT,
         barDir: config.barOrientation === 'horizontal' ? 'bar' : 'col',
         barGrouping: 'clustered', barGapWidthPct: 20,
         ...dataLabelOpts(g.series[0].pct, config.valueLabels, 'outEnd'),
@@ -169,6 +179,12 @@ async function chartCard(
   if (!series.length) { noDataText(slide, box.x, box.y, box.w, box.h); return }
   const sentiment = !!config.metrics?.includes('sentiments')
   const lineStyle = { lineSize: 2.25, lineDataSymbol: 'none' as const, lineSmooth: false }
+  // Label harian (30-an titik) dijarangkan sama seperti sampleLabels di pratinjau
+  // (~7 label) dan tetap mendatar — label "05 Sep" yang panjang membuat PowerPoint
+  // memiringkan atau menumpuk semuanya.
+  const lineCat = labels.length > 8
+    ? { ...catAxis, catAxisLabelFrequency: String(Math.ceil(labels.length / 7)), catAxisLabelRotate: 0 }
+    : catAxis
 
   if (series.length === 2 && !sentiment) {
     const [a, b] = series
@@ -180,11 +196,11 @@ async function chartCard(
       {
         ...box, ...legend,
         valAxes: [
-          { valAxisMinVal: a.scale.min, valAxisMaxVal: a.scale.max, valAxisLabelColor: noHash(a.color), valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ, valGridLine: { style: 'solid', size: 1, color: 'F1F3F5' } },
-          { valAxisMinVal: b.scale.min, valAxisMaxVal: b.scale.max, valAxisLabelColor: noHash(b.color), valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ, valGridLine: { style: 'none' } },
+          { valAxisMinVal: a.scale.min, valAxisMaxVal: a.scale.max, valAxisLabelColor: noHash(a.color), valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ, valAxisLabelFormatCode: AXIS_FMT, valGridLine: { style: 'solid', size: 1, color: 'F1F3F5' } },
+          { valAxisMinVal: b.scale.min, valAxisMaxVal: b.scale.max, valAxisLabelColor: noHash(b.color), valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ, valAxisLabelFormatCode: AXIS_FMT, valGridLine: { style: 'none' } },
         ],
         catAxes: [
-          { ...catAxis, catGridLine: { style: 'none' } },
+          { ...lineCat, catGridLine: { style: 'none' } },
           { catAxisHidden: true },
         ],
       },
@@ -195,10 +211,10 @@ async function chartCard(
   // Single metric (or sentiments' 3 shared-scale series).
   const scale = series[0]?.scale ?? { min: 0, max: 100 }
   slide.addChart('line', series.map(s => ({ name: s.name, labels, values: s.data })), {
-    ...box, ...legend, ...catAxis, ...lineStyle, chartColors: series.map(s => noHash(s.color)),
+    ...box, ...legend, ...lineCat, ...lineStyle, chartColors: series.map(s => noHash(s.color)),
     valAxisMinVal: scale.min, valAxisMaxVal: scale.max,
     valGridLine: { style: 'solid', size: 1, color: 'F1F3F5' }, catGridLine: { style: 'none' },
-    valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ,
+    valAxisLabelColor: 'B6BCC4', valAxisLabelFontSize: FS(1.0), valAxisLabelFontFace: PJ, valAxisLabelFormatCode: AXIS_FMT,
     ...dataLabelOpts(series[0]?.pct, config.valueLabels, 't'),
   })
 }
@@ -280,7 +296,8 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   const months = config.type === 'monthly_tracker' && MONTHLY?.data
     ? trackerMonthsFor(MONTHLY.data, channel, MONTHLY.year, MONTHLY.month, config.fromMonth)
     : null
-  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), sm, sent, comp, customCols, platform, months, platformPrev)
+  const ytd = config.type === 'ytd_metrics' ? ytdChannelFor(YTD, channel) : null
+  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel, ytd), sm, sent, comp, customCols, platform, months, platformPrev, ytd)
   if (config.type === 'monthly_tracker' && rows.length === 0) { noDataText(slide, x + pad, y + H(4.8), w - 2 * pad, h - H(6)); return }
   // Huruf tabel bulanan = ukuran preview (trackerTableSizes), selain itu ukuran tabel biasa.
   const big = config.type === 'monthly_tracker'
@@ -299,7 +316,11 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   // kata header terpanjang tidak terpotong. Header tetap boleh dua baris antar kata.
   const numCols = columns.map((c, i) => ({ c, w: colW[i + 1] })).filter(({ c }) => c.format !== 'text')
   if (numCols.length) {
-    const fitPt = (widthIn: number, chars: number, em: number) => ((widthIn - 0.1) * 72) / (Math.max(1, chars) * em)
+    // Lebar yang tersedia = kolom − margin sel kiri+kanan (CELL_MARGIN) − sedikit
+    // cadangan untuk penampil yang mengganti Consolas dengan font mono lain (WPS,
+    // Google Slides). Dulu hanya 0.1" yang dikurangi padahal margin bawaan
+    // pptxgenjs 0.1" per sisi, jadi "18,605,418" tetap patah jadi dua baris.
+    const fitPt = (widthIn: number, chars: number, em: number) => ((widthIn - CELL_MARGIN[1] - CELL_MARGIN[3] - 0.04) * 72) / (Math.max(1, chars) * em)
     const valueFit = Math.min(...numCols.map(({ c, w: cw }) =>
       fitPt(cw, Math.max(...rows.map(r => {
         const cell = r.cells[c.id]
@@ -341,7 +362,7 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
 
   slide.addTable([headRow, ...bodyRows], {
     x: x + pad, y: y + H(4.8), w: tw, h: h - H(6),
-    colW, fontFace: PJ, autoPage: false,
+    colW, fontFace: PJ, autoPage: false, margin: CELL_MARGIN,
     border: { type: 'solid', color: 'F1F3F5', pt: 0.5 },
   })
 }
@@ -485,7 +506,7 @@ function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, 
  * periodenya, lalu achievement & run rate — tanpa delta "vs periode lalu", yang
  * tidak punya arti untuk sebuah target (lihat kpiTargets.ts).
  */
-function targetCard(slide: Slide, target: KpiTarget, accent: string, count: number, rates: KpiRate[], x: number, y: number, w: number, h: number) {
+function targetCard(slide: Slide, target: KpiTarget, accent: string, count: number, rates: KpiRate[], x: number, y: number, w: number, h: number, channel = '') {
   card(slide, x, y, w, h)
   slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { width: 0 } })
   const pad = W(1.2)
@@ -494,7 +515,7 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
   const metaFs = FS(count >= 6 ? 0.64 : count === 5 ? 0.7 : count === 4 ? 0.75 : 0.8)
   const rateFs = FS(count >= 6 ? 0.72 : count === 5 ? 0.78 : count === 4 ? 0.82 : 0.88)
 
-  slide.addText(kpiTargetLabel(target.metric).toUpperCase(), { x: x + pad, y: y + H(1.6), w: bw, h: H(2.4), fontSize: FS(count >= 6 ? 0.8 : 0.95), bold: true, color: '94A3B8', fontFace: PJ })
+  slide.addText(kpiCardTitle(target, channel, kpiTargetLabel(target.metric)).toUpperCase(), { x: x + pad, y: y + H(1.6), w: bw, h: H(2.4), fontSize: FS(count >= 6 ? 0.8 : 0.95), bold: true, color: '94A3B8', fontFace: PJ })
   slide.addText(fmtKpiValue(target.metric, target.achieved), { x: x + pad, y: y + H(4.6), w: bw, h: H(5), fontSize: FS(valueCqw), bold: true, color: '0F172A', fontFace: PJ })
   slide.addText(
     `Target ${target.operation} ${fmtKpiValue(target.metric, target.target)}  ·  ${fmtKpiPeriod(target.startDate, target.endDate)}`,
@@ -575,7 +596,7 @@ async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, 
       for (let i = 0; i < n; i++) {
         const target = kpiTargetById(kpiTargets ?? null, slide.channel, slide.kpiMetrics[i] ?? null)
         const x = hx + i * (cardW + gap)
-        if (target) targetCard(s, target, colors.primary, n, rates, x, ry, cardW, rh)
+        if (target) targetCard(s, target, colors.primary, n, rates, x, ry, cardW, rh, slide.channel)
         else placeholder(s, x, ry, cardW, rh, 'ADD KPI')
       }
     }
@@ -682,7 +703,7 @@ function postCardFit(rows: number, baseFs: number, h: number, labelW: number, lo
   return { imgH, fs }
 }
 
-async function postCard(slide: Slide, post: { id: number; tag?: string; image?: string; format?: string; pillar?: string; metrics: Record<string, string>; link?: string }, postMetrics: string[], n: number, x: number, y: number, w: number, h: number) {
+async function postCard(slide: Slide, post: { id: number; tag?: string; image?: string; format?: string; pillar?: string; metrics: Record<string, string>; link?: string }, postMetrics: string[], n: number, x: number, y: number, w: number, h: number, highlight?: string) {
   card(slide, x, y, w, h)
   const pad = W(0.6)
   const baseFs = n === 4 ? FS(1.05) : n === 6 ? FS(0.9) : FS(0.78)
@@ -731,8 +752,14 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
   const lineSpacing = Math.round(fs * METRIC_LINE * 10) / 10
   // wrap: false + margin 0 — a line never breaks, so label n and value n always sit
   // on line n together, whatever the renderer's (PowerPoint/WPS) text metrics.
-  slide.addText(postMetrics.map(m => cardMetricLabel(m)).join('\n'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, color: '94A3B8', align: 'left', valign: 'top', lineSpacing, margin: 0, wrap: false, fontFace: PJ })
-  slide.addText(postMetrics.map(m => post.metrics[m] ?? '—').join('\n'), { x: x + pad, y: colY, w: innerW, h: colH, fontSize: fs, color: '334155', align: 'right', valign: 'top', lineSpacing, margin: 0, wrap: false, fontFace: MONO })
+  // Satu run per baris supaya baris metrik "Rank by" bisa disorot (sama dengan
+  // PostCard di pratinjau) tanpa memecah kolom jadi banyak kotak teks.
+  const runs = (text: (m: string) => string, base: string) => postMetrics.map((m, i) => ({
+    text: text(m),
+    options: { color: m === highlight ? '16A34A' : base, bold: m === highlight, breakLine: i < postMetrics.length - 1 },
+  }))
+  slide.addText(runs(m => cardMetricLabel(m), '94A3B8'), { x: x + pad, y: colY, w: labelW, h: colH, fontSize: fs, align: 'left', valign: 'top', lineSpacing, margin: 0, wrap: false, fontFace: PJ })
+  slide.addText(runs(m => post.metrics[m] ?? '—', '334155'), { x: x + pad, y: colY, w: innerW, h: colH, fontSize: fs, align: 'right', valign: 'top', lineSpacing, margin: 0, wrap: false, fontFace: MONO })
 }
 
 async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null, resolveImages?: ImageResolver | null) {
@@ -798,11 +825,136 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
   // bagian yang tidak kosong, persis seperti PostCard di pratinjau.
   for (let i = 0; i < posts.length; i++) {
     const post = comp ? { ...posts[i], pillar: undefined } : posts[i]
-    await postCard(s, post, shownMetrics, n, hx + i * (cw + gap), gy, cw, gh)
+    await postCard(s, post, shownMetrics, n, hx + i * (cw + gap), gy, cw, gh, isAct ? undefined : sortMetric)
   }
 
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(69), hw, H(18),
     isAct ? 'ACTIVITY NOTES & INSIGHTS' : 'VISUAL STRATEGY NOTES & INSIGHTS')
+  await footer(s, chrome, colors, hx, H(89), hw)
+}
+
+/**
+ * Format / Pillar Showcase — cerminan ShowcaseSlide.tsx: rata-rata per kelompok
+ * (kiri), satu baris per kelompok dengan post terendah → tertinggi (tengah), dan
+ * catatan per kelompok (kanan). Datanya dari buildShowcase, sama dengan pratinjau.
+ */
+async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, resolveImages?: ImageResolver | null) {
+  const s = pptx.addSlide()
+  s.background = { color: noHash(tint(colors.primary, 0.965)) }
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
+  await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
+
+  const source = postMetrics?.[slide.channel]
+  const by = slide.showcaseBy ?? 'format'
+  const perRow = SHOWCASE_PER_ROW.includes(slide.postCount) ? slide.postCount : 4
+  const populated = populatedMetricsFor(source)
+  const sortMetric = effectiveSortMetric(slide.postSortMetric, populated)
+  const shown = showcaseShownMetrics(slide.postMetrics, populated, sortMetric)
+  const groups = buildShowcase(source, by, effectiveShowcaseGroups(source, by, slide.showcaseGroups), sortMetric, perRow, slide.postNumbers === 'compact')
+
+  const top = H(18), bodyH = H(69)
+  if (!groups.length) {
+    noDataText(s, hx, top, hw, bodyH)
+    await footer(s, chrome, colors, hx, H(89), hw)
+    return
+  }
+  const accent = noHash(colors.primary)
+  // Geometri bersama dengan ShowcaseSlide (posts.showcaseGeometry).
+  const G = SHOWCASE_GEOM
+  const geom = showcaseGeometry(perRow, groups.length)
+  const gap = W(G.gap)
+  const leftW = W(G.leftW), rightW = W(G.rightW)
+  const mx = hx + leftW + gap, midW = W(geom.midW)
+  const headH = H(G.headH), rowGap = H(G.rowGap)
+  const rowsTop = top + headH
+  const rowH = H(geom.rowH)
+  // pt langsung dari cqw — tanpa batas bawah 6pt milik FS(), yang justru akan
+  // membuat teks di slot sempit melebar keluar kotaknya.
+  const metricPt = Math.round(showcaseMetricFs(geom, shown.length, showcaseLongest(groups, shown)) * 9.6 * 10) / 10
+  const rowY = (i: number) => rowsTop + i * (rowH + rowGap)
+  const maxAvg = Math.max(0, ...groups.map(g => g.avg)) || 1
+
+  // Kiri — rata-rata per kelompok.
+  card(s, hx, top, leftW, bodyH)
+  s.addShape('rect', { x: hx + W(0.8), y: top + H(1.2), w: W(0.9), h: W(0.9), fill: { color: accent }, line: { width: 0 } })
+  s.addText(`Avg. ${metricLabel(sortMetric)}`, { x: hx + W(1.9), y: top + H(0.6), w: leftW - W(2.4), h: H(2.6), fontSize: FS(0.8), bold: true, color: '475569', fontFace: PJ, valign: 'middle', fit: 'shrink' })
+  const barX = hx + W(6.1), barMax = (leftW - W(6.6)) * 0.7
+  groups.forEach((g, i) => {
+    const cy = rowY(i) + rowH / 2
+    // `fit: 'shrink'` tidak dijalankan pptxgenjs → "Entertainment" patah jadi
+    // "Entertain / ment". Kecilkan sampai kata terpanjang muat satu baris (5.4cqw
+    // dikurangi inset kotak); spasi antar kata tetap boleh pindah baris.
+    const longestWord = Math.max(1, ...g.label.split(/\s+/).map(w => w.length))
+    const labFs = Math.max(0.5, Math.min(0.85, 5.0 / (longestWord * 0.52)))
+    s.addText(g.label, { x: hx + W(0.4), y: cy - H(1.6), w: W(5.4), h: H(3.2), fontSize: FS(labFs), color: '334155', align: 'right', valign: 'middle', fontFace: PJ, margin: 0 })
+    const bw = Math.max(barMax * 0.04, (g.avg / maxAvg) * barMax)
+    s.addShape('rect', { x: barX, y: cy - H(1.3), w: bw, h: H(2.6), fill: { color: accent }, line: { width: 0 } })
+    s.addText(g.avgText, { x: barX + bw + W(0.2), y: cy - H(1.6), w: leftW - (barX - hx) - bw - W(0.3), h: H(3.2), fontSize: FS(0.8), bold: true, color: '0F172A', valign: 'middle', fontFace: PJ, margin: 0 })
+  })
+
+  // Tengah — kepala "Lowest … Highest".
+  s.addText('Lowest', { x: mx + W(2.6), y: top, w: W(8), h: headH, fontSize: FS(0.9), bold: true, color: 'DC2626', valign: 'middle', fontFace: PJ, margin: 0 })
+  s.addText(`*based on ${metricLabel(sortMetric)}`, { x: mx, y: top, w: midW, h: headH, fontSize: FS(0.75), color: '94A3B8', align: 'center', valign: 'middle', fontFace: PJ })
+  s.addText('Highest', { x: mx + midW - W(8), y: top, w: W(8), h: headH, fontSize: FS(0.9), bold: true, color: '16A34A', align: 'right', valign: 'middle', fontFace: PJ, margin: 0 })
+
+  // Gambar yang belum tersimpan permanen diminta dulu ke resolver, seperti slide Visual.
+  const keys = groups.flatMap(g => g.posts.map(p => p.imageKey)).filter((k): k is string => !!k)
+  const resolved = resolveImages && keys.length ? await resolveImages(keys) : {}
+
+  const stripW = W(G.stripW), pad = H(G.rowPad), slotGap = W(G.slotGap)
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i], y = rowY(i)
+    s.addShape('roundRect', { x: mx, y, w: midW, h: rowH, rectRadius: 0.05, fill: { color: noHash(tint(colors.primary, 0.95)) }, line: { color: 'E8EBEE', width: 0.75 } })
+    s.addShape('rect', { x: mx, y, w: stripW, h: rowH, fill: { color: accent }, line: { width: 0 } })
+    // Teks diputar 270° di sekitar pusat kotaknya: kotak selebar tinggi baris,
+    // diletakkan supaya pusatnya jatuh di tengah strip.
+    // Pecah baris & ukuran dari showcaseLabel (sama dengan pratinjau) — `fit:
+    // 'shrink'` pptxgenjs tidak benar-benar mengecilkan apa pun.
+    const lab = showcaseLabel(g.label, groups.length)
+    s.addText(lab.lines.join('\n'), {
+      x: mx + stripW / 2 - rowH / 2, y: y + rowH / 2 - stripW / 2, w: rowH, h: stripW,
+      rotate: 270, fontSize: FS(lab.fs), bold: true, color: 'FFFFFF', align: 'center', valign: 'middle', fontFace: PJ, margin: 0, lineSpacingMultiple: 1.0,
+    })
+    const trackX = mx + stripW + W(G.trackPad), trackW = W(geom.trackW)
+    const slotW = W(geom.slotW)
+    const imgH = H(geom.imgH)
+    const imgW = W(geom.imgW)
+    const k = g.posts.length
+    for (let j = 0; j < k; j++) {
+      const p = g.posts[j]
+      // Rata kanan, sama dengan pratinjau: post tertinggi selalu di ujung kanan.
+      const sx = trackX + trackW - (k - j) * slotW - (k - j - 1) * slotGap
+      const sy = y + pad
+      const url = (p.imageKey && resolved[p.imageKey]) || p.image
+      const link = p.link ? { url: p.link, tooltip: p.link } : undefined
+      const data = url ? await toDataUrl(url) : null
+      const linked = data ? await addCoverImage(s, data, sx, sy, imgW, imgH, link) : false
+      if (!data) s.addShape('rect', { x: sx, y: sy, w: imgW, h: imgH, fill: { color: 'E2E8F0' }, line: { width: 0 } })
+      if (link && !linked) s.addShape('rect', { x: sx, y: sy, w: imgW, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { type: 'none' }, hyperlink: link })
+      const bx = sx + imgW + W(G.boxGap), bw = W(geom.boxW)
+      s.addShape('roundRect', { x: bx, y: sy, w: bw, h: imgH, rectRadius: 0.03, fill: { color: 'FFFFFF' }, line: { color: 'EEF0F2', width: 0.5 } })
+      // Dua baris per metrik — label abu-abu, lalu angkanya (sama dengan pratinjau).
+      s.addText(shown.flatMap((m, mi) => [
+        { text: cardMetricLabel(m), options: { color: '94A3B8', breakLine: true } },
+        { text: p.metrics[m] ?? '—', options: { color: m === sortMetric ? '16A34A' : '334155', bold: true, breakLine: mi < shown.length - 1 } },
+      ]), { x: bx, y: sy, w: bw, h: imgH, fontSize: metricPt, valign: 'middle', fontFace: PJ, wrap: false, margin: [2, 2, 2, 2] })
+    }
+  }
+
+  // Kanan — catatan per kelompok.
+  const rx = hx + hw - rightW
+  card(s, rx, top, rightW, bodyH)
+  const sliceH = (bodyH - H(2)) / groups.length
+  groups.forEach((g, i) => {
+    const y = top + H(1) + i * sliceH
+    const note = slide.showcaseNotes?.[g.id]?.trim()
+    s.addText([
+      { text: g.label.toUpperCase(), options: { bold: true, color: '0F172A', fontSize: FS(0.85), breakLine: true } },
+      { text: note || '—', options: { color: '475569', fontSize: FS(0.78) } },
+    ], { x: rx + W(0.9), y, w: rightW - W(1.8), h: sliceH, valign: 'top', fontFace: PJ, fit: 'shrink', margin: 0, lineSpacingMultiple: 1.15 })
+  })
+
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 
@@ -1122,6 +1274,7 @@ export interface ReportExportOptions {
 export async function exportReportPptx({ cover, slides, chromes, colors, brandName, font, metrics, chartMetrics, kpiMetrics, kpiTargets, ytdMetrics, postMetrics, competitorPosts, audienceMetrics, monthlyTracker, resolveImages }: ReportExportOptions): Promise<{ blob: Blob; fileName: string }> {
   PJ = font
   MONTHLY = monthlyTracker ?? null
+  YTD = ytdMetrics ?? null
   const { default: PptxGenJS } = await import('pptxgenjs')
   const pptx = new PptxGenJS()
   pptx.defineLayout({ name: 'AUTOMETRIC_16x9', width: S.w, height: S.h })
@@ -1136,6 +1289,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     else if (slide.type === 'comparison') await addComparisonSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined)
     else if (usesKpiLayout(slide.type)) await addKpiSlide(pptx, slide, chrome, colors, chartMetrics ?? undefined, kpiMetrics ?? undefined, metrics ?? undefined, kpiTargets ?? undefined, ytdMetrics ?? undefined)
     else if (slide.type === 'visual' || slide.type === 'activity') await addVisualSlide(pptx, slide, chrome, colors, postMetrics, competitorPosts, resolveImages)
+    else if (slide.type === 'showcase') await addShowcaseSlide(pptx, slide, chrome, colors, postMetrics, resolveImages)
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)
     else if (slide.type === 'demographic') await addDemographicSlide(pptx, slide, chrome, colors, audienceMetrics)

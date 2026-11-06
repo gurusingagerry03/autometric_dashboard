@@ -7,9 +7,10 @@
 import type { DashPlatform } from '@/components/dashboard/data'
 import { compactNum, groupInt, shortMetricLabel } from './format'
 import { TABLE_COLUMN_TO_TRACKER, fmtTrackerMom, fmtTrackerMonth, fmtTrackerValue, trackerMom, type TrackerMetric, type TrackerMonth } from './monthlyTracker'
+import { fmtYtdGrowth, fmtYtdPrior, fmtYtdRow, ytdLabel, type YtdChannel } from './ytdMetrics'
 
 export type TableFormat = 'compact' | 'number' | 'percent' | 'time' | 'text'
-export type TableRowType = 'comparison' | 'competitors' | 'sentiments' | 'platforms' | 'months' | 'generic'
+export type TableRowType = 'comparison' | 'competitors' | 'sentiments' | 'platforms' | 'months' | 'ytd' | 'generic'
 
 // `channels` omitted = available on every channel; otherwise the metric only
 // exists for the listed platforms (per the ROBZ LAUNCH mapping).
@@ -60,8 +61,30 @@ export interface TableConfig {
   showGrowth?: boolean
 }
 
-/** Tabel yang punya opsi growth vs periode sebelumnya (baris = platform). */
-export const supportsGrowthOption = (typeId: string) => TABLE_TYPES[typeId]?.rowType === 'platforms'
+/** Tabel yang punya opsi growth vs periode sebelumnya: baris = platform, atau
+ *  Brand vs Competitor (baris = brand & tiap kompetitor). */
+export const supportsGrowthOption = (typeId: string) => {
+  const rt = TABLE_TYPES[typeId]?.rowType
+  return rt === 'platforms' || rt === 'competitors'
+}
+
+/**
+ * Kolom yang isinya SUDAH perubahan (Followers Growth, Growth %, Nett Growth) tidak
+ * diberi growth lagi — "growth dari growth" membingungkan pembaca (catatan Post-UAT
+ * brief, Growth Options on Table). Id berawalan ct:/ch: (Cross-Level) ikut dicek.
+ */
+const NO_GROWTH = new Set(['followers_growth', 'followers_growth_pct', 'followers_net_growth', 'avg_followers_net_growth'])
+const skipsGrowth = (colId: string) => NO_GROWTH.has(colId.replace(/^c[th]:/, ''))
+
+/** Growth vs periode sebelumnya sebagai baris kecil di sel ("(+12%)"). */
+function growthSub(v: number | null, pv: number | null, inline: boolean): TableCell['sub'] {
+  if (v == null || pv == null || pv === 0) return undefined
+  // Pembagi |prev|: metrik yang bisa negatif tetap bertanda benar — naik dari -50
+  // ke -10 adalah perbaikan, bukan penurunan.
+  const g = ((v - pv) / Math.abs(pv)) * 100
+  const flat = Math.abs(g) < 0.5
+  return { text: flat ? '(0%)' : `(${g > 0 ? '+' : '-'}${groupInt(Math.abs(g))}%)`, positive: g > 0, flat, inline }
+}
 
 /** Real metric value for a comparison table: previous vs current period. */
 export interface MetricPair { prev: number | null; curr: number | null }
@@ -81,6 +104,8 @@ export interface CompetitorEntity {
   id: string      // 'brand' for the brand row, else the competitor's social_account_id
   label: string   // brand name, or '@username'
   values: Record<string, number | null>
+  /** Nilai periode sebelumnya, kunci sama dengan `values` — untuk opsi showGrowth. */
+  prevValues?: Record<string, number | null>
 }
 /** Competitor comparison for one platform: the brand + every competitor with a row. */
 export interface CompetitorSection {
@@ -422,11 +447,18 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'avg_views', label: 'Avg Views / Post', format: 'number', channels: ['instagram', 'tiktok'] },
       { id: 'avg_saves', label: 'Avg Saves / Post', format: 'number', channels: ['tiktok'] },
       { id: 'er_followers', label: 'ER Followers (%)', format: 'percent' },
+      { id: 'avg_er_followers', label: 'Avg ER Followers / Post (%)', format: 'percent' },
       { id: 'views_per_follower', label: 'Views / Follower', format: 'number', channels: ['instagram', 'tiktok'] },
 
       // ── brand-only: no public surface exposes a competitor's reach ──────────
       { id: 'post_reach', label: 'Post Reach', format: 'compact' },
       { id: 'profile_reach', label: 'Profile Reach', format: 'compact' },
+    ],
+    // Tanpa ini SEMUA kolom (±19 di IG) tercentang — angkanya terpotong "1,19…"
+    // di slide. Sisanya tinggal dicentang di modal.
+    defaultColumns: [
+      'followers', 'followers_growth', 'post_count', 'views', 'engagement',
+      'avg_engagement', 'avg_views', 'er_followers',
     ],
   },
   // Monthly Tracker Performance (deck revisi Report Maker, slide 11/12): satu baris
@@ -451,6 +483,18 @@ export const TABLE_TYPES: Record<string, TableType> = {
       { id: 'key_highlight', label: 'Key Highlight', format: 'text' },
     ],
     defaultColumns: ['followers', 'followers_growth', 'reach', 'profile_visit', 'total_posts', 'engagement', 'key_highlight'],
+  },
+  /**
+   * YTD Metric (Post-UAT brief, YTD Metrics): matriks Last Year / This Year /
+   * Growth seperti slide YTD Performance, tapi sebagai tabel biasa sehingga bisa
+   * dipasang di slide format lain. Kolomnya = metrik YTD brand di channel itu
+   * (dinamis, lihat columnsForChannel); angkanya dari ReportYtdMetrics yang sama
+   * dengan slide YTD, jadi kedua tempat tidak mungkin berbeda.
+   */
+  ytd_metrics: {
+    id: 'ytd_metrics', label: 'YTD Metric', icon: 'timeline',
+    description: 'Accumulated since the brand’s YTD start vs the same window last year.', rowType: 'ytd',
+    columns: [],
   },
   sentiments: {
     id: 'sentiments', label: 'Sentiments', icon: 'favorite',
@@ -480,6 +524,11 @@ const ROW_DEFS: Record<TableRowType, { id: string; label: string; isGap?: boolea
     { id: 'negative', label: 'Negative' },
   ],
   months: [],   // dinamis — satu baris per bulan dari data monthly tracker
+  ytd: [
+    { id: 'prior', label: 'Last Year' },
+    { id: 'curr', label: 'This Year' },
+    { id: 'gap', label: 'Growth (%)', isGap: true },
+  ],
   platforms: [
     { id: 'instagram', label: 'Instagram' },
     { id: 'facebook', label: 'Facebook' },
@@ -493,7 +542,7 @@ const ROW_DEFS: Record<TableRowType, { id: string; label: string; isGap?: boolea
 }
 
 export function firstColHeader(rowType: TableRowType): string {
-  return rowType === 'comparison' ? 'Period'
+  return rowType === 'comparison' || rowType === 'ytd' ? 'Period'
     : rowType === 'competitors' ? 'Brand'
     : rowType === 'sentiments' ? 'Sentiment'
     : rowType === 'platforms' ? 'Platform'
@@ -541,9 +590,11 @@ export function isColumnOnChannel(col: TableColumn, channel: string): boolean {
 /** Columns of a type available for the given slide channel. On "all", a
  *  channel-scoped type uses its `allColumns` layout when defined (Content/Channel
  *  Performance spec), else the channel-agnostic subset of `columns`. */
-export function columnsForChannel(typeId: string, channel: string): TableColumn[] {
+export function columnsForChannel(typeId: string, channel: string, ytd?: YtdChannel | null): TableColumn[] {
   const def = TABLE_TYPES[typeId]
   if (!def) return []
+  // Kolom YTD = metrik YTD yang memang dibangun untuk brand & channel ini.
+  if (def.rowType === 'ytd') return (ytd?.rows ?? []).map(r => ({ id: r.metric, label: ytdLabel(r.metric), format: 'number' as const }))
   if (!def.channelScoped) return def.columns
   // On "all", only columns without a channel restriction survive — the metrics every
   // channel publishes. A column scoped to some platforms would otherwise compare a
@@ -553,9 +604,12 @@ export function columnsForChannel(typeId: string, channel: string): TableColumn[
 }
 
 /** Pre-checked columns for a type on a channel (core set, kept to what's available). */
-export function defaultColumnsFor(typeId: string, channel: string): string[] {
-  const avail = columnsForChannel(typeId, channel)
+export function defaultColumnsFor(typeId: string, channel: string, ytd?: YtdChannel | null): string[] {
+  const avail = columnsForChannel(typeId, channel, ytd)
   const def = TABLE_TYPES[typeId]
+  // YTD: katalognya bisa puluhan metrik (semua scorecard dashboard), jadi yang
+  // tercentang hanya lima pertama — metrik ber-KPI selalu di depan.
+  if (def?.rowType === 'ytd') return avail.slice(0, 5).map(c => c.id)
   const base = (channel === 'all' && def?.allColumns ? def.allDefaultColumns : def?.defaultColumns) ?? avail.map(c => c.id)
   const filtered = base.filter(id => avail.some(c => c.id === id))
   return filtered.length ? filtered : avail.map(c => c.id)
@@ -573,6 +627,8 @@ export function isTypeEnabledForChannel(typeId: string, channel: string): boolea
   if (typeId === 'content_by_platform' || typeId === 'channel_by_platform' || typeId === 'cross_by_platform') {
     return channel === 'all'
   }
+  // Periode YTD disimpan per platform; tidak ada agregat lintas channel.
+  if (typeId === 'ytd_metrics') return channel !== 'all'
   return true
 }
 
@@ -589,6 +645,9 @@ export function typeChannelHint(typeId: string): string {
 function fmtReal(format: TableFormat, val: number, compact = false): string {
   if (format === 'percent') return (Math.round(val * 100) / 100) + '%'
   if (format === 'time') return (Math.round(val * 10) / 10) + 's'
+  // Rasio kecil (Views / Follower ≈ 0.30, rata-rata per post < 10) dulu
+  // dibulatkan groupInt jadi "0" — dan tetap diberi growth, jadi terbaca "0 (-28%)".
+  if (Math.abs(val) < 10 && !Number.isInteger(val)) return String(Math.round(val * 100) / 100)
   return compact ? compactNum(val) : groupInt(val)
 }
 
@@ -632,9 +691,11 @@ function sentimentCell(rowId: string, col: TableColumn, s: SentimentTable, cx = 
 }
 
 // Real cell for a Brand-vs-Competitor row (value keyed by column id; null → "—").
-function competitorCell(entity: CompetitorEntity, col: TableColumn, cx = false): TableCell {
-  const v = entity.values[col.id]
-  return { text: v == null ? '—' : fmtReal(col.format, v, cx) }
+function competitorCell(entity: CompetitorEntity, col: TableColumn, cx = false, growth = false, inline = false): TableCell {
+  const v = entity.values[col.id] ?? null
+  const cell: TableCell = { text: v == null ? '—' : fmtReal(col.format, v, cx) }
+  if (growth && !skipsGrowth(col.id)) cell.sub = growthSub(v, entity.prevValues?.[col.id] ?? null, inline)
+  return cell
 }
 
 // Row order + labels for the per-platform comparison tables.
@@ -671,6 +732,8 @@ function buildTableRaw(
   months?: TrackerMonth[] | null,
   /** Tabel per-platform — nilai periode sebelumnya, untuk opsi showGrowth. */
   platformPrev?: PlatformMetrics | null,
+  /** 'ytd_metrics' — data YTD channel slide. */
+  ytd?: YtdChannel | null,
 ): { header: string; columns: TableColumn[]; rows: TableRow[] } {
   const def = TABLE_TYPES[config.type] ?? TABLE_TYPES.content_level
   const cx = config.numbers === 'compact'
@@ -694,9 +757,10 @@ function buildTableRaw(
         ? competitors.competitors.filter(c => sel.includes(c.id))
         : competitors.competitors
       const entities = [competitors.brand, ...chosen]
+      const inline = columns.length <= 6
       rows = entities.map(e => {
         const cells: Record<string, TableCell> = {}
-        columns.forEach(col => { cells[col.id] = competitorCell(e, col, cx) })
+        columns.forEach(col => { cells[col.id] = competitorCell(e, col, cx, !!config.showGrowth, inline) })
         return { id: e.id, label: e.label, cells }
       })
     } else {
@@ -707,6 +771,26 @@ function buildTableRaw(
       })
     }
     return { header: firstColHeader('competitors'), columns, rows }
+  }
+
+  // YTD: Last Year / This Year / Growth per metrik, format bawaan tiap baris YTD.
+  if (def.rowType === 'ytd') {
+    const rows: TableRow[] = ROW_DEFS.ytd.map(r => {
+      const cells: Record<string, TableCell> = {}
+      columns.forEach(col => {
+        const yr = ytd?.rows.find(x => x.metric === col.id)
+        if (!yr) { cells[col.id] = { text: '—' }; return }
+        if (r.id === 'gap') {
+          const text = fmtYtdGrowth(yr)
+          const d = yr.percentage == null ? null : yr.percentage - 100
+          cells[col.id] = d == null ? { text } : { text, gap: true, positive: d > 0, flat: Math.abs(d) < 0.005 }
+          return
+        }
+        cells[col.id] = { text: r.id === 'prior' ? fmtYtdPrior(yr) : fmtYtdRow(yr) }
+      })
+      return { id: r.id, label: r.label, isGap: r.isGap, cells }
+    })
+    return { header: firstColHeader('ytd'), columns, rows }
   }
 
   // Monthly tracker: satu baris per bulan; tiap angka membawa perubahan vs bulan
@@ -751,16 +835,7 @@ function buildTableRaw(
         const v = vals ? vals[col.id] ?? null : null
         const cell: TableCell = { text: v == null ? '—' : fmtReal(col.format, v, cx) }
         const pv = prevVals ? prevVals[col.id] ?? null : null
-        if (config.showGrowth && v != null && pv != null && pv !== 0) {
-          // Pembagi |prev|: metrik yang bisa negatif (Followers Nett Growth) tetap
-          // bertanda benar — naik dari -50 ke -10 adalah perbaikan, bukan penurunan.
-          const g = ((v - pv) / Math.abs(pv)) * 100
-          const flat = Math.abs(g) < 0.5
-          cell.sub = {
-            text: flat ? '(0%)' : `(${g > 0 ? '+' : '-'}${groupInt(Math.abs(g))}%)`,
-            positive: g > 0, flat, inline,
-          }
-        }
+        if (config.showGrowth && !skipsGrowth(col.id)) cell.sub = growthSub(v, pv, inline)
         cells[col.id] = cell
       })
       return { id: p, label: PLATFORM_ROW_LABEL[p], cells }

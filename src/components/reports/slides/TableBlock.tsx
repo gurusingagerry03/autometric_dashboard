@@ -2,7 +2,8 @@
 
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { TABLE_TYPES, TableColumn, TableConfig, SectionMetrics, SentimentTable, CompetitorSection, PlatformMetrics, buildTable, columnsForChannel, sentimentTableFor, customColumnsFrom } from '@/lib/reports/data/tableTypes'
-import { useReportMetrics, useReportMonthly, sectionMetricsFor, competitorSectionFor, platformMetricsFor } from '@/lib/reports/data/metricsContext'
+import { useReportMetrics, useReportMonthly, useReportYtd, sectionMetricsFor, competitorSectionFor, platformMetricsFor } from '@/lib/reports/data/metricsContext'
+import { ytdChannelFor, type YtdChannel } from '@/lib/reports/data/ytdMetrics'
 import { trackerMonthsFor, trackerTableSizes, type TrackerMonth } from '@/lib/reports/data/monthlyTracker'
 import { PJ, Card, CardLabel, Placeholder } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -12,7 +13,8 @@ const NOTE_FLEX = 1.8
 
 // Renders a configured table, matching report_2's SmartTableBlock layout: sticky
 // first column (Period/Channel/…), metric columns, mono values, green/red Gap row.
-function TableView({ config, accent, channel, metrics, sentiment, competitors, platform, platformPrev, customCols, months, editable, onChange, areaCqh }: {
+function TableView({ config, accent, channel, metrics, sentiment, competitors, platform, platformPrev, customCols, months, ytd, editable, onChange, areaCqh }: {
+  ytd: YtdChannel | null
   config: TableConfig; accent: string; channel: string; metrics: SectionMetrics | null; sentiment: SentimentTable | null
   competitors: CompetitorSection | null; platform: PlatformMetrics | null; platformPrev: PlatformMetrics | null; customCols: TableColumn[]
   months: TrackerMonth[] | null; editable: boolean; onChange?: (next: TableConfig) => void
@@ -20,7 +22,7 @@ function TableView({ config, accent, channel, metrics, sentiment, competitors, p
   areaCqh?: number
 }) {
   const t = useT()
-  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel), metrics, sentiment, competitors, customCols, platform, months, platformPrev)
+  const { header, columns, rows } = buildTable(config, columnsForChannel(config.type, channel, ytd), metrics, sentiment, competitors, customCols, platform, months, platformPrev, ytd)
   const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
   const flexOf = (c: TableColumn) => (c.format === 'text' ? NOTE_FLEX : 1)
   const setHighlight = (month: string, text: string) =>
@@ -104,6 +106,7 @@ export function TableBlock({ config, colors, channel, editable, onConfigure, onC
 }) {
   const metrics = useReportMetrics()
   const monthly = useReportMonthly()
+  const ytdAll = useReportYtd()
   if (!config) return <Placeholder icon="table_chart" label="Configure data table" editable={editable} onClick={onConfigure} />
   const def = TABLE_TYPES[config.type]
   const sm = sectionMetricsFor(metrics, config.type, channel)
@@ -115,7 +118,7 @@ export function TableBlock({ config, colors, channel, editable, onConfigure, onC
   return (
     <Card style={{ padding: '1.8cqh 1.8cqw', display: 'flex', flexDirection: 'column', gap: '1cqh' }}>
       <CardLabel icon={def?.icon ?? 'table_chart'} accent={colors.primary} onEdit={editable ? onConfigure : undefined}>{def?.label ?? 'Data table'}</CardLabel>
-      <TableView config={config} accent={colors.primary} channel={channel} metrics={sm} sentiment={sentiment} competitors={competitors} platform={platform} platformPrev={platformPrev} customCols={customColumnsFrom(metrics)} months={months} editable={editable && !!onChange} onChange={onChange} areaCqh={areaCqh} />
+      <TableView config={config} accent={colors.primary} channel={channel} metrics={sm} sentiment={sentiment} competitors={competitors} platform={platform} platformPrev={platformPrev} customCols={customColumnsFrom(metrics)} months={months} ytd={ytdChannelFor(ytdAll, channel)} editable={editable && !!onChange} onChange={onChange} areaCqh={areaCqh} />
     </Card>
   )
 }

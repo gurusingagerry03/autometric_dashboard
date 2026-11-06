@@ -102,6 +102,40 @@ export async function setKpiActive(brandId: string, kpiId: string, isActive: boo
 }
 
 /**
+ * Ubah target & periode satu KPI yang sudah ada (Post-UAT brief, KPI Editable
+ * Items) — salah ketik angka atau tanggal tidak perlu lagi dihapus lalu dibuat
+ * ulang. Platform & metrik sengaja tidak ikut: mengganti keduanya berarti KPI
+ * yang lain, dan capaian lamanya tidak lagi berarti apa-apa.
+ *
+ * Capaian dihitung ulang dalam transaksi yang sama, dengan alasan yang sama
+ * seperti createBrandKpis. `null` = tidak ada KPI itu di brand ini.
+ */
+export async function updateBrandKpi(
+  brandId: string, kpiId: string, patch: { valueTarget: number; startDate: string; endDate: string },
+): Promise<KpiRow | null> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const res = await client.query(
+      `UPDATE public.kpi_setting
+          SET value_target = $3, start_date = $4::date, end_date = $5::date
+        WHERE kpi_id = $2 AND brand_id = $1`,
+      [brandId, kpiId, patch.valueTarget, patch.startDate, patch.endDate],
+    )
+    if ((res.rowCount ?? 0) === 0) { await client.query('ROLLBACK'); return null }
+    await client.query('CALL l2_gold.sp_calculate_kpi_achievement($1)', [kpiId])
+    const { rows } = await client.query<Row>(`${SELECT} WHERE k.kpi_id = $1`, [kpiId])
+    await client.query('COMMIT')
+    return rows[0] ? toRow(rows[0]) : null
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+/**
  * Hapus satu KPI beserta baris capaiannya.
  *
  * URUTANNYA TIDAK BISA DIBALIK

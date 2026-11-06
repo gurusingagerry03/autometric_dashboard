@@ -10,11 +10,11 @@ import {
   demographicsFor, sentimentFor, type SourceFilter,
 } from '@/lib/reports/data/audienceTypes'
 import { kpiDefsForChannel, kpiMetricFor, resolveKpiMetric, type KpiMetric } from '@/lib/reports/data/kpiMetrics'
-import { fmtKpiPeriod, kpiTargetById, kpiTargetLabel } from '@/lib/reports/data/kpiTargets'
+import { fmtKpiPeriod, kpiCardTitle, kpiTargetById, kpiTargetLabel } from '@/lib/reports/data/kpiTargets'
 import { fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta, ytdLabel, ytdRowFor } from '@/lib/reports/data/ytdMetrics'
 import { TABLE_TYPES, buildTable, columnsForChannel, customColumnsFrom } from '@/lib/reports/data/tableTypes'
 import { resolveLineData, resolveBarData, type ChartConfig } from '@/lib/reports/data/chartData'
-import { buildPosts, activityPool, effectiveActivityMetrics, metricLabel } from '@/lib/reports/data/posts'
+import { buildPosts, activityPool, effectiveActivityMetrics, metricLabel, buildShowcase, effectiveShowcaseGroups, effectiveSortMetric, populatedMetricsFor } from '@/lib/reports/data/posts'
 import { PLATFORM_META } from '@/components/dashboard/data'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -165,7 +165,8 @@ function gatherSlideData(
 
   // TABLE — dashboard always; overview only when it's showing the table.
   if (slide.table && (slide.type !== 'overview' || overviewMode === 'table')) {
-    const built = buildTable(slide.table, columnsForChannel(slide.table.type, ch), sectionMetricsFor(ctx.table, slide.table.type, ch), null, competitorSectionFor(ctx.table, ch), customColumnsFrom(ctx.table), null, ctx.monthly?.data ? trackerMonthsFor(ctx.monthly.data, ch, ctx.monthly.year, ctx.monthly.month, slide.table.fromMonth) : null)
+    const ytdCh = ytdChannelFor(ctx.ytd, ch)
+    const built = buildTable(slide.table, columnsForChannel(slide.table.type, ch, ytdCh), sectionMetricsFor(ctx.table, slide.table.type, ch), null, competitorSectionFor(ctx.table, ch), customColumnsFrom(ctx.table), null, ctx.monthly?.data ? trackerMonthsFor(ctx.monthly.data, ch, ctx.monthly.year, ctx.monthly.month, slide.table.fromMonth) : null, null, ytdCh)
     out.table = {
       name: TABLE_TYPES[slide.table.type]?.label ?? 'Table',
       rows: built.rows.map(r => {
@@ -221,7 +222,7 @@ function gatherSlideData(
       .map(id => kpiTargetById(ctx.kpiTargets, ch, id))
       .filter((t): t is NonNullable<typeof t> => !!t)
       .map(t => ({
-      metric: kpiTargetLabel(t.metric),
+      metric: kpiCardTitle(t, ch, kpiTargetLabel(t.metric)),
       target: t.target,
       achieved: t.achieved,
       achievementRatePct: t.achievementRate,
@@ -285,7 +286,16 @@ function gatherSlideData(
     out.activities = buildPosts(slide.postCount, 'top', { source: activityPool(ctx.posts?.[ch] ?? undefined), sortMetric: 'post_date' })
       .map(p => Object.fromEntries([['rank', p.id], ...shown.map(id => [metricLabel(id), p.metrics[id] ?? '—'])]))
   }
+  if (slide.type === 'showcase') {
+    const src = ctx.posts?.[ch] ?? undefined
+    const by = slide.showcaseBy ?? 'format'
+    const sort = effectiveSortMetric(slide.postSortMetric, populatedMetricsFor(src))
+    out.rankingMetric = metricLabel(sort)
+    out.groups = buildShowcase(src, by, effectiveShowcaseGroups(src, by, slide.showcaseGroups), sort, slide.postCount)
+      .map(g => ({ [by]: g.label, posts: g.count, average: g.avgText, shownLowestToHighest: g.posts.map(p => p.metrics[sort]) }))
+  }
   const has = out.table || out.chart || out.chartLeft || out.sentiment || out.demographics
+    || (out.groups as unknown[] | undefined)?.length
     || (out.scorecards as unknown[] | undefined)?.length || (out.posts as unknown[] | undefined)?.length
     || (out.activities as unknown[] | undefined)?.length
     || (out.kpiTargets as unknown[] | undefined)?.length

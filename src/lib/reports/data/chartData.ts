@@ -29,6 +29,30 @@ export interface ChartConfig {
   sentiment?: string
   /** Label angka di tiap titik/bar (line & bar). Kosong = 'none'. */
   valueLabels?: ValueLabels
+  /** Dimensi 'daymonth' — format tanggal sumbu-X (Post-UAT brief, Daily Chart).
+   *  Kosong = 'day' (hanya tanggal, perilaku lama). */
+  dateFormat?: DateFormat
+  /** 'content_pillars' — pilar yang ditampilkan (nama pilar). Kosong = semua. */
+  barPillars?: string[]
+}
+
+/** Format tanggal sumbu-X chart harian: "5", "05 Sep", atau "Sep 05". */
+export type DateFormat = 'day' | 'day_month' | 'month_day'
+export const DATE_FORMAT_OPTIONS: { id: DateFormat; label: string; sample: string }[] = [
+  { id: 'day', label: 'Day only', sample: '5' },
+  { id: 'day_month', label: 'Day-Month', sample: '05 Sep' },
+  { id: 'month_day', label: 'Month-Day', sample: 'Sep 05' },
+]
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** Label hari ('1'…'N') diubah ke format pilihan; bulan dari meta report. */
+export function formatDayLabels(dayLabels: string[], month: number, fmt: DateFormat | undefined): string[] {
+  if (!fmt || fmt === 'day') return dayLabels
+  const mo = MONTH_SHORT[(month - 1 + 12) % 12]
+  return dayLabels.map(d => {
+    const dd = d.padStart(2, '0')
+    return fmt === 'day_month' ? `${dd} ${mo}` : `${mo} ${dd}`
+  })
 }
 
 /**
@@ -44,7 +68,7 @@ export const VALUE_LABEL_OPTIONS: { id: ValueLabels; label: string; sample: stri
 ]
 
 /** Metrik chart yang nilainya persen (sudah ×100) — ditulis "#.##%". */
-const PCT_METRIC_IDS = new Set(['followers_growth_pct', 'er_reach', 'avg_er_pct', 'er_followers', 'er'])
+const PCT_METRIC_IDS = new Set(['followers_growth_pct', 'er_reach', 'avg_er_pct', 'er_followers', 'avg_er_followers', 'er'])
 export const isPctMetric = (id: string) => PCT_METRIC_IDS.has(id)
 
 const roundedNum = (n: number): string => {
@@ -176,6 +200,7 @@ export const BAR_CATEGORIES = [
       { id: 'avg_views', label: 'Avg Views' },
       { id: 'avg_saves', label: 'Avg Saves' },
       { id: 'er_followers', label: 'ER Followers (%)' },
+      { id: 'avg_er_followers', label: 'Avg ER Followers / Post (%)' },
       { id: 'views_per_follower', label: 'Views / Follower' },
     ],
   },
@@ -275,7 +300,8 @@ export function resolveLineData(
       series: m.series.map(s => ({ name: METRIC_LABELS[s.id] ?? s.id, color: palette[ids.indexOf(s.id)], data: s.data, scale: niceScale(s.data), pct: isPctMetric(s.id) })),
     }
   }
-  const labels = ctx ? dimensionLabelsFor(dim, ctx.meta) : dimensionLabels(dim)
+  const rawLabels = ctx ? dimensionLabelsFor(dim, ctx.meta) : dimensionLabels(dim)
+  const labels = ctx && dim === 'daymonth' ? formatDayLabels(rawLabels, ctx.meta.month, config.dateFormat) : rawLabels
 
   // Sentiments → 3 real daily-count series (Negative / Neutral / Positive) from
   // l2_gold.comment_sentiment_daily, sharing one value axis (comparable counts).
@@ -333,6 +359,24 @@ export function groupBarSeries(series: BarSeries[]): { title: string; series: Ba
 const PREV_PERIOD_COLOR = '#c3cbd6'
 
 /**
+ * Sisakan pilar yang dipilih (Post-UAT brief, Pillar Selection — tidak semua pilar
+ * ingin ditampilkan tiap bulan). Pilihan disimpan sebagai NAMA pilar; pilar yang
+ * tidak ada di bulan ini diabaikan. Kalau tidak ada satu pun yang cocok, semua
+ * pilar tetap tampil — chart kosong tanpa penjelasan lebih membingungkan.
+ */
+function pickPillars(data: ReturnType<typeof barCategoryFor>, pillars: string[] | undefined): ReturnType<typeof barCategoryFor> {
+  if (!data || !pillars?.length) return data
+  const keep = data.labels.map((l, i) => (pillars.includes(l) ? i : -1)).filter(i => i >= 0)
+  if (!keep.length) return data
+  const sub = (rec: Partial<Record<string, number[]>>) =>
+    Object.fromEntries(Object.entries(rec).map(([k, v]) => [k, v && keep.map(i => v[i])]))
+  return {
+    ...data, labels: keep.map(i => data.labels[i]), metrics: sub(data.metrics),
+    ...(data.metricsPrev ? { metricsPrev: sub(data.metricsPrev) } : {}),
+  }
+}
+
+/**
  * Resolve a bar chart against REAL report data only (no dummy) — a metric with no
  * data yields no series → empty state. Rendered as SMALL MULTIPLES: each metric becomes its own mini bar
  * chart over the category members (`labels` = days / months / pillars), each with
@@ -368,7 +412,7 @@ export function resolveBarData(
     return { labels, series }
   }
 
-  const catData = barCategoryFor(ctx, channel, cat)
+  const catData = pickPillars(barCategoryFor(ctx, channel, cat), cat === 'content_pillars' ? config.barPillars : undefined)
   const labels = catData?.labels.length ? catData.labels : barCategoryLabels(cat)
   const n = labels.length
   const palette = [colors.primary, colors.accent, colors.secondary, '#d96d6d']

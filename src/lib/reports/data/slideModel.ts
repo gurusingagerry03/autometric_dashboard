@@ -9,7 +9,7 @@ import type { SourceFilter } from './audienceTypes'
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic' | 'monthly_tracker'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic' | 'monthly_tracker' | 'showcase'
 
 /**
  * Slide yang memakai layout kartu post (grid kartu + catatan di bawah).
@@ -156,6 +156,13 @@ export interface ContentSlide {
   /** monthly_tracker — bulan mulai (YYYY-MM), dipilih saat slide dibuat. Disalin ke
    *  `chart.fromMonth` dan `table.fromMonth` lewat withTrackerFrom(). */
   trackerFrom?: string
+  /** showcase — satu baris per format (bawaan) atau per pilar konten. Jumlah post
+   *  per baris = postCount; metrik pengurut = postSortMetric; isi kotak = postMetrics. */
+  showcaseBy?: 'format' | 'pillar'
+  /** showcase — kelompok yang ditampilkan (id format/pilar). Kosong = otomatis. */
+  showcaseGroups?: string[]
+  /** showcase — catatan per kelompok (id → teks), kolom kanan. */
+  showcaseNotes?: Record<string, string>
   aiInsight: AiInsight | null // AI analyst insight (analysis + typed recommendations)
 }
 
@@ -213,6 +220,7 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   sentiment: { title: 'Audience Sentiment' },
   demographic: { title: 'Audience Demographics' },
   monthly_tracker: { title: 'Monthly Tracker Performance' },
+  showcase: { title: 'Format Showcase' },
 }
 
 /** Pilihan yang ditanyakan pemilih slide sebelum slide Monthly Tracker dibuat. */
@@ -264,13 +272,14 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram', t
     // Activity Performance berangkat dengan kosong: effectiveActivityMetrics()
     // membaca itu sebagai "tampilkan ketujuhnya", sedangkan default Visual
     // ('reach' dsb.) justru akan menampilkan metrik yang tidak ada di katalognya.
-    postMetrics: type === 'activity' ? [] : ['reach', 'engagement', 'er'],
+    postMetrics: type === 'activity' ? [] : type === 'showcase' ? ['engagement', 'reach', 'er_reach'] : ['reach', 'engagement', 'er'],
     visualMode: null,
     sentimentSource: 'all',
     cloudSentiment: 'all',
     demographicView: 'both',
     ytdView: 'matrix',
     trackerLayout: tracker?.layout ?? 'chart_table',
+    ...(type === 'showcase' ? { showcaseBy: 'format' as const, showcaseNotes: {} } : {}),
     aiInsight: null,
   }
   return type === 'monthly_tracker' && tracker ? withTrackerFrom(slide, tracker.from) : slide

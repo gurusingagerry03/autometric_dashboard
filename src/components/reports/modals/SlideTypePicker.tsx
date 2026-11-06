@@ -65,6 +65,7 @@ const KPI_DASHBOARD_VARIANTS: Item[] = [
 const VISUAL_VARIANTS: Item[] = [
   { id: 'visual', name: 'Visual Analysis', desc: 'Top/low posts by a metric you pick', icon: 'image', enabled: true },
   { id: 'activity', name: 'Activity Performance', desc: 'Posts tagged as activity — submissions & participants', icon: 'local_activity', enabled: true },
+  { id: 'showcase', name: 'Format/Pillar Showcase', desc: 'One row per format or pillar, posts lowest → highest', icon: 'view_timeline', enabled: true },
 ]
 
 /** Pintu → daftar variannya. Entri di sini BUKAN SlideType; memilihnya membuka
@@ -80,7 +81,11 @@ const VARIANTS: Record<string, Item[]> = {
 // sentiment counts ADD UP across platforms (they are comment counts), while
 // demographics are per-platform shares that must never be blended — so the
 // demographic slide answers 'all' by drawing one panel per platform instead.
-const ALL_CHANNEL_TYPES = new Set<string>(['overview', 'comparison', 'sentiment', 'demographic', 'monthly_tracker'])
+const ALL_CHANNEL_TYPES = new Set<string>(['overview', 'comparison', 'sentiment', 'demographic', 'monthly_tracker', KPI_DASHBOARD])
+/** Varian yang tersedia di "All Channels". KPI Overview menggabungkan KPI semua
+ *  platform dalam satu slide (Post-UAT brief, KPI Slides Template); Dashboard
+ *  Overview & YTD masih per platform. */
+const ALL_CHANNEL_VARIANTS = new Set<string>(['kpi'])
 
 interface Channel {
   id: string
@@ -94,7 +99,7 @@ const CHANNELS: Channel[] = [
   { id: 'instagram', name: 'Instagram', desc: 'Instagram performance', logo: PLATFORM_META.instagram.logo },
   { id: 'facebook', name: 'Facebook', desc: 'Facebook performance', logo: PLATFORM_META.facebook.logo },
   { id: 'tiktok', name: 'TikTok', desc: 'TikTok performance', logo: PLATFORM_META.tiktok.logo },
-  { id: 'all', name: 'All Channels', desc: 'Overview & Comparison only', icon: 'hub' },
+  { id: 'all', name: 'All Channels', desc: 'Overview, Comparison & KPI', icon: 'hub' },
 ]
 
 /** Dua bentuk slide Monthly Tracker — deck revisi, slide 12 dan slide 11. */
@@ -142,7 +147,7 @@ export default function SlideTypePicker({
   const pick = (tpl: Item) => {
     if (!tpl.enabled) return
     const next = VARIANTS[tpl.id as string]
-    if (next) { setVariants(next); return }
+    if (next) { setVariants(channel === 'all' ? next.filter(v => ALL_CHANNEL_VARIANTS.has(v.id as string)) : next); return }
     if (tpl.id === 'monthly_tracker') { setTrackerSetup(true); return }
     onSelect(tpl.id as SlideType, channel!)
   }
@@ -175,7 +180,7 @@ export default function SlideTypePicker({
                 ? 'Same layout, different content — pick which one this slide is.'
                 : channel
                   ? channel === 'all'
-                    ? 'All Channels supports Overview & Comparison layouts.'
+                    ? 'All Channels supports Overview, Comparison, KPI Overview & more.'
                     : 'Pick a template — content fills with sample data you can edit.'
                   : 'Which channel is this slide about?'}
             </p>

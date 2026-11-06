@@ -8,7 +8,7 @@
 //   yang dihitung ulang di sini: menghitung ulang di client berarti dua rumus
 //   untuk satu angka, dan yang di slide-lah yang akan diam-diam berbeda.
 import type { DashPlatform } from '@/components/dashboard/data'
-import { KPI_METRIC_LABEL, kpiMetricUnit, type KpiMetric } from '@/lib/kpi/types'
+import { KPI_METRIC_LABEL, kpiAccumulates, kpiMetricUnit, type KpiMetric } from '@/lib/kpi/types'
 import { groupInt } from './format'
 
 /** Satu KPI brand beserta capaiannya. */
@@ -37,10 +37,28 @@ export type ReportKpiTargets = Partial<Record<DashPlatform, KpiTarget[]>>
 /** Paling banyak 6 kartu dalam satu slide — batas yang sama dengan layout KPI. */
 export const KPI_TARGET_MAX = 6
 
-/** Semua KPI aktif brand untuk satu channel — daftar pilihan di picker. */
+/**
+ * Semua KPI aktif brand untuk satu channel — daftar pilihan di picker.
+ *
+ * "All Channels" = KPI semua platform dalam satu daftar (Post-UAT brief, KPI
+ * Slides Template: klien ingin seluruh KPI di satu slide, bukan satu slide per
+ * platform). Urutannya IG → FB → TikTok, lalu urutan pembuatan di tiap platform.
+ */
 export const kpiTargetsFor = (
   targets: ReportKpiTargets | null | undefined, channel: string,
-): KpiTarget[] => targets?.[channel as DashPlatform] ?? []
+): KpiTarget[] => channel === 'all'
+  ? (['instagram', 'facebook', 'tiktok'] as DashPlatform[]).flatMap(p => targets?.[p] ?? [])
+  : targets?.[channel as DashPlatform] ?? []
+
+const PLATFORM_TAG: Record<string, string> = { instagram: 'IG', facebook: 'FB', tiktok: 'TikTok' }
+
+/**
+ * Judul kartu KPI. Di slide "All Channels" platform-nya ikut di depan
+ * ("IG · Followers Growth") — tanpa itu dua kartu Followers Growth milik IG dan
+ * TikTok tidak bisa dibedakan. `label` sudah diterjemahkan oleh pemanggil.
+ */
+export const kpiCardTitle = (t: KpiTarget, channel: string, label: string): string =>
+  channel === 'all' ? `${PLATFORM_TAG[t.platform] ?? t.platform} · ${label}` : label
 
 /** KPI di satu slot kartu. undefined = slot kosong, atau KPI-nya sudah dihapus. */
 export const kpiTargetById = (
@@ -70,6 +88,7 @@ export const autofillKpiSlots = (
 // berbeda tergantung slide-nya.
 const ICON: Record<KpiMetric, string> = {
   followers_growth: 'trending_up',
+  total_followers:  'group',
   engagement:       'touch_app',
   reach:            'ads_click',
   impressions:      'visibility',
@@ -133,13 +152,14 @@ export const fmtKpiRate = (n: number | null): string => {
  * lewat); itu sekarang punya baris sendiri. Run rate 100% = tepat di jadwal,
  * di atas 100% = di depan jadwal.
  *
- * Pro-rata waktu hanya berlaku untuk metrik yang BERAKUMULASI (unit 'count').
+ * Pro-rata waktu hanya berlaku untuk metrik yang BERAKUMULASI (kpiAccumulates).
+ * Total Followers juga tidak: angkanya posisi akhir, bukan jumlah harian.
  * ER dan rata-rata per post tidak tumbuh seiring waktu — ER 1.8% di bulan ketiga
  * sudah 1.8%, bukan seperempat target — jadi run rate-nya = achievement rate.
  */
 export function kpiRunRate(metric: KpiMetric, achievementRate: number | null, timeGone: number | null): number | null {
   if (achievementRate == null) return null
-  if (kpiMetricUnit(metric) !== 'count') return achievementRate
+  if (!kpiAccumulates(metric)) return achievementRate
   if (!timeGone) return null
   return Math.round((achievementRate / timeGone) * 100 * 100) / 100
 }

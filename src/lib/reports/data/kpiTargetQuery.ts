@@ -94,6 +94,23 @@ async function achievedFor(r: Row): Promise<number | null> {
     )
     return Number(rows[0]?.v ?? 0)
   }
+  // Total Followers = posisi, bukan jumlah: follower EOD terakhir di jendela per
+  // akun, lalu dijumlah antar akun platform itu (sama dengan migration 059).
+  if (r.metrics_target === 'total_followers') {
+    const { rows } = await pool.query<{ v: string | null }>(
+      `SELECT COALESCE(SUM(last_eod), 0) AS v FROM (
+         SELECT DISTINCT ON (bmd.account_id) bmd.follower_count_eod AS last_eod
+           FROM l2_gold.brand_metric_daily bmd
+          WHERE bmd.brand_id = $1 AND bmd.platform = $2
+            AND bmd.metric_date BETWEEN $3::date AND $4::date
+            AND ($5::uuid IS NULL OR bmd.account_id = $5::uuid)
+            AND bmd.follower_count_eod IS NOT NULL
+          ORDER BY bmd.account_id, bmd.metric_date DESC
+       ) x`,
+      args,
+    )
+    return Number(rows[0]?.v ?? 0)
+  }
   const perPost = POST_EXPR[r.metrics_target]
   if (perPost) {
     // post_metric.brand_id = social_accounts.id → naik ke brand lewat brand_social_accounts.

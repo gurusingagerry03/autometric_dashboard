@@ -8,7 +8,7 @@ import {
 import { KpiMetric, deltaIsGood, resolveKpiMetric } from '@/lib/reports/data/kpiMetrics'
 import {
   KPI_TARGET_MAX, KpiTarget, fmtKpiValue, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
-  kpiTargetById, kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
+  kpiCardTitle, kpiTargetById, kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
 } from '@/lib/reports/data/kpiTargets'
 import { useReportKpi, useReportKpiTargets, useReportMetrics, useReportYtd } from '@/lib/reports/data/metricsContext'
 import {
@@ -126,10 +126,12 @@ function RateRow({ label, value, size, color, strong }: { label: string; value: 
  * tertinggal dari jadwal (lihat kpiOnPace).
  */
 function TargetCard({
-  target, accent, count, rates, editable, onClick,
+  target, accent, count, rates, editable, onClick, channel,
 }: {
   target: KpiTarget | undefined; accent: string; count: number
   rates: KpiRate[]; editable: boolean; onClick?: () => void
+  /** Channel slide — 'all' menambahkan platform di judul kartu. */
+  channel: string
 }) {
   const t = useT()
   const s = targetSizesFor(count)
@@ -166,7 +168,7 @@ function TargetCard({
       <div className="flex items-center justify-between" style={{ marginTop: '0.3cqh' }}>
         <span className="flex items-center min-w-0" style={{ gap: '0.5cqw', fontSize: s.label, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.03em', ...PJ }}>
           <span className="material-symbols-outlined" style={{ fontSize: `calc(${s.label} + 0.4cqw)`, color: accent }}>{kpiTargetIcon(target.metric)}</span>
-          <span className="truncate">{t(kpiTargetLabel(target.metric))}</span>
+          <span className="truncate">{kpiCardTitle(target, channel, t(kpiTargetLabel(target.metric)))}</span>
         </span>
         {editable && (
           <span className="material-symbols-outlined opacity-0 group-hover:opacity-100 transition-opacity" style={{ fontSize: '1.4cqw', color: '#cbd5e1' }}>edit</span>
@@ -246,6 +248,7 @@ function TargetRow({
             rates={rates}
             editable={editable}
             onClick={() => onConfigure?.(`kpi-${i}`)}
+            channel={slide.channel}
           />
         </div>
       ))}

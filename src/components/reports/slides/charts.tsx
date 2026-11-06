@@ -122,7 +122,15 @@ function ChartFrame({ labels, left, right, horizontal, children }: { labels: str
         <div style={{ width: Y_AXIS_W, flexShrink: 0 }} />
         <div className="flex-1 flex justify-between">
           {shown.map((l, i) => (
-            <span key={i} className="truncate" style={{ flex: 1, textAlign: 'center', fontSize: '1.0cqw', fontWeight: 600, color: '#94a3b8', ...PJ }}>{l}</span>
+            // Slot = 1/30 lebar sumbu untuk bulan 30 hari — "Jul 01" (format
+            // tanggal Day-Month/Month-Day) dulu terpotong jadi "J…". Labelnya
+            // meluber rata dari tengah slotnya; sampleLabels mengosongkan slot
+            // di antaranya, jadi tidak saling tindih.
+            // Hanya saat label dijarangkan (>8); kategori bar yang rapat tetap
+            // dipotong supaya nama pillar panjang tidak saling menimpa.
+            labels.length > 8
+              ? <span key={i} className="flex justify-center" style={{ flex: '1 1 0', minWidth: 0, whiteSpace: 'nowrap', overflow: 'visible', fontSize: '1.0cqw', fontWeight: 600, color: '#94a3b8', ...PJ }}>{l}</span>
+              : <span key={i} className="truncate" style={{ flex: 1, textAlign: 'center', fontSize: '1.0cqw', fontWeight: 600, color: '#94a3b8', ...PJ }}>{l}</span>
           ))}
         </div>
         {right && <div style={{ width: Y_AXIS_W, flexShrink: 0 }} />}

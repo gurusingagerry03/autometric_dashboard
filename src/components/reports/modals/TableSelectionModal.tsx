@@ -10,6 +10,7 @@ import MetricInfo from '@/components/ui/MetricInfo'
 import { listCustomMetrics } from '@/lib/reports/data/customMetricsApi'
 import CustomMetricModal from './CustomMetricModal'
 import { useT } from '@/lib/i18n/LanguageContext'
+import type { YtdChannel } from '@/lib/reports/data/ytdMetrics'
 
 const PJ = { fontFamily: "'Plus Jakarta Sans', sans-serif" } as const
 
@@ -46,8 +47,10 @@ const typeAllowed = (id: string, monthlyOnly: boolean) => (id === 'monthly_track
  * columns are filtered by the slide's channel and they're disabled on "all".
  */
 export default function TableSelectionModal({
-  open, orgId, initial, channel, monthlyOnly = false, availableCompetitors = [], onClose, onConfirm, onCustomMetricsChanged,
+  open, orgId, initial, channel, monthlyOnly = false, availableCompetitors = [], ytd = null, onClose, onConfirm, onCustomMetricsChanged,
 }: {
+  /** Data YTD channel slide — kolom tabel 'YTD Metric'. */
+  ytd?: YtdChannel | null
   open: boolean
   /** Slide Monthly Tracker — hanya tabel "Monthly Tracker" yang ditawarkan. */
   monthlyOnly?: boolean
@@ -62,7 +65,7 @@ export default function TableSelectionModal({
   const t = useT()
   const [type, setType] = useState(initial?.type ?? defaultTypeFor(channel, monthlyOnly))
   const [columns, setColumns] = useState<string[]>(
-    initial ? normalizeColumnIds(initial.columns) : defaultColumnsFor(defaultTypeFor(channel, monthlyOnly), channel),
+    initial ? normalizeColumnIds(initial.columns) : defaultColumnsFor(defaultTypeFor(channel, monthlyOnly), channel, ytd),
   )
   // Chosen competitors (Brand-vs-Competitor table only). Default = all available.
   const allCompIds = availableCompetitors.map(c => c.id)
@@ -85,7 +88,7 @@ export default function TableSelectionModal({
     const valid = initial && TABLE_TYPES[initial.type] && isTypeEnabledForChannel(initial.type, channel) && !TABLE_TYPES[initial.type].disabled && typeAllowed(initial.type, monthlyOnly)
     const t = valid ? initial!.type : defaultTypeFor(channel, monthlyOnly)
     setType(t)
-    setColumns(valid ? normalizeColumnIds(initial!.columns) : defaultColumnsFor(t, channel))
+    setColumns(valid ? normalizeColumnIds(initial!.columns) : defaultColumnsFor(t, channel, ytd))
     // Default all competitors checked (or the saved selection intersected with what's available).
     setCompetitorIds(
       valid && initial!.competitorIds
@@ -102,13 +105,13 @@ export default function TableSelectionModal({
   const isCompetitor = type === 'brand_vs_competitor'
   const changeType = (id: string) => {
     setType(id)
-    setColumns(defaultColumnsFor(id, channel))
+    setColumns(defaultColumnsFor(id, channel, ytd))
     if (id === 'brand_vs_competitor') setCompetitorIds(allCompIds)
   }
   const toggle = (id: string) => setColumns(prev => (prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]))
   const toggleComp = (id: string) => setCompetitorIds(prev => (prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]))
 
-  const visibleColumns = columnsForChannel(type, channel)
+  const visibleColumns = columnsForChannel(type, channel, ytd)
   // Custom metrics attach to the per-post / channel-level comparison tables (they render
   // as extra columns). Selection lives in `columns` alongside the built-in column ids.
   const showCustom = TABLE_TYPES[type]?.rowType === 'comparison'
@@ -214,10 +217,23 @@ export default function TableSelectionModal({
             )}
             <div className="flex justify-between items-center mb-3">
               <h4 style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Visible Columns')}</h4>
-              <button onClick={() => setColumns(defaultColumnsFor(type, channel))} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold">
-                Reset to Default
-              </button>
+              <div className="flex items-center gap-3">
+                {/* Post-UAT brief (Metrics Selection): kosongkan semua sekaligus, lalu
+                    centang yang perlu — bukan melepas centang satu per satu. */}
+                <button onClick={() => setColumns([])} disabled={columns.length === 0} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold disabled:opacity-40 disabled:no-underline">
+                  {t('Clear all')}
+                </button>
+                <button onClick={() => setColumns(defaultColumnsFor(type, channel, ytd))} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold">
+                  Reset to Default
+                </button>
+              </div>
             </div>
+            {/* YTD Metric tanpa periode YTD: kolomnya memang kosong — sebutkan di mana mengaturnya. */}
+            {TABLE_TYPES[type]?.rowType === 'ytd' && visibleColumns.length === 0 && (
+              <p className="text-[11px] text-[#94a3b8] leading-snug">
+                {t('No YTD data for this channel yet. Set the YTD period on the brand’s KPI tab.')}
+              </p>
+            )}
             {groupColumns(visibleColumns).map((g, gi) => (
               <div key={g.group ?? gi} className={gi > 0 ? 'mt-4' : ''}>
                 {g.group && (

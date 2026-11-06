@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide } from '@/lib/reports/data/slideModel'
-import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, cardMetricLabel, isErMetric, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
+import { POST_COUNTS, POST_FILTERS, POST_METRICS, metricsForChannel, metricsForCompetitor, metricsForActivity, activityPool, effectiveActivityMetrics, competitorVisualSupported, competitorPoolFor, buildPosts, cardMetricLabel, populatedMetricsFor, effectiveSortMetric, effectiveShownMetrics, effectiveFilterId } from '@/lib/reports/data/posts'
 import { useReportPosts, useReportCompetitorPosts, useReportImageResolver } from '@/lib/reports/data/metricsContext'
 import { PJ, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -40,7 +40,13 @@ function PostLink({ link, className, style, children }: { link?: string; classNa
   )
 }
 
-function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count, link, loading }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number; link?: string; loading?: boolean }) {
+/** Warna baris metrik yang disorot (= metrik Rank by). Sama dengan exporter. */
+const HIGHLIGHT = '#16a34a'
+
+function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count, link, loading, highlight }: { id: number; tag?: 'TOP' | 'LOW'; image: string; format: string; pillar?: string; metrics: Record<string, string>; postMetrics: string[]; count: number; link?: string; loading?: boolean
+  /** Metrik "Rank by" — satu-satunya baris yang disorot (Post-UAT brief, Content
+   *  Performance Metrics Highlight). Kosong = tidak ada sorotan (Activity). */
+  highlight?: string }) {
   const t = useT()
   // Pilar boleh kosong (post kompetitor tidak punya), jadi keterangannya dirakit
   // dari bagian yang benar-benar ada — bukan template "format · pilar" yang
@@ -91,12 +97,15 @@ function PostCard({ id, tag, image, format, pillar, metrics, postMetrics, count,
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', columnGap: '0.6cqw', lineHeight: METRIC_LINE }}>
           {postMetrics.map(mid => {
-            const isER = isErMetric(mid)
+            // Sorotan mengikuti metrik pengurut kartu, bukan lagi ER: kartu yang
+            // diurutkan menurut Views dulu menyorot ER Reach, jadi mata pembaca
+            // ditarik ke angka yang bukan dasar peringkatnya.
+            const hl = mid === highlight
             const v = metrics[mid] ?? '—'
             return (
               <span key={mid} className="contents">
-                <span className="truncate" style={{ fontSize: metricFs, fontWeight: 500, color: '#94a3b8', ...PJ }}>{cardMetricLabel(mid)}</span>
-                <span style={{ fontSize: metricFs, fontWeight: isER ? 800 : 600, textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: isER ? (parseFloat(v) > 2.5 ? '#16a34a' : '#f59e0b') : '#334155' }}>{v}</span>
+                <span className="truncate" style={{ fontSize: metricFs, fontWeight: hl ? 700 : 500, color: hl ? HIGHLIGHT : '#94a3b8', ...PJ }}>{cardMetricLabel(mid)}</span>
+                <span style={{ fontSize: metricFs, fontWeight: hl ? 800 : 600, textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: hl ? HIGHLIGHT : '#334155' }}>{v}</span>
               </span>
             )
           })}
@@ -264,7 +273,7 @@ export default function VisualSlide({
         ) : (
           <div className="h-full" style={{ display: 'grid', gridTemplateColumns: cols, gap: count === 4 ? '1.2cqw' : count === 6 ? '0.9cqw' : '0.7cqw' }}>
             {posts.map((p, i) => (
-              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} link={p.link} loading={isLoadingImage(p.imageKey)} />
+              <PostCard key={i} id={p.id} tag={p.tag} image={p.image} format={p.format} pillar={isComp ? undefined : p.pillar} metrics={p.metrics} postMetrics={shownMetrics} count={count} link={p.link} loading={isLoadingImage(p.imageKey)} highlight={isAct ? undefined : sortMetric} />
             ))}
           </div>
         )}

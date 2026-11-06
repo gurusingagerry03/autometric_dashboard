@@ -11,10 +11,10 @@ import { exportCoverPptx } from '@/lib/reports/export/exportCover'
 import { exportReportPptx } from '@/lib/reports/export/exportReport'
 import { downloadBlob, saveExportToLibrary, saveTemplateToLibrary, updateTemplateInLibrary } from '@/lib/reports/export/clientSave'
 import { ReportTableMetrics } from '@/lib/reports/data/tableTypes'
-import { ReportChartMetrics } from '@/lib/reports/data/chartTypes'
+import { ReportChartMetrics, barCategoryFor } from '@/lib/reports/data/chartTypes'
 import { ReportKpiMetrics } from '@/lib/reports/data/kpiMetrics'
 import { ReportKpiTargets, autofillKpiSlots } from '@/lib/reports/data/kpiTargets'
-import { ReportYtdMetrics } from '@/lib/reports/data/ytdMetrics'
+import { ReportYtdMetrics, ytdChannelFor } from '@/lib/reports/data/ytdMetrics'
 import { ReportPostMetrics } from '@/lib/reports/data/posts'
 import { trackerToChartMonthly, type ReportMonthlyTracker } from '@/lib/reports/data/monthlyTracker'
 import type { AvailablePeriod } from '@/lib/reports/data/periodsQuery'
@@ -737,6 +737,11 @@ export default function ReportBuilder({
           (configBlock === 'chart' || configBlock === 'chartA' || configBlock === 'chartB')
             ? (activeSlide?.[configBlock] as ChartConfig | null | undefined)?.valueLabels : undefined
         }
+        initialConfig={
+          (configBlock === 'chart' || configBlock === 'chartA' || configBlock === 'chartB')
+            ? (activeSlide?.[configBlock] as ChartConfig | null | undefined) ?? null : null
+        }
+        availablePillars={barCategoryFor(chartCtx, activeSlide?.channel ?? 'instagram', 'content_pillars')?.labels ?? []}
         availableCompetitors={competitorSectionFor(tableMetrics, activeSlide?.channel ?? 'instagram')?.competitors.map(c => ({ id: c.id, label: c.label })) ?? []}
         onClose={() => setConfigBlock(null)}
         onSelect={applyChart}
@@ -750,6 +755,7 @@ export default function ReportBuilder({
         monthlyOnly={activeSlide?.type === 'monthly_tracker'}
         channel={activeSlide?.channel ?? 'instagram'}
         availableCompetitors={competitorSectionFor(tableMetrics, activeSlide?.channel ?? 'instagram')?.competitors.map(c => ({ id: c.id, label: c.label })) ?? []}
+        ytd={ytdChannelFor(ytdMetrics, activeSlide?.channel ?? 'instagram')}
         onClose={() => setConfigBlock(null)}
         onConfirm={applyTable}
       />

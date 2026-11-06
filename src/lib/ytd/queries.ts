@@ -12,6 +12,16 @@ export interface YtdSetting {
   endDate: string     // YYYY-MM-DD
 }
 
+/**
+ * metrics_target yang diterima `l2_gold.sp_calculate_ytd_performance` — salinan
+ * daftar NOT IN di procedure warehouse (diperiksa 2026-11-05). Tambah di sini
+ * hanya setelah procedure-nya diperluas.
+ */
+export const YTD_PROC_METRICS = [
+  'followers_growth', 'engagement', 'reach', 'impressions',
+  'views', 'video_views', 'likes', 'comments', 'shares', 'saves', 'post_count',
+]
+
 const isDate = (v: unknown): v is string =>
   typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v + 'T00:00:00Z'))
 
@@ -80,10 +90,17 @@ export async function setBrandYtd(
     // Kombinasinya diambil dari KPI aktif brand: hanya metrik ber-KPI yang punya
     // deret YTD. Brand tanpa KPI aktif menyimpan periodenya dengan sah, cuma
     // belum ada yang bisa dihitung — itu bukan kesalahan.
+    //
+    // Hanya metrik yang dikenal procedure (YTD_PROC_METRICS). KPI di luar daftar
+    // itu (ER, rata-rata per post, Total Followers, …) membuat procedure RAISE
+    // EXCEPTION — dan karena satu transaksi, SATU KPI seperti itu dulu membuat
+    // periode YTD brand tidak bisa disimpan sama sekali. Metrik itu tetap tampil
+    // di slide YTD lewat jalur metrik dashboard (ytdQuery), bukan lewat sini.
     const combos = await client.query<{ platform_id: string; metrics_target: string }>(
       `SELECT DISTINCT platform_id, metrics_target
-         FROM public.kpi_setting WHERE brand_id = $1 AND is_active`,
-      [brandId],
+         FROM public.kpi_setting
+        WHERE brand_id = $1 AND is_active AND metrics_target = ANY($2::text[])`,
+      [brandId, YTD_PROC_METRICS],
     )
     for (const c of combos.rows) {
       await client.query(

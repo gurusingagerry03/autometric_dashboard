@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import {
-  BAR_CATEGORIES, ChartConfig, LINE_DIMENSIONS, LINE_METRICS, MAX_LINE_METRICS,
+  BAR_CATEGORIES, ChartConfig, DATE_FORMAT_OPTIONS, LINE_DIMENSIONS, type DateFormat, LINE_METRICS, MAX_LINE_METRICS,
   WORDCLOUD_SENTIMENTS, VALUE_LABEL_OPTIONS, type BarOrientation, type ChartCategory, type LineDimension,
   type ValueLabels,
 } from '@/lib/reports/data/chartData'
@@ -46,8 +46,35 @@ function ValueLabelPicker({ value, onChange }: { value: ValueLabels; onChange: (
   )
 }
 
+// Format tanggal sumbu-X chart harian (Post-UAT brief, Daily Chart).
+function DateFormatPicker({ value, onChange }: { value: DateFormat; onChange: (v: DateFormat) => void }) {
+  const t = useT()
+  return (
+    <div>
+      <span style={PJ} className="block text-[11px] font-bold uppercase tracking-wider text-[#94a3b8] mb-2">{t('Date format')}</span>
+      <div className="grid grid-cols-3 gap-2">
+        {DATE_FORMAT_OPTIONS.map(o => {
+          const on = value === o.id
+          return (
+            <button key={o.id} onClick={() => onChange(o.id)} style={PJ}
+              className={`p-2.5 rounded-lg border flex items-center gap-2 text-left transition-all ${on ? 'border-[#2C3079] bg-[#F1F2FB] text-[#2C3079] ring-1 ring-[#2C3079]' : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#475569]'}`}>
+              <span className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ${on ? 'border-[#2C3079]' : 'border-[#cbd5e1]'}`}>
+                {on && <span className="w-2 h-2 rounded-full bg-[#2C3079]" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[12px] font-semibold">{t(o.label)}</span>
+                <span className="block text-[10.5px] text-[#94a3b8] font-mono">{o.sample}</span>
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function ChartSelectionModal({
-  open, orgId, allowWordCloud = false, monthlyOnly = false, availableCompetitors = [], initialValueLabels = 'none', onClose, onSelect, onCustomMetricsChanged,
+  open, orgId, allowWordCloud = false, monthlyOnly = false, availableCompetitors = [], availablePillars = [], initialValueLabels = 'none', initialConfig = null, onClose, onSelect, onCustomMetricsChanged,
 }: {
   open: boolean
   orgId: string
@@ -59,6 +86,10 @@ export default function ChartSelectionModal({
    */
   monthlyOnly?: boolean
   availableCompetitors?: { id: string; label: string }[]
+  /** Nama pilar konten yang punya data di channel & periode ini (kategori Content Pillars). */
+  availablePillars?: string[]
+  /** Chart yang sedang terpasang — format tanggal & pilihan pilar dipertahankan saat diganti. */
+  initialConfig?: ChartConfig | null
   /** Mode label nilai chart yang sedang terpasang — dipertahankan saat chart diganti. */
   initialValueLabels?: ValueLabels
   onClose: () => void
@@ -77,6 +108,9 @@ export default function ChartSelectionModal({
   const [comparePeriod, setComparePeriod] = useState(false)
   const [competitorIds, setCompetitorIds] = useState<string[]>([])
   const [valueLabels, setValueLabels] = useState<ValueLabels>(initialValueLabels)
+  const [dateFormat, setDateFormat] = useState<DateFormat>('day')
+  // Pilar yang ditampilkan (Content Pillars). Kosong = semua pilar.
+  const [pillars, setPillars] = useState<string[]>([])
   // Org custom metrics — selectable as line series (created/managed via CustomMetricModal).
   const [customMetrics, setCustomMetrics] = useState<CustomMetricDef[]>([])
   const [cmOpen, setCmOpen] = useState(false)
@@ -85,6 +119,8 @@ export default function ChartSelectionModal({
     if (!open) return
     loadCustom()
     setValueLabels(initialValueLabels)
+    setDateFormat(initialConfig?.dateFormat ?? 'day')
+    setPillars(initialConfig?.barPillars ?? [])
     if (monthlyOnly) { setCategory('line'); setDimension('monthly'); setStep(3) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -120,12 +156,29 @@ export default function ChartSelectionModal({
   const toggleComp = (id: string) =>
     setCompetitorIds(prev => (prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]))
 
+  const pillarOn = (p: string) => pillars.length === 0 || pillars.includes(p)
+  const togglePillar = (p: string) => setPillars(prev => {
+    const cur = prev.length ? prev : availablePillars
+    const next = cur.includes(p) ? cur.filter(x => x !== p) : [...cur, p]
+    // Minimal satu pilar: melepas yang terakhir diabaikan, bukan diam-diam
+    // berubah jadi "semua pilar" (yang juga disimpan sebagai array kosong).
+    if (next.length === 0) return prev
+    return next.length === availablePillars.length ? [] : next
+  })
+  // Pilihan tersimpan yang semua pilarnya sudah tidak ada lagi tidak dikirim.
+  const pillarFilter = pillars.filter(p => availablePillars.includes(p)).length ? pillars : []
+
   const confirm = () => {
-    if (category === 'line') onSelect({ chartType: 'line', dimension: dimension ?? 'daymonth', metrics: lineMetrics, valueLabels })
+    if (category === 'line') onSelect({
+      chartType: 'line', dimension: dimension ?? 'daymonth', metrics: lineMetrics, valueLabels,
+      ...((dimension ?? 'daymonth') === 'daymonth' && dateFormat !== 'day' ? { dateFormat } : {}),
+    })
     else if (category === 'bar') onSelect({
       chartType: 'bar', barOrientation: orientation, barCategory: barCategory ?? undefined, barMetrics, valueLabels,
       ...(barCategory === 'content_pillars' && comparePeriod ? { barCompare: 'period' as const } : {}),
       ...(barCategory === 'competitors' ? { competitorIds } : {}),
+      // Semua pilar tercentang = tidak menyaring, supaya pilar baru bulan depan ikut tampil.
+      ...(barCategory === 'content_pillars' && pillarFilter.length ? { barPillars: pillarFilter } : {}),
     })
     close()
   }
@@ -261,7 +314,12 @@ export default function ChartSelectionModal({
         {/* Step 3: line metrics */}
         {step === 3 && category === 'line' && (
           <div className="space-y-4">
-            <p className="text-[12px] text-[#94a3b8]">Select up to {MAX_LINE_METRICS} metrics</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[12px] text-[#94a3b8]">Select up to {MAX_LINE_METRICS} metrics</p>
+              {lineMetrics.length > 0 && (
+                <button onClick={() => setLineMetrics([])} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold">{t('Clear all')}</button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto">
               {LINE_METRICS.filter(m => !monthlyOnly || m.id !== 'sentiments').map(metric => {
                 const isSel = lineMetrics.includes(metric.id)
@@ -321,6 +379,7 @@ export default function ChartSelectionModal({
                 <span className="material-symbols-outlined text-[16px]">add</span>Create a custom metric
               </button>
             )}
+            {(dimension ?? 'daymonth') === 'daymonth' && <DateFormatPicker value={dateFormat} onChange={setDateFormat} />}
             <ValueLabelPicker value={valueLabels} onChange={setValueLabels} />
             <button onClick={confirm} disabled={lineMetrics.length === 0} style={PJ}
               className={`w-full py-3 rounded-xl font-bold text-[13px] transition-all ${lineMetrics.length > 0 ? 'bg-[#2C3079] text-white hover:bg-[#20224F]' : 'bg-[#f1f3f5] text-[#b6bcc4] cursor-not-allowed'}`}>
@@ -332,6 +391,10 @@ export default function ChartSelectionModal({
         {/* Step 4: bar metrics */}
         {step === 4 && category === 'bar' && barCategory && (
           <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Metrics')}</span>
+              <button onClick={() => setBarMetrics([])} disabled={barMetrics.length === 0} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold disabled:opacity-40 disabled:no-underline">{t('Clear all')}</button>
+            </div>
             <div className="grid grid-cols-2 gap-2 max-h-[280px] overflow-y-auto">
               {BAR_CATEGORIES.find(c => c.id === barCategory)?.metrics.map(metric => {
                 const isSel = barMetrics.includes(metric.id)
@@ -427,6 +490,31 @@ export default function ChartSelectionModal({
                     })}
                   </div>
                 )}
+              </div>
+            )}
+            {/* Post-UAT brief (Pillar Selection): tidak semua pilar ingin ditampilkan tiap bulan. */}
+            {barCategory === 'content_pillars' && availablePillars.length > 0 && (
+              <div className="border-t border-[#f0f1f2] pt-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span style={PJ} className="text-[11px] font-bold uppercase tracking-wider text-[#94a3b8]">{t('Content pillars')}</span>
+                  {pillars.length > 0 && (
+                    <button onClick={() => setPillars([])} className="text-[10.5px] text-[#2C3079] hover:underline font-semibold">{t('Select all')}</button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 max-h-[140px] overflow-y-auto">
+                  {availablePillars.map(p => {
+                    const on = pillarOn(p)
+                    return (
+                      <button key={p} onClick={() => togglePillar(p)} style={PJ}
+                        className={`p-2.5 rounded-lg border flex items-center gap-2 text-left transition-all ${on ? selected : 'border-[#e5e7eb] hover:bg-[#f9fafb] text-[#475569]'}`}>
+                        <span className={`w-4 h-4 flex-shrink-0 rounded border flex items-center justify-center text-[10px] ${on ? 'bg-[#2C3079] border-[#2C3079] text-white' : 'border-[#cbd5e1]'}`}>
+                          {on && '✓'}
+                        </span>
+                        <span className="text-[12px] font-medium truncate" title={p}>{p}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
             <ValueLabelPicker value={valueLabels} onChange={setValueLabels} />

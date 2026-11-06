@@ -9,6 +9,7 @@ import DashboardSlide from './DashboardSlide'
 import ComparisonSlide from './ComparisonSlide'
 import KpiSlide from './KpiSlide'
 import VisualSlide, { CompetitorHeaderTag } from './VisualSlide'
+import ShowcaseSlide from './ShowcaseSlide'
 import OverviewSlide from './OverviewSlide'
 import SentimentSlide from './SentimentSlide'
 import DemographicSlide from './DemographicSlide'
@@ -70,6 +71,8 @@ export default function SlidePreview({
           <KpiSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
         ) : usesPostLayout(slide.type) ? (
           <VisualSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
+        ) : slide.type === 'showcase' ? (
+          <ShowcaseSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
         ) : slide.type === 'overview' ? (
           <OverviewSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
         ) : slide.type === 'sentiment' ? (

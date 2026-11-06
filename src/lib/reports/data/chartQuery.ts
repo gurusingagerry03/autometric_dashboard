@@ -165,7 +165,9 @@ function competitorMetrics(i: CompMetricInput): Partial<Record<string, number>> 
   putPub('avg_views', 'views', per(i.views))
   putPub('avg_saves', 'saves', per(i.saves))
 
-  put('er_followers', i.eng != null && i.posts && i.last ? (i.eng / i.posts / i.last) * 100 : null)
+  // Definisi sama dengan tabel Brand vs Competitor (Post-UAT brief, ER Followers).
+  put('er_followers', i.eng != null && i.last ? (i.eng / i.last) * 100 : null)
+  put('avg_er_followers', i.eng != null && i.posts && i.last ? (i.eng / i.posts / i.last) * 100 : null)
   putPub('views_per_follower', 'views', per(i.views) != null && i.last ? per(i.views)! / i.last : null)
   return m
 }
@@ -754,7 +756,9 @@ export async function getReportChartMetrics(
     set('avg_shares', per(merged.shares))
     set('avg_views', per(merged.views))
     set('avg_saves', per(merged.saves))
-    set('er_followers', merged.engagements !== undefined && posts && foll
+    set('er_followers', merged.engagements !== undefined && foll
+      ? (merged.engagements / foll) * 100 : undefined)
+    set('avg_er_followers', merged.engagements !== undefined && posts && foll
       ? (merged.engagements / posts / foll) * 100 : undefined)
     set('views_per_follower', per(merged.views) !== undefined && foll
       ? per(merged.views)! / foll : undefined)

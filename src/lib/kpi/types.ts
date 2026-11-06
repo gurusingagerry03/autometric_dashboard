@@ -17,7 +17,7 @@ export type KpiPlatform = (typeof KPI_PLATFORMS)[number]
  * versi rata-rata per post-nya.
  */
 export const KPI_METRICS = [
-  'followers_growth',
+  'followers_growth', 'total_followers',
   'er_reach', 'avg_er_reach', 'er_views', 'avg_er_views',
   'engagement', 'avg_engagement', 'reach', 'avg_reach', 'views', 'avg_views',
   'impressions', 'video_views',
@@ -28,6 +28,7 @@ export type KpiMetric = (typeof KPI_METRICS)[number]
 
 export const KPI_METRIC_LABEL: Record<KpiMetric, string> = {
   followers_growth: 'Followers Growth',
+  total_followers:  'Total Followers',
   er_reach:         'ER Reach',
   avg_er_reach:     'Avg. ER Reach per Post',
   er_views:         'ER Views',
@@ -65,6 +66,14 @@ export const kpiMetricUnit = (m: KpiMetric): KpiUnit =>
   m.startsWith('er_') || m.startsWith('avg_er_') ? 'pct' : m.startsWith('avg_') ? 'avg' : 'count'
 
 /**
+ * Metrik yang BERAKUMULASI sepanjang periode (jumlah harian) — hanya untuk ini
+ * target boleh di-pro-rata waktu. Total Followers adalah posisi (jumlah follower
+ * per hari terakhir), bukan akumulasi: 9.000 dari target 10.000 di bulan ketiga
+ * sudah 90%, bukan 360%.
+ */
+export const kpiAccumulates = (m: KpiMetric): boolean => kpiMetricUnit(m) === 'count' && m !== 'total_followers'
+
+/**
  * Metrik yang boleh dipilih per platform.
  *
  * KENAPA DISARING, PADAHAL PROCEDURE MENERIMA SEMUANYA
@@ -80,16 +89,16 @@ export const kpiMetricUnit = (m: KpiMetric): KpiUnit =>
  *   `views`/`video_views` di Facebook (42 dari 343 baris).
  */
 const ALLOWED: Record<KpiPlatform, readonly KpiMetric[]> = {
-  instagram: ['followers_growth', 'er_reach', 'avg_er_reach', 'er_views', 'avg_er_views',
+  instagram: ['followers_growth', 'total_followers', 'er_reach', 'avg_er_reach', 'er_views', 'avg_er_views',
               'engagement', 'avg_engagement', 'reach', 'avg_reach', 'views', 'avg_views', 'video_views',
               'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares', 'saves', 'avg_saves',
               'post_count', 'new_followers', 'profile_visits', 'profile_reach', 'link_clicks'],
-  facebook:  ['followers_growth', 'er_reach', 'avg_er_reach',
+  facebook:  ['followers_growth', 'total_followers', 'er_reach', 'avg_er_reach',
               'engagement', 'avg_engagement', 'reach', 'avg_reach', 'impressions',
               'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares',
               'post_count', 'new_followers', 'profile_visits', 'profile_reach', 'link_clicks'],
   // TikTok: reach jarang terisi → tanpa ER Reach / Avg Reach; link clicks selalu 0.
-  tiktok:    ['followers_growth', 'er_views', 'avg_er_views',
+  tiktok:    ['followers_growth', 'total_followers', 'er_views', 'avg_er_views',
               'engagement', 'avg_engagement', 'views', 'avg_views', 'video_views',
               'likes', 'avg_likes', 'comments', 'avg_comments', 'shares', 'avg_shares',
               'post_count', 'new_followers', 'profile_visits', 'profile_reach'],
@@ -121,6 +130,19 @@ export interface KpiRow {
   startDate: string   // YYYY-MM-DD
   endDate: string     // YYYY-MM-DD
   isActive: boolean
+}
+
+/**
+ * Validasi perubahan target & periode KPI yang sudah ada (lihat updateBrandKpi).
+ * Aturannya sama dengan parseKpiInput untuk field yang sama.
+ */
+export function parseKpiPatch(raw: unknown): { ok: true; value: { valueTarget: number; startDate: string; endDate: string } } | { ok: false; error: string } {
+  const b = (raw ?? {}) as Record<string, unknown>
+  const valueTarget = Number(b.valueTarget)
+  if (!Number.isFinite(valueTarget) || valueTarget <= 0) return { ok: false, error: 'Nilai target harus lebih besar dari 0.' }
+  if (!isDate(b.startDate) || !isDate(b.endDate)) return { ok: false, error: 'Periode belum lengkap.' }
+  if (b.endDate < b.startDate) return { ok: false, error: 'Tanggal akhir mendahului tanggal mulai.' }
+  return { ok: true, value: { valueTarget, startDate: b.startDate, endDate: b.endDate } }
 }
 
 /** Payload satu KPI yang dikirim client saat menyimpan. */

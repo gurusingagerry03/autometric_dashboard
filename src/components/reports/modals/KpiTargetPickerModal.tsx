@@ -3,7 +3,7 @@
 import { useReportKpiTargets } from '@/lib/reports/data/metricsContext'
 import {
   fmtKpiValue, fmtKpiPeriod, fmtKpiRate, kpiOnPace,
-  kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
+  kpiCardTitle, kpiTargetIcon, kpiTargetLabel, kpiTargetsFor,
 } from '@/lib/reports/data/kpiTargets'
 import { useT } from '@/lib/i18n/LanguageContext'
 
@@ -41,7 +41,7 @@ export default function KpiTargetPickerModal({
           <div>
             <h2 style={PJ} className="text-[16px] font-bold text-[#0f172a]">{t('Select KPI')}</h2>
             <p className="text-[12px] text-[#94a3b8] mt-0.5">
-              {t('Active KPI targets for {channel} — set on the brand’s KPI tab.', { channel })}
+              {t('Active KPI targets for {channel} — set on the brand’s KPI tab.', { channel: channel === 'all' ? t('All Channels') : channel })}
             </p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
@@ -74,7 +74,7 @@ export default function KpiTargetPickerModal({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p style={PJ} className="text-[13px] font-bold text-[#0f172a] truncate">
-                        {t(kpiTargetLabel(k.metric))} {k.operation} {fmtKpiValue(k.metric, k.target)}
+                        {kpiCardTitle(k, channel, t(kpiTargetLabel(k.metric)))} {k.operation} {fmtKpiValue(k.metric, k.target)}
                       </p>
                       <p className="text-[11.5px] text-[#94a3b8] truncate">
                         {fmtKpiPeriod(k.startDate, k.endDate)} · {fmtKpiValue(k.metric, k.achieved)} {t('achieved')}

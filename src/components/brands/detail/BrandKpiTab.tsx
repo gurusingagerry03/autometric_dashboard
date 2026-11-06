@@ -155,6 +155,9 @@ export default function BrandKpiTab() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  // Edit di tempat (Post-UAT brief, KPI Editable Items): target & periode saja.
+  const [editing, setEditing] = useState<{ kpiId: string; value: string; range: DateSelection } | null>(null)
+  const [editSaving, setEditSaving] = useState(false)
 
   /**
    * Platform yang ditawarkan = yang brand ini benar-benar punya akunnya. KPI di
@@ -237,6 +240,35 @@ export default function BrandKpiTab() {
     })
     // Kembalikan kalau server menolak — centangnya tidak boleh berbohong.
     if (!res.ok) setRows(rs => rs?.map(r => (r.kpiId === row.kpiId ? { ...r, isActive: !next } : r)) ?? rs)
+  }
+
+  function startEdit(row: KpiRow) {
+    setErr(null)
+    setEditing({ kpiId: row.kpiId, value: String(row.valueTarget), range: { mode: 'fixed', start: row.startDate, end: row.endDate } })
+  }
+
+  async function saveEdit() {
+    if (!editing || editSaving) return
+    const valueTarget = Number(editing.value)
+    if (!Number.isFinite(valueTarget) || valueTarget <= 0) { setErr(t('Fill in metric and target value first.')); return }
+    const r = withResolved(editing.range)
+    setEditSaving(true); setErr(null)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/kpi/${editing.kpiId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valueTarget, startDate: r.start, endDate: r.end }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j?.error ?? t('Failed to save KPI.'))
+      const next = j.data as KpiRow
+      setRows(rs => rs?.map(x => (x.kpiId === next.kpiId ? next : x)) ?? rs)
+      setEditing(null)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : t('Failed to save KPI.'))
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   async function removeRow(row: KpiRow) {
@@ -428,7 +460,7 @@ export default function BrandKpiTab() {
 
       {/* ── daftar ──────────────────────────────────────────────────── */}
       <div className="mt-6">
-        <div className="grid grid-cols-[140px_1fr_240px_70px_32px] gap-3 px-3 pb-2 border-b border-[#e5e7eb]">
+        <div className="grid grid-cols-[140px_1fr_240px_70px_64px] gap-3 px-3 pb-2 border-b border-[#e5e7eb]">
           {['platform', 'KPI', 'period', 'active'].map(h => (
             <span key={h} style={PJB} className={`text-[11px] font-bold uppercase tracking-wide text-[#9ca3af] ${h === 'active' ? 'text-right' : ''}`}>
               {t(h)}
@@ -441,8 +473,39 @@ export default function BrandKpiTab() {
           <p className="text-[12.5px] text-[#9ca3af] py-6 text-center">{t('Loading…')}</p>
         ) : rows.length === 0 ? (
           <p className="text-[12.5px] text-[#9ca3af] py-6 text-center">{t('No KPI set for this brand yet.')}</p>
-        ) : rows.map(row => (
-          <div key={row.kpiId} className="grid grid-cols-[140px_1fr_240px_70px_32px] gap-3 items-center px-3 py-3 border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
+        ) : rows.map(row => editing?.kpiId === row.kpiId ? (
+          <div key={row.kpiId} className="px-3 py-3 border-b border-[#f3f4f6] bg-[#fafafa]">
+            <div className="flex items-end gap-2.5 flex-wrap">
+              <span className="flex items-center gap-2 h-9 min-w-[140px]">
+                <PlatformIcon platform={row.platform as Platform} size={18} />
+                <span style={PJB} className="text-[12.5px] font-semibold text-[#111827]">{t(KPI_METRIC_LABEL[row.metric])} {row.operation}</span>
+              </span>
+              <label className="w-[120px]">
+                <span className="block text-[11px] font-semibold text-[#6b7280] mb-1">{t('Value')}{kpiMetricUnit(row.metric) === 'pct' ? ' (%)' : ''}</span>
+                <input type="number" value={editing.value} autoFocus
+                  min={kpiMetricUnit(row.metric) === 'count' ? 1 : 0.01} step={kpiMetricUnit(row.metric) === 'count' ? 1 : 0.01}
+                  className={fieldCls} onChange={e => setEditing({ ...editing, value: e.target.value })}
+                  onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditing(null) }} />
+              </label>
+              <div>
+                <span className="block text-[11px] font-semibold text-[#6b7280] mb-1">{t('Periode')}</span>
+                <DateRangePicker value={editing.range} onChange={range => setEditing({ ...editing, range })} />
+              </div>
+              <div className="ml-auto flex items-center gap-2">
+                <button onClick={() => { setEditing(null); setErr(null) }} style={PJB}
+                  className="h-9 px-3.5 rounded-lg text-[12.5px] font-semibold text-[#6b7280] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors">
+                  {t('Cancel')}
+                </button>
+                <button onClick={saveEdit} disabled={editSaving} style={PJB}
+                  className="h-9 px-4 rounded-lg text-[12.5px] font-semibold text-white bg-[#1B8A80] hover:bg-[#177A70] disabled:bg-[#9ca3af] transition-colors">
+                  {editSaving ? t('Saving…') : t('Save')}
+                </button>
+              </div>
+            </div>
+            {err && <p className="mt-2 text-[12px] text-[#b91c1c]">{err}</p>}
+          </div>
+        ) : (
+          <div key={row.kpiId} className="grid grid-cols-[140px_1fr_240px_70px_64px] gap-3 items-center px-3 py-3 border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
             <span className="flex items-center gap-2 min-w-0">
               <PlatformIcon platform={row.platform as Platform} size={18} />
               <span className="text-[12.5px] text-[#374151] truncate">{PLATFORM_LABEL[row.platform]}</span>
@@ -456,10 +519,16 @@ export default function BrandKpiTab() {
                 title={row.isActive ? t('Active') : t('Inactive')}
                 className="w-4 h-4 accent-[#1B8A80] cursor-pointer" />
             </span>
-            <button onClick={() => removeRow(row)} title={t('Remove')}
-              className="w-7 h-7 flex items-center justify-center rounded-md text-[#c4c9d4] opacity-0 group-hover/row:opacity-100 hover:text-[#b91c1c] hover:bg-[#fef2f2] transition-all">
-              <span className="material-symbols-outlined text-[17px]">delete</span>
-            </button>
+            <span className="flex items-center gap-0.5">
+              <button onClick={() => startEdit(row)} title={t('Edit')}
+                className="w-7 h-7 flex items-center justify-center rounded-md text-[#c4c9d4] opacity-0 group-hover/row:opacity-100 hover:text-[#1B8A80] hover:bg-[#f0f7f5] transition-all">
+                <span className="material-symbols-outlined text-[17px]">edit</span>
+              </button>
+              <button onClick={() => removeRow(row)} title={t('Remove')}
+                className="w-7 h-7 flex items-center justify-center rounded-md text-[#c4c9d4] opacity-0 group-hover/row:opacity-100 hover:text-[#b91c1c] hover:bg-[#fef2f2] transition-all">
+                <span className="material-symbols-outlined text-[17px]">delete</span>
+              </button>
+            </span>
           </div>
         ))}
       </div>
