@@ -19,11 +19,13 @@
 //   Using the wrong one returns ZERO ROWS with no error — an empty slide that
 //   looks exactly like "this brand has no data".
 import pool from '@/lib/db'
+import { imageKey, isStoredImage } from '../images/keys'
 import type { DashPlatform } from '@/components/dashboard/data'
 import {
   AGE_BUCKETS, SOURCE_FROM_DB, blockFrom,
   type AudienceSource, type ChannelDemographics, type ChannelSentimentSummary,
   type CloudWord, type DemographicPeriod, type ReportAudienceMetrics,
+  type ChannelTagged, TAGGED_TOP_MAX,
   type SentimentCounts, type SentimentKey,
 } from './audienceTypes'
 
@@ -81,10 +83,13 @@ export async function getReportAudienceMetrics(
   const prev = addMonths(year, month, -1)
   const curStart = monthStart(year, month)
   const prevStart = monthStart(prev.year, prev.month)
+  // Demografi diambil tiga bulan (opsi "Last 3 months" di slide demografi).
+  const prev2 = addMonths(year, month, -2)
+  const prev2Start = monthStart(prev2.year, prev2.month)
   const next = addMonths(year, month, 1)
   const nextStart = monthStart(next.year, next.month)
 
-  const [sentiment, words, demo] = await Promise.all([
+  const [sentiment, words, demo, taggedCounts, taggedTop] = await Promise.all([
     // Sentiment for the report month, with the previous month already attached by
     // the view. Only the two AUDIENCE sources — `post_caption` is the brand's own
     // copy and is deliberately excluded (see audienceTypes.ts).
@@ -148,8 +153,54 @@ export async function getReportAudienceMetrics(
          JOIN snap s ON s.platform = u.platform AND s.last_date = u.audience_date
         WHERE u.audience_type = 'follower_demographics'
         GROUP BY 1, 2`,
-      [orgId, brandId, prevStart, nextStart],
+      [orgId, brandId, prev2Start, nextStart],
     ),
+    // Tagged posts (UGC): jumlah post & pengguna bulan report vs bulan lalu, dan
+    // post dengan engagement tertinggi. Gold menyimpan baris ganda per post (satu
+    // post muncul 2× untuk sebagian brand), jadi dihitung per post_id unik. Kalau
+    // query ini gagal, slide lain tetap jalan — tagged post jadi kosong saja.
+    pool.query<{ platform: DashPlatform; cur: boolean; posts: number; users: number }>(
+      `SELECT platform, (d >= $3::date) cur, COUNT(*)::int posts, COUNT(DISTINCT lower(username))::int users
+         FROM (
+           SELECT DISTINCT ON (g.platform, g.post_id) g.platform, g.post_id, g.username, g.post_date::date d
+             FROM l2_gold.ugc_tagged_posts g
+             JOIN public.brands b ON b.id = g.brand_id AND b.deleted_at IS NULL
+            WHERE b.organization_id = $1 AND g.brand_id = $2
+              AND g.post_date::date >= $4::date AND g.post_date::date < $5::date
+            ORDER BY g.platform, g.post_id
+         ) t
+        GROUP BY 1, 2`,
+      [orgId, brandId, curStart, prevStart, nextStart],
+    ).catch(err => { console.error('[report] tagged counts failed:', err); return { rows: [] } }),
+    pool.query<{ platform: DashPlatform; post_id: string; username: string | null; d: string; likes: number; comments: number; eng: number; link: string | null; image: string | null }>(
+      `SELECT platform, post_id, username, d, likes, comments, eng, link, image FROM (
+         SELECT t.*, ROW_NUMBER() OVER (PARTITION BY t.platform ORDER BY t.eng DESC, t.post_id) rn
+           FROM (
+             SELECT DISTINCT ON (g.platform, g.post_id) g.platform, g.post_id, g.username,
+                    to_char(g.post_date::date, 'YYYY-MM-DD') d,
+                    COALESCE(g.like_count,0)::float likes, COALESCE(g.comment_count,0)::float comments,
+                    COALESCE(g.total_engagement, COALESCE(g.like_count,0) + COALESCE(g.comment_count,0))::float eng,
+                    g.link_post link
+               FROM l2_gold.ugc_tagged_posts g
+               JOIN public.brands b ON b.id = g.brand_id AND b.deleted_at IS NULL
+              WHERE b.organization_id = $1 AND g.brand_id = $2
+                AND g.post_date::date >= $3::date AND g.post_date::date < $4::date
+              ORDER BY g.platform, g.post_id
+           ) t
+       ) ranked
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(ri.image_url, x.cover_image) image FROM (
+           SELECT cover_image, fetched_at FROM l0_raw.ig_tagged_posts WHERE ranked.platform = 'instagram' AND media_id = ranked.post_id
+           UNION ALL SELECT cover_image, fetched_at FROM l0_raw.tt_tagged_posts WHERE ranked.platform = 'tiktok' AND media_id = ranked.post_id
+           UNION ALL SELECT cover_image, fetched_at FROM l0_raw.fb_tagged_posts WHERE ranked.platform = 'facebook' AND media_id = ranked.post_id
+         ) x
+         LEFT JOIN report_post_images ri ON ri.platform = ranked.platform AND ri.post_id = ranked.post_id
+         ORDER BY x.fetched_at DESC NULLS LAST LIMIT 1
+       ) img ON true
+       WHERE rn <= $5
+       ORDER BY platform, eng DESC`,
+      [orgId, brandId, curStart, nextStart, TAGGED_TOP_MAX],
+    ).catch(err => { console.error('[report] tagged top failed:', err); return { rows: [] } }),
   ])
 
   /* ── sentiment ─────────────────────────────────────────────────────────── */
@@ -196,6 +247,7 @@ export async function getReportAudienceMetrics(
   /* ── demographics ──────────────────────────────────────────────────────── */
   const curMon = `${year}-${String(month).padStart(2, '0')}`
   const prevMon = `${prev.year}-${String(prev.month).padStart(2, '0')}`
+  const prev2Mon = `${prev2.year}-${String(prev2.month).padStart(2, '0')}`
 
   const toPeriod = (row: DemoRow | undefined): DemographicPeriod | null => {
     if (!row) return null
@@ -224,7 +276,30 @@ export async function getReportAudienceMetrics(
     const rows = demo.rows.filter(r => r.platform === p)
     const current = toPeriod(rows.find(r => r.mon === curMon))
     const previous = toPeriod(rows.find(r => r.mon === prevMon))
-    if (current || previous) demographics[p] = { current, previous }
+    const older = toPeriod(rows.find(r => r.mon === prev2Mon))
+    if (current || previous || older) demographics[p] = { current, previous, history: [older, previous, current] }
+  }
+
+  /* ── tagged posts ──────────────────────────────────────────────────────── */
+  const tagged: Partial<Record<DashPlatform, ChannelTagged>> = {}
+  for (const p of PLATFORMS) {
+    const cnt = taggedCounts.rows.filter(r => r.platform === p)
+    const top = taggedTop.rows.filter(r => r.platform === p)
+    if (cnt.length === 0 && top.length === 0) continue
+    const pick = (cur: boolean) => {
+      const r = cnt.find(x => x.cur === cur)
+      return { posts: num(r?.posts), users: num(r?.users) }
+    }
+    tagged[p] = {
+      current: pick(true),
+      previous: pick(false),
+      top: top.map(r => ({
+        postId: r.post_id, platform: p, username: (r.username ?? '').replace(/^@/, '') || 'unknown',
+        date: r.d, likes: num(r.likes), comments: num(r.comments), engagement: num(r.eng),
+        link: r.link, image: r.image,
+        imageKey: isStoredImage(r.image) ? undefined : imageKey('t', p, r.post_id),
+      })),
+    }
   }
 
   return {
@@ -232,9 +307,11 @@ export async function getReportAudienceMetrics(
       year, month,
       monthLabel: `${MONTH_NAMES[month - 1]} ${year}`,
       prevMonthLabel: `${MONTH_NAMES[prev.month - 1]} ${prev.year}`,
+      last3Labels: [prev2, prev, { year, month }].map(x => `${MONTH_NAMES[x.month - 1]} ${x.year}`),
     },
     sentiment: sentimentByChannel,
     words: wordsByChannel,
     demographics,
+    tagged,
   }
 }

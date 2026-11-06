@@ -9,7 +9,7 @@ import { useT } from '@/lib/i18n/LanguageContext'
 
 export default function SlidesReview({
   slides, colors, isExporting, cover, chromeFor,
-  onAdd, onOpen, onRename, onDelete, onMove, onExport, onSaveTemplate, onEditCover,
+  onAdd, onOpen, onRename, onDelete, onDuplicate, onMove, onExport, onSaveTemplate, onEditCover,
 }: {
   slides: ContentSlide[]
   colors: CoverColors
@@ -20,6 +20,8 @@ export default function SlidesReview({
   onOpen: (id: string) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
+  /** Salin slide (isi + pengaturannya) tepat di belakang aslinya. */
+  onDuplicate: (id: string) => void
   /** Reorder: move the slide at `from` to index `to` (both 0-based in `slides`). */
   onMove: (from: number, to: number) => void
   onExport: (mode: 'export' | 'export-save') => void
@@ -247,6 +249,13 @@ export default function SlidesReview({
                       className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-[#1B8A80] hover:bg-[#f0f7fa] transition"
                     >
                       <span className="material-symbols-outlined text-[16px]">edit</span>
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); onDuplicate(s.id) }}
+                      title={t('Duplicate')}
+                      className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-md text-[#9ca3af] hover:text-[#1B8A80] hover:bg-[#f0f7fa] transition"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
                     </button>
                     <button
                       onClick={e => { e.stopPropagation(); onDelete(s.id) }}

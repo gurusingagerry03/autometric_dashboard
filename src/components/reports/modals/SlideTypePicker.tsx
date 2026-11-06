@@ -40,6 +40,7 @@ const TEMPLATES: Item[] = [
   { id: VISUAL_CONTENT, name: 'Visual Content', desc: 'Post cards — performance or activity', icon: 'image', enabled: true },
   { id: 'overview', name: 'Overview Slide', desc: 'Full Visualization & Notes', icon: 'view_quilt', enabled: true },
   { id: 'sentiment', name: 'Audience Sentiment', desc: 'Comments & tagged posts + word cloud', icon: 'sentiment_satisfied', enabled: true },
+  { id: 'tagged', name: 'Tagged Posts', desc: 'UGC count, users & top tagged posts', icon: 'alternate_email', enabled: true },
   { id: 'demographic', name: 'Audience Demographics', desc: 'Age & gender, month over month', icon: 'groups', enabled: true },
   { id: 'monthly_tracker', name: 'Monthly Tracker Performance', desc: 'Month-by-month table, MoM change & trend', icon: 'calendar_month', enabled: true },
   { id: 'custom', name: 'Custom Template', desc: 'Configurable Grid (2×2, 3×3)', icon: 'grid_view', enabled: false },

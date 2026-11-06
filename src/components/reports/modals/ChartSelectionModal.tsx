@@ -121,7 +121,20 @@ export default function ChartSelectionModal({
     setValueLabels(initialValueLabels)
     setDateFormat(initialConfig?.dateFormat ?? 'day')
     setPillars(initialConfig?.barPillars ?? [])
-    if (monthlyOnly) { setCategory('line'); setDimension('monthly'); setStep(3) }
+    // Edit (Post-UAT least priority): chart yang sudah dipasang dibuka langsung di
+    // langkah terakhirnya dengan pilihan lamanya, jadi metrik yang terlewat cukup
+    // dicentang — tidak perlu menyusun ulang dari jenis chart. Tombol Back tetap
+    // bisa mundur untuk mengganti jenis / dimensi / kategori.
+    const c = initialConfig
+    if (c?.chartType === 'line' && (!monthlyOnly || c.dimension === 'monthly')) {
+      setCategory('line'); setDimension(c.dimension ?? 'daymonth'); setLineMetrics(c.metrics ?? []); setStep(3)
+    } else if (c?.chartType === 'bar' && c.barCategory && !monthlyOnly) {
+      setCategory('bar'); setOrientation(c.barOrientation ?? 'vertical'); setBarCategory(c.barCategory)
+      setBarMetrics(c.barMetrics ?? []); setComparePeriod(c.barCompare === 'period')
+      setCompetitorIds(c.competitorIds ?? availableCompetitors.map(x => x.id)); setStep(4)
+    } else if (c?.chartType === 'wordcloud' && allowWordCloud && !monthlyOnly) {
+      setCategory('wordcloud'); setStep(2)
+    } else if (monthlyOnly) { setCategory('line'); setDimension('monthly'); setStep(3) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!open) return null

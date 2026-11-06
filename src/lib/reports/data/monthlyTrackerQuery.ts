@@ -28,8 +28,8 @@ function monthsEndingAt(year: number, month: number, n = 12): string[] {
   return out
 }
 
-interface Sums { reach: number; eng: number; impr: number; pv: number; pr: number; posts: number; growth: number; erden: number; likes: number; comments: number; shares: number; followers: number | null }
-const empty = (): Sums => ({ reach: 0, eng: 0, impr: 0, pv: 0, pr: 0, posts: 0, growth: 0, erden: 0, likes: 0, comments: 0, shares: 0, followers: null })
+interface Sums { reach: number; eng: number; impr: number; pv: number; pr: number; posts: number; growth: number; erden: number; likes: number; comments: number; shares: number; follows: number; unfollows: number | null; followers: number | null }
+const empty = (): Sums => ({ reach: 0, eng: 0, impr: 0, pv: 0, pr: 0, posts: 0, growth: 0, erden: 0, likes: 0, comments: 0, shares: 0, follows: 0, unfollows: null, followers: null })
 
 function toValues(s: Sums | undefined): TrackerValues {
   // Bulan tanpa satu baris gold pun = tidak ada data, bukan nol.
@@ -43,6 +43,11 @@ function toValues(s: Sums | undefined): TrackerValues {
     likes: s.likes,
     comments: s.comments,
     shares: s.shares,
+    // Follow & unfollow sama-sama 0 sebulan penuh = warehouse belum menyimpannya
+    // (mis. IG Fitbar Jan–Agu 2026), bukan tidak ada yang follow → "—".
+    ...(s.follows === 0 && !s.unfollows
+      ? { follows: null, unfollows: null }
+      : { follows: s.follows, unfollows: s.unfollows }),
     total_posts: s.posts,
     engagement: s.eng,
     impressions: s.impr,
@@ -58,7 +63,7 @@ export async function getReportMonthlyTracker(
   const endExcl = month === 12 ? `${year + 1}-01-01` : `${year}-${pad(month + 1)}-01`
 
   const [flows, fol] = await Promise.all([
-    pool.query<{ platform: DashPlatform; m: string; reach: number; eng: number; impr: number; pv: number; pr: number; posts: number; growth: number; erden: number; likes: number; comments: number; shares: number }>(
+    pool.query<{ platform: DashPlatform; m: string; reach: number; eng: number; impr: number; pv: number; pr: number; posts: number; growth: number; erden: number; likes: number; comments: number; shares: number; follows: number; unfollows: number }>(
       `SELECT bmd.platform, to_char(date_trunc('month', bmd.metric_date), 'YYYY-MM') m,
               COALESCE(SUM(bmd.reach_sum),0)::float reach,
               COALESCE(SUM(bmd.engagement_sum),0)::float eng,
@@ -68,6 +73,8 @@ export async function getReportMonthlyTracker(
               COALESCE(SUM(bmd.likes_sum),0)::float likes,
               COALESCE(SUM(bmd.comments_sum),0)::float comments,
               COALESCE(SUM(bmd.shares_sum),0)::float shares,
+              COALESCE(SUM(bmd.new_followers_sum),0)::float follows,
+              COALESCE(SUM(bmd.lost_followers_sum),0)::float unfollows,
               COALESCE(SUM(bmd.post_count),0)::float posts,
               COALESCE(SUM(${EOD_GROWTH}),0)::float growth,
               COALESCE(SUM(bmd.er_denominator_sum),0)::float erden
@@ -111,6 +118,10 @@ export async function getReportMonthlyTracker(
       s.reach += r.reach; s.eng += r.eng; s.impr += r.impr; s.pv += r.pv; s.pr += r.pr
       s.posts += r.posts; s.growth += r.growth; s.erden += r.erden
       s.likes += r.likes; s.comments += r.comments; s.shares += r.shares
+      s.follows += r.follows
+      // Facebook tidak lagi melaporkan unfollow (page_daily_unfollows_unique selalu 0
+      // sejak Meta mencabutnya) — nolnya bukan "tidak ada yang unfollow", jadi "—".
+      if (r.platform !== 'facebook') s.unfollows = (s.unfollows ?? 0) + r.unfollows
     }
   }
   for (const r of fol.rows) {

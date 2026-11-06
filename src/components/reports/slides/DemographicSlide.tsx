@@ -4,9 +4,10 @@ import { CoverColors } from '@/lib/reports/cover/colors'
 import { ContentSlide, DemographicView } from '@/lib/reports/data/slideModel'
 import { useReportAudience } from '@/lib/reports/data/metricsContext'
 import {
-  ageBucketsFor, demographicChannels, demographicHeading, demographicsFor,
-  type ChannelDemographics, type DemographicPeriod,
+  ageBucketsFor, demographicChannels, demographicHeading, demographicsFor, demographicHistory, shortMonth,
+  type ChannelDemographics, type DemographicPeriod, type DemographicRange,
 } from '@/lib/reports/data/audienceTypes'
+import { tint } from '@/lib/reports/cover/colors'
 import { PLATFORM_META, type DashPlatform } from '@/components/dashboard/data'
 import { PJ, Card, CardLabel, AiInsightBlock } from './parts'
 import { useT } from '@/lib/i18n/LanguageContext'
@@ -127,8 +128,66 @@ function GenderBlock({ cur, prev }: { cur: DemographicPeriod; prev: DemographicP
   )
 }
 
-function PlatformPanel({ platform, data, view, accent }: {
+/** Warna tiga bulan riwayat, lama → baru: makin pudar makin lama. */
+const last3Shades = (accent: string) => [tint(accent, 0.68), tint(accent, 0.38), accent]
+
+/**
+ * Satu kelompok umur, tiga bulan: tiga bar tipis bertumpuk (lama → baru, makin
+ * pekat makin baru), angka bulan terbaru, dan pergeseran poinnya sejak bulan
+ * TERLAMA yang berdata — itu "pergerakan" yang ditanyakan brief.
+ */
+function AgeRow3({ bucket, months, max, shades }: {
+  bucket: string; months: { idx: number; v: number }[]; max: number; shades: string[]
+}) {
+  const last = months[months.length - 1]
+  const first = months[0]
+  return (
+    <div className="flex items-center" style={{ gap: '0.5cqw', flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
+      <span style={{ width: '4.6cqw', flexShrink: 0, fontSize: '1cqw', lineHeight: 1, fontWeight: 600, color: '#64748b', textAlign: 'right', ...PJ }}>
+        {bucket}
+      </span>
+      <div className="flex flex-col justify-center" style={{ flex: 1, minWidth: 0, height: '100%', gap: '0.12cqh' }}>
+        {months.map(m => (
+          <div key={m.idx} style={{ height: '0.5cqh', maxHeight: '30%', background: '#f1f5f9', borderRadius: '0.2cqw' }}>
+            <div style={{ width: `${max > 0 ? (m.v / max) * 100 : 0}%`, height: '100%', background: shades[m.idx], borderRadius: '0.2cqw' }} />
+          </div>
+        ))}
+      </div>
+      <span style={{ width: '3.2cqw', flexShrink: 0, fontSize: '1cqw', lineHeight: 1, fontWeight: 700, color: '#0f172a', textAlign: 'right', ...PJ }}>
+        {last ? `${last.v.toFixed(1)}%` : '—'}
+      </span>
+      {months.length > 1 && (
+        <span style={{ width: '2.8cqw', flexShrink: 0, textAlign: 'right' }}>
+          <Delta now={last.v} before={first.v} />
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** Gender tiga bulan: satu bar Female/Male per bulan, diberi label bulannya. */
+function GenderRows3({ months }: { months: { label: string; period: DemographicPeriod }[] }) {
+  return (
+    <div className="flex flex-col" style={{ gap: '0.35cqh' }}>
+      {months.map(m => (
+        <div key={m.label} className="flex items-center" style={{ gap: '0.5cqw' }}>
+          <span style={{ width: '2.6cqw', flexShrink: 0, fontSize: '0.9cqw', lineHeight: 1, fontWeight: 700, color: '#64748b', ...PJ }}>{shortMonth(m.label)}</span>
+          <div style={{ flex: 1, display: 'flex', height: '1.7cqh', borderRadius: '0.3cqw', overflow: 'hidden' }}>
+            {([['female', FEMALE], ['male', MALE]] as const).map(([k, c]) => (
+              <div key={k} className="flex items-center justify-center" style={{ width: `${m.period[k]}%`, background: c, minWidth: 0 }}>
+                {m.period[k] >= 12 && <span style={{ fontSize: '0.85cqw', lineHeight: 1, fontWeight: 800, color: '#fff', ...PJ }}>{m.period[k].toFixed(0)}%</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PlatformPanel({ platform, data, view, accent, range = 'mom', history = [] }: {
   platform: DashPlatform; data: ChannelDemographics; view: DemographicView; accent: string
+  range?: DemographicRange; history?: { label: string; idx: number; period: DemographicPeriod }[]
 }) {
   const t = useT()
   const meta = PLATFORM_META[platform]
@@ -144,6 +203,9 @@ function PlatformPanel({ platform, data, view, accent }: {
   )
   const showAge = view !== 'gender'
   const showGender = view !== 'age'
+  const last3 = range === 'last3'
+  const shades = last3Shades(accent)
+  const max3 = Math.max(...history.flatMap(h => buckets.map(([, k]) => h.period.age[k] ?? 0)), 1)
 
   return (
     <div className="flex flex-col min-w-0" style={{ flex: 1 }}>
@@ -151,9 +213,9 @@ function PlatformPanel({ platform, data, view, accent }: {
         <div className="flex items-center" style={{ gap: '0.5cqw', flexShrink: 0 }}>
           <img src={meta.logo} alt={meta.label} style={{ width: '1.6cqw', height: '1.6cqw', objectFit: 'contain' }} />
           <span style={{ fontSize: '1.25cqw', lineHeight: 1, fontWeight: 800, color: '#0f172a', ...PJ }}>{meta.label}</span>
-          {!prev && (
+          {(last3 ? history.length < 3 : !prev) && (
             <span style={{ fontSize: '0.85cqw', fontWeight: 700, color: '#b8915a', background: '#fbf4e8', padding: '0.1cqh 0.4cqw', borderRadius: '0.3cqw', ...PJ }}>
-              {t('no prior month')}
+              {last3 ? t('{n} of 3 months', { n: history.length }) : t('no prior month')}
             </span>
           )}
         </div>
@@ -167,10 +229,15 @@ function PlatformPanel({ platform, data, view, accent }: {
                 asks for more. `overflow: hidden` is the last line of defence, so a
                 row can never be painted on top of the gender block below. */}
             <div className="flex flex-col" style={{ flex: 1, minHeight: 0, gap: '0.55cqh', overflow: 'hidden' }}>
-              {buckets.map(([label, k]) => (
-                <AgeRow key={label} bucket={label} now={cur.age[k] ?? 0}
-                  before={prev ? (prev.age[k] ?? 0) : null} max={max} accent={accent} />
-              ))}
+              {last3
+                ? buckets.map(([label, k]) => (
+                  <AgeRow3 key={label} bucket={label} max={max3} shades={shades}
+                    months={history.map(h => ({ idx: h.idx, v: h.period.age[k] ?? 0 }))} />
+                ))
+                : buckets.map(([label, k]) => (
+                  <AgeRow key={label} bucket={label} now={cur.age[k] ?? 0}
+                    before={prev ? (prev.age[k] ?? 0) : null} max={max} accent={accent} />
+                ))}
             </div>
           </div>
         )}
@@ -180,7 +247,7 @@ function PlatformPanel({ platform, data, view, accent }: {
             <div style={{ fontSize: '0.95cqw', lineHeight: 1, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6cqh', ...PJ }}>
               {t('Gender')}
             </div>
-            <GenderBlock cur={cur} prev={prev} />
+            {last3 ? <GenderRows3 months={history} /> : <GenderBlock cur={cur} prev={prev} />}
           </div>
         )}
       </Card>
@@ -188,6 +255,8 @@ function PlatformPanel({ platform, data, view, accent }: {
   )
 }
 
+const RANGES: DemographicRange[] = ['mom', 'last3']
+const RANGE_LABEL: Record<DemographicRange, string> = { mom: 'vs last month', last3: 'Last 3 months' }
 const VIEWS: DemographicView[] = ['both', 'age', 'gender']
 const VIEW_LABEL: Record<DemographicView, string> = { both: 'Age + Gender', age: 'Age only', gender: 'Gender only' }
 
@@ -216,17 +285,47 @@ export default function DemographicSlide({
   const channels = demographicChannels(audience, slide.channel)
   const loading = audience === null
   const heading = demographicHeading(audience, channels)
+  const range: DemographicRange = slide.demographicRange ?? 'mom'
+  const labels3 = audience?.meta.last3Labels ?? []
+  const shades = last3Shades(colors.primary)
+  const pill = (active: boolean): React.CSSProperties => ({
+    fontSize: '0.95cqw', fontWeight: 700, padding: '0.35cqh 0.7cqw', borderRadius: '0.5cqw',
+    border: `1px solid ${active ? '#2C3079' : '#e2e8f0'}`,
+    background: active ? '#2C3079' : '#ffffff',
+    color: active ? '#ffffff' : '#94a3b8',
+    cursor: editable ? 'pointer' : 'default', ...PJ,
+  })
 
   return (
     <>
       <div className="flex flex-col min-h-0" style={{ flex: 1, gap: '0.8cqh' }}>
         <div className="flex items-center justify-between" style={{ flexShrink: 0 }}>
           <CardLabel icon="groups" accent={colors.primary}>
-            {heading.hasPrevious || loading
+            {range === 'last3' && labels3.length === 3
+              ? t('Follower demographics — {from} to {to}', { from: labels3[0], to: labels3[2] })
+              : heading.hasPrevious || loading
               ? t('Follower demographics — {cur} vs {prev}', { cur: heading.cur, prev: heading.prev })
               : t('Follower demographics — {cur} (no {prev} data to compare)', { cur: heading.cur, prev: heading.prev })}
           </CardLabel>
-          <div className="flex" style={{ gap: '0.4cqw' }}>
+          <div className="flex items-center" style={{ gap: '0.4cqw' }}>
+            {range === 'last3' && labels3.length === 3 && (
+              <span className="flex items-center" style={{ gap: '0.5cqw', marginRight: '0.4cqw' }}>
+                {labels3.map((l, i) => (
+                  <span key={l} className="flex items-center" style={{ gap: '0.25cqw' }}>
+                    <span style={{ width: '1.1cqw', height: '0.55cqh', borderRadius: '0.2cqw', background: shades[i] }} />
+                    <span style={{ fontSize: '0.9cqw', lineHeight: 1, fontWeight: 700, color: '#64748b', ...PJ }}>{shortMonth(l)}</span>
+                  </span>
+                ))}
+              </span>
+            )}
+            {RANGES.map(r => (
+              <button key={r}
+                onClick={editable ? () => onChange?.({ ...slide, demographicRange: r }) : undefined}
+                disabled={!editable}
+                style={pill(range === r)}
+              >{t(RANGE_LABEL[r])}</button>
+            ))}
+            <span style={{ width: '1px', height: '2.4cqh', background: '#e2e8f0', margin: '0 0.2cqw' }} />
             {VIEWS.map(v => (
               <button key={v}
                 onClick={editable ? () => onChange?.({ ...slide, demographicView: v }) : undefined}
@@ -251,7 +350,7 @@ export default function DemographicSlide({
           ) : (
             channels.map(p => {
               const d = demographicsFor(audience, p)
-              return d ? <PlatformPanel key={p} platform={p} data={d} view={view} accent={colors.primary} /> : null
+              return d ? <PlatformPanel key={p} platform={p} data={d} view={view} accent={colors.primary} range={range} history={demographicHistory(audience, p)} /> : null
             })
           )}
         </div>

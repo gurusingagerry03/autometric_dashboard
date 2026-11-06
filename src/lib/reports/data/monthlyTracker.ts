@@ -13,6 +13,7 @@ import { groupInt } from './format'
 export type TrackerMetric =
   | 'followers' | 'followers_growth' | 'reach' | 'profile_views' | 'profile_reach'
   | 'total_posts' | 'engagement' | 'likes' | 'comments' | 'shares' | 'impressions' | 'er'
+  | 'follows' | 'unfollows'
 
 export type TrackerValues = Partial<Record<TrackerMetric, number | null>>
 export interface TrackerMonth {

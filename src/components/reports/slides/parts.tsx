@@ -7,7 +7,7 @@ import { useReportKpi, useReportKpiTargets, useReportYtd, useReportAI, useReport
 import { trackerMonthsFor } from '@/lib/reports/data/monthlyTracker'
 import {
   ageBucketsFor, SENTIMENT_KEYS, audienceWordsFor, biggestShift, demographicChannels,
-  demographicsFor, sentimentFor, type SourceFilter,
+  demographicsFor, sentimentFor, taggedFor, type SourceFilter,
 } from '@/lib/reports/data/audienceTypes'
 import { kpiDefsForChannel, kpiMetricFor, resolveKpiMetric, type KpiMetric } from '@/lib/reports/data/kpiMetrics'
 import { fmtKpiPeriod, kpiCardTitle, kpiTargetById, kpiTargetLabel } from '@/lib/reports/data/kpiTargets'
@@ -273,6 +273,16 @@ function gatherSlideData(
         },
       }
     })
+  }
+  if (slide.type === 'tagged') {
+    const tg = taggedFor(ctx.audience, ch)
+    if (tg) {
+      out.taggedPosts = {
+        totalTaggedPosts: tg.current.posts, previousMonthTaggedPosts: tg.previous.posts,
+        distinctAccounts: tg.current.users, previousMonthDistinctAccounts: tg.previous.users,
+        topPosts: tg.top.slice(0, slide.postCount).map(p => ({ account: `@${p.username}`, date: p.date, likes: p.likes, comments: p.comments, engagement: p.engagement })),
+      }
+    }
   }
   if (slide.type === 'visual') {
     out.posts = buildPosts(slide.postCount, slide.postFilter, { source: ctx.posts?.[ch] ?? undefined, format: slide.postFormat, pillar: slide.postPillar, sortMetric: slide.postSortMetric })

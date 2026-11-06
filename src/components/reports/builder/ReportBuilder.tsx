@@ -8,6 +8,7 @@ import type { DashBrand } from '@/components/dashboard/data'
 import { CoverColors, CoverMode, extractPalette, normalizeHex } from '@/lib/reports/cover/colors'
 import { COVER_TEMPLATES, getTemplate } from '@/lib/reports/cover/templates'
 import { exportCoverPptx } from '@/lib/reports/export/exportCover'
+import { removeLogoBackground } from '@/lib/reports/cover/logoBackground'
 import { exportReportPptx } from '@/lib/reports/export/exportReport'
 import { downloadBlob, saveExportToLibrary, saveTemplateToLibrary, updateTemplateInLibrary } from '@/lib/reports/export/clientSave'
 import { ReportTableMetrics } from '@/lib/reports/data/tableTypes'
@@ -97,7 +98,20 @@ export default function ReportBuilder({
   // Cover state. Branding (colors/logo) stays brand-driven.
   const [templateId, setTemplateId] = useState(initialTemplateId ?? COVER_TEMPLATES[0].id)
   const [mode, setMode] = useState<CoverMode>('light')
-  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
+  // Logo apa adanya (upload / foto profil brand) + versi berlatar transparan.
+  // logoDataUrl = yang dipakai cover, footer, dan PPTX.
+  const [logoSrc, setLogoSrc] = useState<string | null>(null)
+  const [logoTransparent, setLogoTransparent] = useState(true)
+  // undefined = sedang diproses, null = tidak ada latar polos yang bisa dibuang.
+  const [logoClean, setLogoClean] = useState<string | null | undefined>(null)
+  useEffect(() => {
+    if (!logoSrc) { setLogoClean(null); return }
+    let alive = true
+    setLogoClean(undefined)
+    removeLogoBackground(logoSrc).then(r => { if (alive) setLogoClean(r) })
+    return () => { alive = false }
+  }, [logoSrc])
+  const logoDataUrl = logoTransparent && logoClean ? logoClean : logoSrc
   // true once the user uploads their own logo → stop auto-filling from the brand.
   const [logoIsManual, setLogoIsManual] = useState(false)
   const [colors, setColors] = useState<CoverColors>({
@@ -105,6 +119,14 @@ export default function ReportBuilder({
     secondary: '#1B8A80',
     accent: '#e0a458',
   })
+  // true = palet sudah dipilih sendiri (diubah tangan, atau dipulihkan dari
+  // template) → logo brand yang termuat belakangan tidak boleh menimpanya.
+  // Upload logo manual tetap mengekstrak ulang: itu permintaan eksplisit.
+  const [colorsLocked, setColorsLockedState] = useState(false)
+  // Ref kembarannya: fetch logo yang masih berjalan saat template diterapkan harus
+  // melihat nilai terbaru, bukan nilai saat efeknya dimulai.
+  const colorsLockedRef = useRef(false)
+  const setColorsLocked = (v: boolean) => { colorsLockedRef.current = v; setColorsLockedState(v) }
   const [isExporting, setIsExporting] = useState(false)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   // Set once the user starts from a saved template, so saving can update it in place.
@@ -265,13 +287,14 @@ export default function ReportBuilder({
   useEffect(() => {
     if (logoIsManual) return
     const url = brands.find(b => b.id === brandId)?.logo ?? null
-    if (!url) { setLogoDataUrl(null); return }
+    if (!url) { setLogoSrc(null); return }
     let alive = true
     urlToDataUrl(url).then(async dataUrl => {
       if (!alive || !dataUrl) return
-      setLogoDataUrl(dataUrl)
+      setLogoSrc(dataUrl)
+      if (colorsLockedRef.current) return
       const palette = await extractPalette(dataUrl)
-      if (alive && palette) setColors(palette)
+      if (alive && palette && !colorsLockedRef.current) setColors(palette)
     })
     return () => { alive = false }
   }, [brandId, brands, logoIsManual])
@@ -303,6 +326,17 @@ export default function ReportBuilder({
   }
   function updateSlide(next: ContentSlide) {
     setSlides(prev => prev.map(s => (s.id === next.id ? next : s)))
+  }
+  // Duplikat: salinan utuh (chart, tabel, filter, catatan) tepat di belakang
+  // aslinya — kasus umumnya slide yang sama untuk pilar/format lain. structuredClone
+  // supaya mengubah salinannya tidak ikut mengubah objek bersarang milik aslinya.
+  function duplicateSlide(id: string) {
+    setSlides(prev => {
+      const i = prev.findIndex(s => s.id === id)
+      if (i < 0) return prev
+      const copy: ContentSlide = { ...structuredClone(prev[i]), id: `s${++slideSeq}-${Date.now()}` }
+      return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)]
+    })
   }
   function deleteSlide(id: string) {
     setSlides(prev => prev.filter(s => s.id !== id))
@@ -374,7 +408,7 @@ export default function ReportBuilder({
     setBrandId(id)
     setLogoIsManual(false)   // new brand → auto-load its logo (unless re-uploaded)
     const b = brands.find(x => x.id === id)
-    if (b) setColors(c => ({ ...c, primary: b.color }))
+    if (b && !colorsLocked) setColors(c => ({ ...c, primary: b.color }))
   }
 
   async function handleLogo(file: File) {
@@ -382,9 +416,9 @@ export default function ReportBuilder({
     const reader = new FileReader()
     reader.onload = async () => {
       const dataUrl = reader.result as string
-      setLogoDataUrl(dataUrl)
+      setLogoSrc(dataUrl)
       const palette = await extractPalette(dataUrl)
-      if (palette) setColors(palette)
+      if (palette) { setColors(palette); setColorsLocked(true) }
     }
     reader.readAsDataURL(file)
   }
@@ -449,6 +483,7 @@ export default function ReportBuilder({
     setFont(config.cover.font)
     setTitle(config.cover.title)
     setSubtitle(config.cover.subtitle)
+    if (config.cover.colors) { setColors(config.cover.colors); setColorsLocked(true) }
     // Remember where the structure came from so the next save can go back onto
     // it — otherwise resuming work always leaves a duplicate template behind.
     setActiveTemplate({ id: tpl.id, name: tpl.name })
@@ -461,7 +496,7 @@ export default function ReportBuilder({
   async function saveTemplate(name: string, existingId: string | null): Promise<{ ok: boolean; error?: string }> {
     // A template = structure only: cover style + slides, no brand/period/data.
     const config: ReportTemplateConfig = {
-      cover: { templateId, mode, font, title, subtitle },
+      cover: { templateId, mode, font, title, subtitle, colors },
       slides,
     }
     const res = existingId
@@ -559,6 +594,25 @@ export default function ReportBuilder({
                   </p>
                   <p className="text-[11px] text-[#9ca3af] mt-0.5">{t('Colors are extracted automatically')}</p>
                 </button>
+                {logoSrc && (
+                  <label className="flex items-center justify-between gap-3 mt-3 cursor-pointer select-none">
+                    <span>
+                      <span style={PJ} className="block text-[12px] font-semibold text-[#374151]">{t('Transparent background')}</span>
+                      <span className="block text-[11px] text-[#9ca3af]">
+                        {logoClean === undefined ? t('Processing…')
+                          : logoClean === null ? t('No plain background to remove')
+                          : t('Removes the plain background around the logo')}
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={logoTransparent}
+                      disabled={!logoClean}
+                      onChange={e => setLogoTransparent(e.target.checked)}
+                      className="w-4 h-4 accent-[#1B8A80] flex-shrink-0"
+                    />
+                  </label>
+                )}
               </Panel>
 
               <Panel title={t('Template')} icon="dashboard">
@@ -596,13 +650,27 @@ export default function ReportBuilder({
                         <input
                           type="color"
                           value={colors[key]}
-                          onChange={e => setColors(c => ({ ...c, [key]: normalizeHex(e.target.value) }))}
+                          onChange={e => { setColors(c => ({ ...c, [key]: normalizeHex(e.target.value) })); setColorsLocked(true) }}
                           className="w-8 h-8 rounded cursor-pointer border border-[#e5e7eb] bg-white"
                         />
                         <span className="text-[11px] text-[#9ca3af] font-mono w-[62px]">{colors[key]}</span>
                       </div>
                     </div>
                   ))}
+                  {colorsLocked && logoSrc && (
+                    <button
+                      onClick={async () => {
+                        const palette = await extractPalette(logoSrc!)
+                        if (palette) setColors(palette)
+                        setColorsLocked(false)
+                      }}
+                      style={PJ}
+                      className="flex items-center gap-1 text-[11.5px] font-semibold text-[#1B8A80] hover:text-[#2C3079] pt-1"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">auto_fix_high</span>
+                      {t('Use logo colors')}
+                    </button>
+                  )}
                 </div>
               </Panel>
 
@@ -690,6 +758,7 @@ export default function ReportBuilder({
             onOpen={openSlide}
             onRename={(id, t) => updateSlide({ ...slides.find(s => s.id === id)!, title: t })}
             onDelete={deleteSlide}
+            onDuplicate={duplicateSlide}
             onMove={moveSlide}
             onExport={handleExport}
             onSaveTemplate={() => setSaveTemplateOpen(true)}

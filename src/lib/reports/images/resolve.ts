@@ -173,6 +173,45 @@ async function loadTargets(orgId: string, brandId: string, keys: string[]): Prom
     }
   }
 
+  // Tagged post: hanya yang menandai akun milik brand ini (l0_raw, per akun brand).
+  const tagged = refs.filter(r => r.ref.kind === 't')
+  if (tagged.length) {
+    const { rows } = await pool.query<Record<string, string | null>>(
+      `SELECT DISTINCT ON (x.platform, x.post_id) x.platform, x.post_id, x.acct, x.username, x.image, x.link FROM (
+         SELECT 'instagram' platform, t.media_id post_id, t.social_account_id::text acct, t.tagged_by username,
+                t.cover_image image, t.permalink link, t.fetched_at
+           FROM l0_raw.ig_tagged_posts t
+           JOIN public.brand_social_accounts bsa ON bsa.social_account_id = t.social_account_id
+           JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
+          WHERE b.organization_id = $1::uuid AND b.id = $2::uuid AND t.media_id = ANY($3::text[])
+         UNION ALL
+         SELECT 'tiktok', t.media_id, t.social_account_id::text, t.tagged_by, t.cover_image, t.permalink, t.fetched_at
+           FROM l0_raw.tt_tagged_posts t
+           JOIN public.brand_social_accounts bsa ON bsa.social_account_id = t.social_account_id
+           JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
+          WHERE b.organization_id = $1::uuid AND b.id = $2::uuid AND t.media_id = ANY($4::text[])
+         UNION ALL
+         SELECT 'facebook', t.media_id, t.social_account_id::text, t.tagged_by, t.cover_image, t.permalink, t.fetched_at
+           FROM l0_raw.fb_tagged_posts t
+           JOIN public.brand_social_accounts bsa ON bsa.social_account_id = t.social_account_id
+           JOIN public.brands b ON b.id = bsa.brand_id AND b.deleted_at IS NULL
+          WHERE b.organization_id = $1::uuid AND b.id = $2::uuid AND t.media_id = ANY($5::text[])
+       ) x ORDER BY x.platform, x.post_id, x.fetched_at DESC NULLS LAST`,
+      [orgId, brandId,
+        tagged.filter(r => r.ref.platform === 'instagram').map(r => r.ref.postId),
+        tagged.filter(r => r.ref.platform === 'tiktok').map(r => r.ref.postId),
+        tagged.filter(r => r.ref.platform === 'facebook').map(r => r.ref.postId)],
+    )
+    for (const r of rows) {
+      // accountId dikosongkan: akun pemilik tagged post bukan akun brand, dan
+      // report_post_images.social_account_id menunjuk ke social_accounts.
+      out.push({
+        key: `t:${r.platform}:${r.post_id}`, kind: 't', platform: r.platform!, postId: r.post_id!,
+        accountId: null, username: r.username, image: r.image, link: r.link,
+      })
+    }
+  }
+
   // Satu post bisa muncul lewat dua akun (mis. kolaborasi) — cukup sekali.
   const seen = new Set<string>()
   return out.filter(t => (seen.has(t.key) ? false : (seen.add(t.key), true)))

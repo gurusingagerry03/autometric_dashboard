@@ -10,7 +10,8 @@ import { TableColumn, TableConfig, TABLE_TYPES, SectionMetrics, SentimentTable, 
 import { cloudWordsFrom, type ReportChartMetrics, type CloudWordData } from '../data/chartTypes'
 import {
   ageBucketsFor, SENTIMENT_COLOR, SENTIMENT_KEYS, SENTIMENT_LABEL, SOURCE_LABEL,
-  audienceWordsFor, biggestShift, demographicChannels, demographicHeading, demographicsFor, sentimentFor,
+  audienceWordsFor, biggestShift, demographicChannels, demographicHeading, demographicsFor, demographicHistory, shortMonth, sentimentFor,
+  taggedFor, taggedChange, fmtTaggedDate, TAGGED_COUNTS,
   type ReportAudienceMetrics, type SentimentBlock, type SourceFilter,
 } from '../data/audienceTypes'
 import { computeWordCloud, WC_W, WC_H, WC_FONT } from '../data/wordcloudLayout'
@@ -301,7 +302,10 @@ function tableCard(slide: Slide, config: TableConfig | null, colors: CoverColors
   if (config.type === 'monthly_tracker' && rows.length === 0) { noDataText(slide, x + pad, y + H(4.8), w - 2 * pad, h - H(6)); return }
   // Huruf tabel bulanan = ukuran preview (trackerTableSizes), selain itu ukuran tabel biasa.
   const big = config.type === 'monthly_tracker'
-    ? trackerTableSizes(rows.length, (h / S.h) * 100, columns.filter(c => c.format !== 'text').length, columns.some(c => c.format === 'text'))
+    // Margin atas+bawah sel PowerPoint (CELL_MARGIN) ikut memakan tinggi tiap baris,
+    // padahal pratinjau tidak punya — tanpa dikurangi, tabel 10+ bulan memanjang
+    // melewati kartunya dan baris terakhir menimpa footer.
+    ? trackerTableSizes(rows.length, (h / S.h) * 100 - (rows.length + 1) * ((CELL_MARGIN[0] + CELL_MARGIN[2] + 0.02) / S.h) * 100, columns.filter(c => c.format !== 'text').length, columns.some(c => c.format === 'text'))
     : null
   const tw = w - 2 * pad
   const firstW = tw * (big ? 0.12 : 0.18)
@@ -409,7 +413,7 @@ async function footer(slide: Slide, chrome: SlideChrome, colors: CoverColors, x:
     slide.addText(chrome.brandName.slice(0, 2).toUpperCase(), { x: lx, y: fy, w: W(6), h: fh, valign: 'middle', fontSize: FS(1.9), bold: true, color: noHash(colors.primary), fontFace: PJ })
     lx += W(6)
   }
-  slide.addShape('ellipse', { x: lx, y: fy + fh / 2 - W(0.45), w: W(0.9), h: W(0.9), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  slide.addShape('ellipse', { x: lx, y: fy + fh / 2 - W(0.45), w: W(0.9), h: W(0.9), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   slide.addText(chrome.period, { x: lx + W(1.6), y: fy, w: W(30), h: fh, valign: 'middle', fontSize: FS(1.5), color: '475569', fontFace: PJ })
 
   // Center — prepared by
@@ -440,10 +444,10 @@ async function addSectionSlide(pptx: any, slide: ContentSlide, chrome: SlideChro
   const s = pptx.addSlide()
   const bgPng = await svgToPng(chrome.template.background(colors, chrome.mode), 1280 * 2, 720 * 2)
   s.addImage({ data: bgPng, x: 0, y: 0, w: S.w, h: S.h })
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: S.h, fill: { color: chrome.mode === 'dark' ? '000000' : 'FFFFFF', transparency: chrome.mode === 'dark' ? 82 : 78 }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: S.h, fill: { color: chrome.mode === 'dark' ? '000000' : 'FFFFFF', transparency: chrome.mode === 'dark' ? 82 : 78 }, line: { type: 'none' } })
   const text = noHash(chrome.template.textColor(colors, chrome.mode))
   s.addText('SECTION', { x: 0, y: H(35), w: S.w, h: H(5), align: 'center', fontSize: FS(1.5), bold: true, color: text, charSpacing: 6, fontFace: PJ })
-  s.addShape('rect', { x: S.w / 2 - W(3.5), y: H(43.5), w: W(7), h: H(0.6), fill: { color: text }, line: { width: 0 } })
+  s.addShape('rect', { x: S.w / 2 - W(3.5), y: H(43.5), w: W(7), h: H(0.6), fill: { color: text }, line: { type: 'none' } })
   s.addText(slide.title || 'Section Title', { x: W(8), y: H(45), w: S.w - W(16), h: H(16), align: 'center', valign: 'middle', fontSize: FS(7), bold: true, color: text, fontFace: PJ })
   if (slide.body) s.addText(slide.body, { x: W(15), y: H(64), w: S.w - W(30), h: H(8), align: 'center', fontSize: FS(2.4), color: text, fontFace: PJ })
 }
@@ -451,7 +455,7 @@ async function addSectionSlide(pptx: any, slide: ContentSlide, chrome: SlideChro
 async function addDashboardSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, metrics?: ReportTableMetrics, chartMetrics?: ReportChartMetrics) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -466,7 +470,7 @@ async function addDashboardSlide(pptx: any, slide: ContentSlide, chrome: SlideCh
 async function addComparisonSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, chartMetrics?: ReportChartMetrics) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -482,7 +486,7 @@ async function addComparisonSlide(pptx: any, slide: ContentSlide, chrome: SlideC
 function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, count: number, x: number, y: number, w: number, h: number, meta?: string, caption?: string, emptyLabel = 'ADD METRIC', noDeltaLabel = 'no prior-period data') {
   if (!metric) { placeholder(slide, x, y, w, h, emptyLabel); return }
   card(slide, x, y, w, h)
-  slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { width: 0 } })
+  slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { type: 'none' } })
   const pad = W(1.2)
   const valueCqw = count <= 4 ? 2.5 : count === 5 ? 2.1 : 1.8
   slide.addText(metric.label.toUpperCase(), { x: x + pad, y: y + H(1.8), w: w - 2 * pad, h: H(2.4), fontSize: FS(0.95), bold: true, color: '94A3B8', fontFace: PJ })
@@ -508,7 +512,7 @@ function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, 
  */
 function targetCard(slide: Slide, target: KpiTarget, accent: string, count: number, rates: KpiRate[], x: number, y: number, w: number, h: number, channel = '') {
   card(slide, x, y, w, h)
-  slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { width: 0 } })
+  slide.addShape('rect', { x, y, w, h: H(0.5), fill: { color: noHash(accent) }, line: { type: 'none' } })
   const pad = W(1.2)
   const bw = w - 2 * pad
   const valueCqw = count <= 3 ? 2.4 : count === 4 ? 2.1 : count === 5 ? 1.85 : 1.6
@@ -543,7 +547,7 @@ function targetCard(slide: Slide, target: KpiTarget, accent: string, count: numb
 async function addKpiSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, chartMetrics?: ReportChartMetrics, kpiMetrics?: ReportKpiMetrics, metrics?: ReportTableMetrics, kpiTargets?: ReportKpiTargets, ytdMetrics?: ReportYtdMetrics) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -717,7 +721,7 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
     Math.max(mx, cardMetricLabel(m).length * 0.5 + (post.metrics[m] ?? '—').length * 0.62 + 1), 0)   // em; +1 em gap
   const { imgH, fs } = postCardFit(postMetrics.length, baseFs, h, labelW, longest, innerW, longestRow)
 
-  slide.addShape('rect', { x, y, w, h: imgH, fill: { color: hslToHex((post.id * 47) % 360, 0.42, 0.85) }, line: { width: 0 } })
+  slide.addShape('rect', { x, y, w, h: imgH, fill: { color: hslToHex((post.id * 47) % 360, 0.42, 0.85) }, line: { type: 'none' } })
   // Embedded link content (Post-UAT brief "Embedded Link Content"): the photo, #id
   // and the ↗ mark open the post's permalink. The link rides on the picture itself;
   // only when there is no picture (load failed → gradient only) does a transparent
@@ -765,7 +769,7 @@ async function postCard(slide: Slide, post: { id: number; tag?: string; image?: 
 async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, competitorPosts?: CompetitorPostPool | null, resolveImages?: ImageResolver | null) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   // Mode competitive review hanya menukar kumpulan post-nya; pemilihan kompetitornya
   // lewat helper yang sama dengan preview supaya keduanya tidak mungkin memilih akun
   // yang berbeda.
@@ -841,7 +845,7 @@ async function addVisualSlide(pptx: any, slide: ContentSlide, chrome: SlideChrom
 async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, postMetrics?: ReportPostMetrics | null, resolveImages?: ImageResolver | null) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -877,7 +881,7 @@ async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
 
   // Kiri — rata-rata per kelompok.
   card(s, hx, top, leftW, bodyH)
-  s.addShape('rect', { x: hx + W(0.8), y: top + H(1.2), w: W(0.9), h: W(0.9), fill: { color: accent }, line: { width: 0 } })
+  s.addShape('rect', { x: hx + W(0.8), y: top + H(1.2), w: W(0.9), h: W(0.9), fill: { color: accent }, line: { type: 'none' } })
   s.addText(`Avg. ${metricLabel(sortMetric)}`, { x: hx + W(1.9), y: top + H(0.6), w: leftW - W(2.4), h: H(2.6), fontSize: FS(0.8), bold: true, color: '475569', fontFace: PJ, valign: 'middle', fit: 'shrink' })
   const barX = hx + W(6.1), barMax = (leftW - W(6.6)) * 0.7
   groups.forEach((g, i) => {
@@ -889,7 +893,7 @@ async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
     const labFs = Math.max(0.5, Math.min(0.85, 5.0 / (longestWord * 0.52)))
     s.addText(g.label, { x: hx + W(0.4), y: cy - H(1.6), w: W(5.4), h: H(3.2), fontSize: FS(labFs), color: '334155', align: 'right', valign: 'middle', fontFace: PJ, margin: 0 })
     const bw = Math.max(barMax * 0.04, (g.avg / maxAvg) * barMax)
-    s.addShape('rect', { x: barX, y: cy - H(1.3), w: bw, h: H(2.6), fill: { color: accent }, line: { width: 0 } })
+    s.addShape('rect', { x: barX, y: cy - H(1.3), w: bw, h: H(2.6), fill: { color: accent }, line: { type: 'none' } })
     s.addText(g.avgText, { x: barX + bw + W(0.2), y: cy - H(1.6), w: leftW - (barX - hx) - bw - W(0.3), h: H(3.2), fontSize: FS(0.8), bold: true, color: '0F172A', valign: 'middle', fontFace: PJ, margin: 0 })
   })
 
@@ -906,7 +910,7 @@ async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
   for (let i = 0; i < groups.length; i++) {
     const g = groups[i], y = rowY(i)
     s.addShape('roundRect', { x: mx, y, w: midW, h: rowH, rectRadius: 0.05, fill: { color: noHash(tint(colors.primary, 0.95)) }, line: { color: 'E8EBEE', width: 0.75 } })
-    s.addShape('rect', { x: mx, y, w: stripW, h: rowH, fill: { color: accent }, line: { width: 0 } })
+    s.addShape('rect', { x: mx, y, w: stripW, h: rowH, fill: { color: accent }, line: { type: 'none' } })
     // Teks diputar 270° di sekitar pusat kotaknya: kotak selebar tinggi baris,
     // diletakkan supaya pusatnya jatuh di tengah strip.
     // Pecah baris & ukuran dari showcaseLabel (sama dengan pratinjau) — `fit:
@@ -930,7 +934,7 @@ async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
       const link = p.link ? { url: p.link, tooltip: p.link } : undefined
       const data = url ? await toDataUrl(url) : null
       const linked = data ? await addCoverImage(s, data, sx, sy, imgW, imgH, link) : false
-      if (!data) s.addShape('rect', { x: sx, y: sy, w: imgW, h: imgH, fill: { color: 'E2E8F0' }, line: { width: 0 } })
+      if (!data) s.addShape('rect', { x: sx, y: sy, w: imgW, h: imgH, fill: { color: 'E2E8F0' }, line: { type: 'none' } })
       if (link && !linked) s.addShape('rect', { x: sx, y: sy, w: imgW, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { type: 'none' }, hyperlink: link })
       const bx = sx + imgW + W(G.boxGap), bw = W(geom.boxW)
       s.addShape('roundRect', { x: bx, y: sy, w: bw, h: imgH, rectRadius: 0.03, fill: { color: 'FFFFFF' }, line: { color: 'EEF0F2', width: 0.5 } })
@@ -961,7 +965,7 @@ async function addShowcaseSlide(pptx: any, slide: ContentSlide, chrome: SlideChr
 async function addOverviewSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, metrics?: ReportTableMetrics, chartMetrics?: ReportChartMetrics) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -1001,7 +1005,7 @@ function sentimentTile(
   const moveColor = flat ? '94A3B8' : good ? '15803D' : 'B91C1C'
 
   s.addShape('roundRect', { x, y, w, h, rectRadius: 0.05, fill: { color: 'FBFCFD' }, line: { color: 'E8EBEE', width: 0.75 } })
-  s.addShape('rect', { x, y, w, h: H(0.5), fill: { color }, line: { width: 0 } })
+  s.addShape('rect', { x, y, w, h: H(0.5), fill: { color }, line: { type: 'none' } })
   s.addText(SENTIMENT_LABEL[k].toUpperCase(), {
     x: x + W(0.6), y: y + H(1.2), w: w - W(1.2), h: H(3),
     fontSize: FS(1.15), bold: true, color: '64748B', charSpacing: 0.6, fontFace: PJ,
@@ -1026,7 +1030,7 @@ async function addSentimentSlide(
 ) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -1103,19 +1107,24 @@ async function addSentimentSlide(
  * so a combined number would average three percentages and weigh a small TikTok
  * exactly like a large Instagram. See DemographicSlide.tsx.
  */
+/** Warna tiga bulan riwayat, lama → baru — sama dengan DemographicSlide. */
+const last3Shades = (accent: string) => [tint(accent, 0.68), tint(accent, 0.38), accent]
+
 function demographicPanel(
   s: Slide, platform: DashPlatform,
   cur: NonNullable<ReturnType<typeof demographicsFor>>['current'],
   prev: NonNullable<ReturnType<typeof demographicsFor>>['previous'],
   view: string, accent: string, x: number, y: number, w: number, h: number,
+  history: ReturnType<typeof demographicHistory> | null = null,
 ) {
   if (!cur) return
   card(s, x, y, w, h)
   const meta = PLATFORM_META[platform]
+  const badge = history ? (history.length < 3 ? `   ${history.length} OF 3 MONTHS` : null) : prev ? null : '   NO PRIOR MONTH'
   s.addText(
-    prev ? meta.label : [
+    !badge ? meta.label : [
       { text: meta.label, options: { bold: true, color: '0F172A', fontSize: FS(1.25) } },
-      { text: '   NO PRIOR MONTH', options: { bold: true, color: 'B8915A', fontSize: FS(0.85) } },
+      { text: badge, options: { bold: true, color: 'B8915A', fontSize: FS(0.85) } },
     ],
     { x: x + W(1), y: y + H(1), w: w - W(2), h: H(3.4), fontSize: FS(1.25), bold: true, color: '0F172A', fontFace: PJ },
   )
@@ -1123,6 +1132,62 @@ function demographicPanel(
   const showAge = view !== 'gender'
   const showGender = view !== 'age'
   let cursor = y + H(5)
+  const tight = { margin: 0, wrap: false, valign: 'middle' as const, fontFace: PJ }
+
+  // ── Tiga bulan terakhir (cerminan AgeRow3 / GenderRows3 di DemographicSlide) ──
+  if (history) {
+    const shades = last3Shades(accent)
+    if (showAge) {
+      s.addText('AGE GROUP', { x: x + W(1), y: cursor, w: w - W(2), h: H(2.6), fontSize: FS(0.95), bold: true, color: '94A3B8', charSpacing: 0.5, fontFace: PJ })
+      cursor += H(3)
+      const buckets = ageBucketsFor(platform)
+      const max = Math.max(...history.flatMap(hh => buckets.map(([, k]) => hh.period.age[k] ?? 0)), 1)
+      // Mode gender ikut tampil → tiga baris gender butuh ruang lebih dari satu bar.
+      const rowH = showGender ? H(2.45) : H(3.6)
+      const labelW = W(4.4), valW = W(4.6), deltaW = history.length > 1 ? W(3.8) : 0
+      const barW = Math.max(w - W(2) - labelW - valW - deltaW - W(1), W(4))
+      const barH = H(0.5), barGap = H(0.12)
+      for (const [label, b] of buckets) {
+        s.addText(label, { ...tight, x: x + W(1), y: cursor, w: labelW, h: rowH, align: 'right', fontSize: FS(1), color: '64748B' })
+        const bx = x + W(1) + labelW + W(0.5)
+        const stackH = history.length * barH + (history.length - 1) * barGap
+        let by = cursor + (rowH - stackH) / 2
+        for (const hh of history) {
+          const v = hh.period.age[b] ?? 0
+          s.addShape('rect', { x: bx, y: by, w: barW, h: barH, fill: { color: 'F1F5F9' }, line: { type: 'none' } })
+          if (v > 0) s.addShape('rect', { x: bx, y: by, w: Math.max(barW * (v / max), 0.02), h: barH, fill: { color: noHash(shades[hh.idx]) }, line: { type: 'none' } })
+          by += barH + barGap
+        }
+        const last = history[history.length - 1].period.age[b] ?? 0
+        const first = history[0].period.age[b] ?? 0
+        s.addText(`${last.toFixed(1)}%`, { ...tight, x: bx + barW + W(0.5), y: cursor, w: valW, h: rowH, align: 'right', fontSize: FS(1), bold: true, color: '0F172A' })
+        if (history.length > 1) {
+          const d = +(last - first).toFixed(1)
+          s.addText(Math.abs(d) < 0.05 ? '0.0' : ppText(d).replace('pp', ''), {
+            ...tight, x: bx + barW + W(0.5) + valW, y: cursor, w: deltaW, h: rowH, align: 'right',
+            fontSize: FS(0.95), bold: true, color: Math.abs(d) < 0.05 ? 'A3ADBA' : d > 0 ? '15803D' : 'B91C1C',
+          })
+        }
+        cursor += rowH
+      }
+      cursor += H(1)
+    }
+    if (showGender) {
+      s.addText('GENDER', { x: x + W(1), y: cursor, w: w - W(2), h: H(2.6), fontSize: FS(0.95), bold: true, color: '94A3B8', charSpacing: 0.5, fontFace: PJ })
+      cursor += H(3)
+      const lw = W(2.8), gx = x + W(1) + lw, gw = w - W(2) - lw, gh = H(1.8)
+      for (const hh of history) {
+        s.addText(shortMonth(hh.label), { ...tight, x: x + W(1), y: cursor, w: lw, h: gh, fontSize: FS(0.9), bold: true, color: '64748B' })
+        const fw = gw * (hh.period.female / 100)
+        s.addShape('rect', { x: gx, y: cursor, w: Math.max(fw, 0.001), h: gh, fill: { color: 'D6447A' }, line: { type: 'none' } })
+        s.addShape('rect', { x: gx + fw, y: cursor, w: Math.max(gw - fw, 0.001), h: gh, fill: { color: '3D7EEA' }, line: { type: 'none' } })
+        if (hh.period.female >= 12) s.addText(`${hh.period.female.toFixed(0)}%`, { ...tight, x: gx, y: cursor, w: fw, h: gh, align: 'center', fontSize: FS(0.85), bold: true, color: 'FFFFFF' })
+        if (hh.period.male >= 12) s.addText(`${hh.period.male.toFixed(0)}%`, { ...tight, x: gx + fw, y: cursor, w: gw - fw, h: gh, align: 'center', fontSize: FS(0.85), bold: true, color: 'FFFFFF' })
+        cursor += gh + H(0.4)
+      }
+    }
+    return
+  }
 
   if (showAge) {
     s.addText('AGE GROUP', { x: x + W(1), y: cursor, w: w - W(2), h: H(2.6), fontSize: FS(0.95), bold: true, color: '94A3B8', charSpacing: 0.5, fontFace: PJ })
@@ -1136,17 +1201,16 @@ function demographicPanel(
     // Tanpa bulan pembanding kolom delta hanya berisi "—"; ruangnya dikembalikan ke bar.
     const labelW = W(4.4), valW = W(4.6), deltaW = prev ? W(3.8) : 0
     const barW = Math.max(w - W(2) - labelW - valW - deltaW - W(1), W(4))
-    const tight = { margin: 0, wrap: false, valign: 'middle' as const, fontFace: PJ }
     for (const [label, b] of buckets) {
       const now = cur.age[b] ?? 0
       const before = prev ? (prev.age[b] ?? 0) : null
       s.addText(label, { ...tight, x: x + W(1), y: cursor, w: labelW, h: rowH, align: 'right', fontSize: FS(1), color: '64748B' })
       const bx = x + W(1) + labelW + W(0.5)
-      s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: barW, h: H(1.5), rectRadius: 0.02, fill: { color: 'F1F5F9' }, line: { width: 0 } })
-      if (now > 0) s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: Math.max(barW * (now / max), 0.02), h: H(1.5), rectRadius: 0.02, fill: { color: noHash(accent) }, line: { width: 0 } })
+      s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: barW, h: H(1.5), rectRadius: 0.02, fill: { color: 'F1F5F9' }, line: { type: 'none' } })
+      if (now > 0) s.addShape('roundRect', { x: bx, y: cursor + H(0.55), w: Math.max(barW * (now / max), 0.02), h: H(1.5), rectRadius: 0.02, fill: { color: noHash(accent) }, line: { type: 'none' } })
       // Last month as a hairline, so the shift is visible without doubling the bars.
       if (before !== null) {
-        s.addShape('rect', { x: bx + barW * (before / max), y: cursor + H(0.3), w: W(0.16), h: H(2), fill: { color: '0F172A', transparency: 62 }, line: { width: 0 } })
+        s.addShape('rect', { x: bx + barW * (before / max), y: cursor + H(0.3), w: W(0.16), h: H(2), fill: { color: '0F172A', transparency: 62 }, line: { type: 'none' } })
       }
       s.addText(`${now.toFixed(1)}%`, { ...tight, x: bx + barW + W(0.5), y: cursor, w: valW, h: rowH, align: 'right', fontSize: FS(1), bold: true, color: '0F172A' })
       const d = before === null ? null : +(now - before).toFixed(1)
@@ -1166,8 +1230,8 @@ function demographicPanel(
     cursor += H(3)
     const gw = w - W(2)
     const fw = gw * (cur.female / 100)
-    s.addShape('rect', { x: x + W(1), y: cursor, w: fw, h: H(2.4), fill: { color: 'D6447A' }, line: { width: 0 } })
-    s.addShape('rect', { x: x + W(1) + fw, y: cursor, w: gw - fw, h: H(2.4), fill: { color: '3D7EEA' }, line: { width: 0 } })
+    s.addShape('rect', { x: x + W(1), y: cursor, w: fw, h: H(2.4), fill: { color: 'D6447A' }, line: { type: 'none' } })
+    s.addShape('rect', { x: x + W(1) + fw, y: cursor, w: gw - fw, h: H(2.4), fill: { color: '3D7EEA' }, line: { type: 'none' } })
     s.addText(`${cur.female.toFixed(0)}%`, { x: x + W(1), y: cursor, w: fw, h: H(2.4), align: 'center', valign: 'middle', fontSize: FS(1), bold: true, color: 'FFFFFF', fontFace: PJ })
     s.addText(`${cur.male.toFixed(0)}%`, { x: x + W(1) + fw, y: cursor, w: gw - fw, h: H(2.4), align: 'center', valign: 'middle', fontSize: FS(1), bold: true, color: 'FFFFFF', fontFace: PJ })
     cursor += H(3)
@@ -1187,7 +1251,7 @@ async function addDemographicSlide(
 ) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -1198,12 +1262,26 @@ async function addDemographicSlide(
   const labelY = H(16.6), bodyY = H(20), bodyH = H(45.5)
 
   const heading = demographicHeading(audience, channels)
+  const labels3 = audience?.meta.last3Labels ?? []
+  const last3 = slide.demographicRange === 'last3' && labels3.length === 3
   s.addText(
-    (heading.hasPrevious
+    (last3
+      ? `FOLLOWER DEMOGRAPHICS — ${labels3[0]} TO ${labels3[2]}`
+      : heading.hasPrevious
       ? `FOLLOWER DEMOGRAPHICS — ${heading.cur} VS ${heading.prev}`
       : `FOLLOWER DEMOGRAPHICS — ${heading.cur} (NO ${heading.prev} DATA TO COMPARE)`).toUpperCase(),
-    { x: hx, y: labelY, w: hw, h: H(2.8), margin: 0, valign: 'middle', fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ },
+    { x: hx, y: labelY, w: hw * (last3 ? 0.7 : 1), h: H(2.8), margin: 0, valign: 'middle', fontSize: FS(1.2), bold: true, color: '94A3B8', charSpacing: 0.6, fontFace: PJ },
   )
+  if (last3) {
+    // Legenda warna bulan, rata kanan di jalur label.
+    const shades = last3Shades(colors.primary)
+    const itemW = W(5.2)
+    labels3.forEach((l, i) => {
+      const ix = hx + hw - itemW * (3 - i)
+      s.addShape('rect', { x: ix, y: labelY + H(1.1), w: W(1.1), h: H(0.6), fill: { color: noHash(shades[i]) }, line: { type: 'none' } })
+      s.addText(shortMonth(l), { x: ix + W(1.4), y: labelY, w: itemW - W(1.4), h: H(2.8), margin: 0, valign: 'middle', fontSize: FS(0.95), bold: true, color: '64748B', fontFace: PJ })
+    })
+  }
 
   if (channels.length === 0) {
     card(s, hx, bodyY, hw, bodyH)
@@ -1214,11 +1292,99 @@ async function addDemographicSlide(
     channels.forEach((p, i) => {
       const d = demographicsFor(audience, p)
       if (!d) return
-      demographicPanel(s, p, d.current, d.previous, slide.demographicView ?? 'both', colors.primary, hx + i * (pw + gap), bodyY, pw, bodyH)
+      demographicPanel(s, p, d.current, d.previous, slide.demographicView ?? 'both', colors.primary, hx + i * (pw + gap), bodyY, pw, bodyH,
+        last3 ? demographicHistory(audience, p) : null)
     })
   }
 
   insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx, H(67), hw, H(20), 'DEMOGRAPHIC SHIFT & NOTES')
+  await footer(s, chrome, colors, hx, H(89), hw)
+}
+
+/* ── Tagged Posts (Post-UAT least priority) ───────────────────────────────
+ * Cerminan TaggedSlide.tsx: dua kartu angka, Top N tagged post dengan gambar
+ * (gambar & "Open post" menaut ke post-nya), dan catatan di kanan.
+ */
+async function addTaggedSlide(
+  pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors,
+  audience?: ReportAudienceMetrics | null, resolveImages?: ImageResolver | null,
+) {
+  const s = pptx.addSlide()
+  s.background = { color: noHash(tint(colors.primary, 0.965)) }
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
+  const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
+  await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
+
+  const data = taggedFor(audience, slide.channel)
+  const n = (TAGGED_COUNTS as readonly number[]).includes(slide.postCount) ? slide.postCount : 3
+  const posts = (data?.top ?? []).slice(0, n)
+  const accent = noHash(colors.primary)
+
+  const gap = W(1.4)
+  const leftW = (hw - gap) * (2.1 / 3.1), rightW = hw - gap - leftW
+  const top = H(18), bottom = H(87)
+
+  // Kartu angka.
+  const statH = H(11), statGap = W(1.2), statW = (leftW - statGap) / 2
+  const stats: [string, number, number][] = [
+    ['Total Tagged Posts', data?.current.posts ?? 0, data?.previous.posts ?? 0],
+    ['Tagged Post User Count', data?.current.users ?? 0, data?.previous.users ?? 0],
+  ]
+  stats.forEach(([label, cur, prev], i) => {
+    const x = hx + i * (statW + statGap)
+    s.addShape('roundRect', { x, y: top, w: statW, h: statH, rectRadius: 0.08, fill: { color: accent }, line: { type: 'none' } })
+    s.addText(label, { x, y: top + H(1.4), w: statW, h: H(3), align: 'center', valign: 'middle', margin: 0, fontSize: FS(1.15), color: noHash(tint(colors.primary, 0.85)), fontFace: PJ })
+    const ch = taggedChange(cur, prev)
+    s.addText([
+      { text: cur.toLocaleString('en-US'), options: { fontSize: FS(2.3), bold: true } },
+      ...(ch ? [{ text: ` (${ch})`, options: { fontSize: FS(1.5), bold: true } }] : []),
+    ], { x, y: top + H(4.6), w: statW, h: H(5), align: 'center', valign: 'middle', margin: 0, color: 'FFFFFF', fontFace: PJ })
+  })
+
+  // Top N.
+  const cy = top + statH + H(1.6), ch = bottom - cy
+  card(s, hx, cy, leftW, ch)
+  const pad = W(1.2)
+  s.addShape('rect', { x: hx + pad, y: cy + H(1.4), w: leftW - 2 * pad, h: H(3), fill: { color: noHash(tint(colors.primary, 0.88)) }, line: { type: 'none' } })
+  s.addText(`TOP ${posts.length || n} TAGGED POST ENGAGEMENTS`, {
+    x: hx + pad, y: cy + H(1.4), w: leftW - 2 * pad, h: H(3), align: 'center', valign: 'middle', margin: 0,
+    fontSize: FS(1), bold: true, color: '0F172A', charSpacing: 0.4, fontFace: PJ,
+  })
+  if (posts.length === 0) {
+    noDataText(s, hx, cy + H(5), leftW, ch - H(5), 'No tagged posts in this period')
+  } else {
+    const keys = posts.map(p => p.imageKey).filter((k): k is string => !!k)
+    const resolved = resolveImages && keys.length ? await resolveImages(keys) : {}
+    const areaY = cy + H(6), areaH = ch - H(6) - H(1.4)
+    const textH = H(10.5)
+    const imgH = areaH - textH
+    const cGap = W(1)
+    const cw = (leftW - 2 * pad - cGap * (posts.length - 1)) / posts.length
+    const line = { margin: 0, wrap: false, valign: 'middle' as const, fontFace: PJ }
+    for (let i = 0; i < posts.length; i++) {
+      const p = posts[i]
+      const x = hx + pad + i * (cw + cGap)
+      const link = p.link ? { url: p.link, tooltip: p.link } : undefined
+      const url = (p.imageKey && resolved[p.imageKey]) || p.image
+      const data = url ? await toDataUrl(url) : null
+      if (!data) s.addShape('rect', { x, y: areaY, w: cw, h: imgH, fill: { color: noHash(tint(colors.primary, 0.9)) }, line: { type: 'none' } })
+      const linked = data ? await addCoverImage(s, data, x, areaY, cw, imgH, link) : false
+      if (link && !linked) s.addShape('rect', { x, y: areaY, w: cw, h: imgH, fill: { color: 'FFFFFF', transparency: 100 }, line: { type: 'none' }, hyperlink: link })
+      const ty = areaY + imgH + H(0.8), lh = H(2.4)
+      // fit: 'shrink' tidak dijalankan pptxgenjs — handle panjang dikecilkan sendiri.
+      const handle = `@${p.username}`
+      const userFs = Math.max(6, Math.min(FS(0.95), Math.floor((cw * 72) / (handle.length * 0.6) * 10) / 10))
+      s.addText(handle, { ...line, x, y: ty, w: cw, h: lh, fontSize: userFs, bold: true, color: '334155' })
+      s.addText(fmtTaggedDate(p.date), { ...line, x, y: ty + lh, w: cw, h: lh, fontSize: FS(0.85), color: '64748B' })
+      s.addText([
+        { text: 'Eng.: ', options: { color: '64748B' } },
+        { text: p.engagement.toLocaleString('en-US'), options: { color: '0F172A', bold: true } },
+      ], { ...line, x, y: ty + 2 * lh, w: cw, h: lh, fontSize: FS(0.85) })
+      if (link) s.addText([{ text: 'Open post ↗', options: { hyperlink: link, color: '2563EB', bold: true } }], { ...line, x, y: ty + 3 * lh, w: cw, h: lh, fontSize: FS(0.85) })
+    }
+  }
+
+  insightsCard(s, { text: slide.insights, ai: slide.aiInsight }, hx + leftW + gap, top, rightW, bottom - top, 'TAGGED POST INSIGHTS')
   await footer(s, chrome, colors, hx, H(89), hw)
 }
 
@@ -1229,7 +1395,7 @@ async function addDemographicSlide(
 async function addMonthlyTrackerSlide(pptx: any, slide: ContentSlide, chrome: SlideChrome, colors: CoverColors, metrics?: ReportTableMetrics, chartMetrics?: ReportChartMetrics) {
   const s = pptx.addSlide()
   s.background = { color: noHash(tint(colors.primary, 0.965)) }
-  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { width: 0 } })
+  s.addShape('rect', { x: 0, y: 0, w: S.w, h: H(0.5), fill: { color: noHash(colors.primary) }, line: { type: 'none' } })
   const { hx, hy, hw } = dashboardHeader(s, slide.title, colors)
   await channelBadge(s, slide.channel, hx + hw - W(1.5), hy)
 
@@ -1293,6 +1459,7 @@ export async function exportReportPptx({ cover, slides, chromes, colors, brandNa
     else if (slide.type === 'overview') await addOverviewSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else if (slide.type === 'sentiment') await addSentimentSlide(pptx, slide, chrome, colors, audienceMetrics)
     else if (slide.type === 'demographic') await addDemographicSlide(pptx, slide, chrome, colors, audienceMetrics)
+    else if (slide.type === 'tagged') await addTaggedSlide(pptx, slide, chrome, colors, audienceMetrics, resolveImages)
     else if (slide.type === 'monthly_tracker') await addMonthlyTrackerSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
     else await addDashboardSlide(pptx, slide, chrome, colors, metrics ?? undefined, chartMetrics ?? undefined)
   }

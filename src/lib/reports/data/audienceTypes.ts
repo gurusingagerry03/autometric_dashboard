@@ -105,6 +105,12 @@ export interface DemographicPeriod {
 export interface ChannelDemographics {
   current: DemographicPeriod | null
   previous: DemographicPeriod | null
+  /**
+   * Tiga bulan terakhir s.d. bulan report, lama → baru (Post-UAT: "compare last 3
+   * month seperti apa pergerakan audience nya"). Bulan tanpa snapshot = null —
+   * snapshot demografi tidak bisa diisi mundur. Opsional untuk payload lama.
+   */
+  history?: (DemographicPeriod | null)[]
 }
 
 /* ── payload ──────────────────────────────────────────────────────────────── */
@@ -114,6 +120,8 @@ export interface AudienceMeta {
   month: number            // 1-based
   monthLabel: string       // 'July 2026'
   prevMonthLabel: string   // 'June 2026'
+  /** Label tiga bulan ChannelDemographics.history, lama → baru: ['May 2026', 'June 2026', 'July 2026']. */
+  last3Labels?: string[]
 }
 
 export interface ReportAudienceMetrics {
@@ -121,6 +129,8 @@ export interface ReportAudienceMetrics {
   sentiment: Partial<Record<DashPlatform, ChannelSentimentSummary>>
   words: Partial<Record<DashPlatform, CloudWord[]>>
   demographics: Partial<Record<DashPlatform, ChannelDemographics>>
+  /** Tagged post (UGC) per platform. Opsional: payload lama tidak punya. */
+  tagged?: Partial<Record<DashPlatform, ChannelTagged>>
 }
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
@@ -304,4 +314,95 @@ export function demographicHeading(
   const prev = m?.meta.prevMonthLabel ?? '—'
   const hasPrevious = channels.some(p => !!demographicsFor(m, p)?.previous)
   return { cur, prev, hasPrevious }
+}
+
+/** Pilihan pembanding slide demografi: bulan lalu (bawaan) atau tiga bulan terakhir. */
+export type DemographicRange = 'mom' | 'last3'
+
+/** 'July 2026' → 'Jul' */
+export const shortMonth = (label: string) => label.slice(0, 3)
+
+/**
+ * Bulan-bulan riwayat 3 bulan yang berdata untuk satu platform, dengan labelnya.
+ * Bulan tanpa snapshot dibuang dari gambar (bukan digambar nol).
+ */
+export function demographicHistory(
+  m: ReportAudienceMetrics | null | undefined, platform: DashPlatform,
+): { label: string; idx: number; period: DemographicPeriod }[] {
+  const d = m?.demographics?.[platform]
+  const labels = m?.meta.last3Labels ?? []
+  const hist = d?.history ?? (d ? [null, d.previous, d.current] : [])
+  const out: { label: string; idx: number; period: DemographicPeriod }[] = []
+  hist.forEach((p, i) => { if (p) out.push({ label: labels[i] ?? '', idx: i, period: p }) })
+  return out
+}
+
+/* ── tagged posts (slide Tagged Posts) ────────────────────────────────────────
+ * Post orang lain yang menandai brand (UGC), dari l2_gold.ugc_tagged_posts —
+ * sumber yang sama dengan bagian UGC Tagged Posts di dashboard Audience. Post-UAT
+ * least priority: slide-nya bukan hanya angka, tapi juga memperlihatkan post-nya.
+ */
+export interface TaggedPost {
+  postId: string
+  platform: DashPlatform
+  /** Tanpa '@'. */
+  username: string
+  /** YYYY-MM-DD */
+  date: string
+  likes: number
+  comments: number
+  engagement: number
+  link: string | null
+  /** Cover dari l0_raw.*_tagged_posts — kebanyakan sudah di Cloudinary. */
+  image: string | null
+  /** Kunci resolver gambar report ('t:<platform>:<post_id>') — hanya kalau cover
+   *  belum tersimpan permanen di Cloudinary. */
+  imageKey?: string
+}
+export interface TaggedCounts { posts: number; users: number }
+export interface ChannelTagged {
+  current: TaggedCounts
+  previous: TaggedCounts
+  /** Post bulan report, engagement tertinggi dulu (maks. TAGGED_TOP_MAX). */
+  top: TaggedPost[]
+}
+/** Jumlah kartu post yang bisa dipilih di slide Tagged Posts. */
+export const TAGGED_COUNTS = [3, 4, 5] as const
+export const TAGGED_TOP_MAX = 5
+
+/**
+ * Data tagged post untuk channel slide. 'all' menjumlahkan semua platform: jumlah
+ * post dijumlah, jumlah pengguna juga (akun yang sama di dua platform terhitung
+ * dua — handle-nya memang tidak bisa dicocokkan lintas platform).
+ */
+export function taggedFor(m: ReportAudienceMetrics | null | undefined, channel: string): ChannelTagged | null {
+  const all = m?.tagged
+  if (!all) return null
+  const list = channel === 'all'
+    ? Object.values(all).filter((x): x is ChannelTagged => !!x)
+    : all[channel as DashPlatform] ? [all[channel as DashPlatform]!] : []
+  if (list.length === 0) return null
+  if (list.length === 1) return list[0]
+  const sum = (k: 'current' | 'previous') => list.reduce(
+    (a, x) => ({ posts: a.posts + x[k].posts, users: a.users + x[k].users }), { posts: 0, users: 0 })
+  return {
+    current: sum('current'),
+    previous: sum('previous'),
+    top: list.flatMap(x => x.top).sort((a, b) => b.engagement - a.engagement).slice(0, TAGGED_TOP_MAX),
+  }
+}
+
+/** Perubahan vs bulan lalu untuk kartu angka: "+50%", "0%", atau null (tanpa pembanding). */
+export function taggedChange(cur: number, prev: number): string | null {
+  if (prev <= 0) return cur > 0 ? null : '0%'
+  const d = ((cur - prev) / prev) * 100
+  const r = Math.round(d)
+  return `${r > 0 ? '+' : ''}${r}%`
+}
+
+const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** '2026-07-31' → '31 Jul 2026' (sama dengan contoh di brief). */
+export function fmtTaggedDate(d: string): string {
+  const [y, m, day] = d.split('-')
+  return `${Number(day)} ${MON3[Number(m) - 1] ?? m} ${y}`
 }

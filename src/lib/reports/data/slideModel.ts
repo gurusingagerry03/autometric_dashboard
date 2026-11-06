@@ -1,6 +1,6 @@
 // Domain model for content slides (shared by the slide components and the
 // PPTX exporter). Kept in lib so nothing imports types up from components.
-import { CoverMode } from '../cover/colors'
+import { CoverColors, CoverMode } from '../cover/colors'
 import { CoverTemplate } from '../cover/templates'
 import { ChartConfig } from './chartData'
 import { TableConfig } from './tableTypes'
@@ -9,7 +9,7 @@ import type { SourceFilter } from './audienceTypes'
 export type { ChartConfig } from './chartData'
 export type { TableConfig } from './tableTypes'
 
-export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic' | 'monthly_tracker' | 'showcase'
+export type SlideType = 'section' | 'dashboard' | 'comparison' | 'kpi' | 'dashboard_overview' | 'ytd' | 'visual' | 'activity' | 'overview' | 'sentiment' | 'demographic' | 'monthly_tracker' | 'showcase' | 'tagged'
 
 /**
  * Slide yang memakai layout kartu post (grid kartu + catatan di bawah).
@@ -121,7 +121,7 @@ export interface ContentSlide {
   kpiRates?: KpiRate[]
   postCount: number          // visual — number of post cards (4/6/8)
   postFilter: string         // visual — 'top' | 'low' | 'mixed'
-  postFormat: string         // visual — format filter: 'all' | 'reel' | 'video' | 'carousel' | 'image'
+  postFormat: string         // visual — format filter: 'all' | 'reel' | 'video' | 'motion' | 'carousel' | 'image'
   postPillar: string         // visual — content-pillar filter: 'all' | '<pillar id>'
   postSortMetric: string     // visual — metric the top/low ranking is based on
   /** visual — angka di kartu post: 'full' (default) = 1,234,567, 'compact' = 1.23M. */
@@ -145,6 +145,8 @@ export interface ContentSlide {
   cloudSentiment: string
   /** demographic — 'age' | 'gender' | 'both'. */
   demographicView: DemographicView
+  /** demographic — pembanding: 'mom' (bulan lalu, bawaan) atau 'last3' (tiga bulan terakhir). */
+  demographicRange?: 'mom' | 'last3'
   /** ytd — matriks (bawaan) atau scorecard. Opsional: template lama tidak punya. */
   ytdView?: YtdView
   /**
@@ -180,6 +182,10 @@ export interface ReportTemplateCover {
   font: string
   title: string
   subtitle: string
+  /** Palet warna saat template disimpan (Post-UAT: warnanya harus ikut kembali,
+   *  bukan selalu diambil ulang dari logo). Opsional — template lama tidak punya,
+   *  dan tetap memakai warna otomatis dari logo brand. */
+  colors?: CoverColors
 }
 export interface ReportTemplateConfig {
   cover: ReportTemplateCover
@@ -221,6 +227,7 @@ const SLIDE_DEFAULTS: Record<SlideType, Partial<ContentSlide>> = {
   demographic: { title: 'Audience Demographics' },
   monthly_tracker: { title: 'Monthly Tracker Performance' },
   showcase: { title: 'Format Showcase' },
+  tagged: { title: 'Tagged Posts' },
 }
 
 /** Pilihan yang ditanyakan pemilih slide sebelum slide Monthly Tracker dibuat. */
@@ -263,7 +270,8 @@ export function makeSlide(type: SlideType, seq: number, channel = 'instagram', t
     metricCount: 4,
     kpiMetrics: [null, null, null, null, null, null],
     kpiCompare: 'both',
-    postCount: 4,
+    // Tagged Posts: 3 kartu seperti contoh di brief (Top 3 Tagged Post Engagements).
+    postCount: type === 'tagged' ? 3 : 4,
     postFilter: 'top',
     postSource: 'owned',
     postFormat: 'all',

@@ -14,6 +14,7 @@ import OverviewSlide from './OverviewSlide'
 import SentimentSlide from './SentimentSlide'
 import DemographicSlide from './DemographicSlide'
 import MonthlyTrackerSlide from './MonthlyTrackerSlide'
+import TaggedSlide from './TaggedSlide'
 
 // Re-exported for convenience so existing imports `from '.../SlidePreview'` keep working.
 export type { ContentSlide, SlideType, SlideChrome, ConfigBlock, ChartConfig, TableConfig } from '@/lib/reports/data/slideModel'
@@ -79,6 +80,8 @@ export default function SlidePreview({
           <SentimentSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
         ) : slide.type === 'demographic' ? (
           <DemographicSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
+        ) : slide.type === 'tagged' ? (
+          <TaggedSlide slide={slide} colors={colors} editable={editable} onChange={onChange} />
         ) : slide.type === 'monthly_tracker' ? (
           <MonthlyTrackerSlide slide={slide} colors={colors} editable={editable} onChange={onChange} onConfigure={onConfigure} />
         ) : (

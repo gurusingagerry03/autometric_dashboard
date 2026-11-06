@@ -166,7 +166,10 @@ export type ReportPostMetrics = Record<string, PostCandidate[]>
 function formatBucket(s: string): { id: string; label: string } | null {
   if (s.includes('reel')) return { id: 'reel', label: 'Reel' }
   if (s.includes('carousel')) return { id: 'carousel', label: 'Carousel' }
-  if (s.includes('video') || s.includes('motion')) return { id: 'video', label: 'Video' }
+  // "Motion" = tag editorial untuk gambar beranimasi (motion graphic), dulu digabung
+  // ke Video. Post-UAT: jadi format sendiri supaya bisa dipilih & dibandingkan.
+  if (s.includes('motion')) return { id: 'motion', label: 'Motion Images' }
+  if (s.includes('video')) return { id: 'video', label: 'Video' }
   if (s.includes('photo') || s.includes('feed') || s.includes('static') || s.includes('image')) return { id: 'image', label: 'Image' }
   if (s.includes('link')) return { id: 'link', label: 'Link' }
   if (s.includes('story')) return { id: 'story', label: 'Story' }

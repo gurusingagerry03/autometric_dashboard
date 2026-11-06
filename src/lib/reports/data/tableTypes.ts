@@ -470,6 +470,10 @@ export const TABLE_TYPES: Record<string, TableType> = {
     columns: [
       { id: 'followers', label: 'Followers', format: 'number' },
       { id: 'followers_growth', label: 'Followers Growth', format: 'number' },
+      // Follow / Unfollow (Post-UAT least priority): new_followers_sum /
+      // lost_followers_sum gold. Facebook tak punya unfollow → "—".
+      { id: 'follows', label: 'Follows', format: 'number' },
+      { id: 'unfollows', label: 'Unfollows', format: 'number' },
       { id: 'reach', label: 'Channel Reach', format: 'number' },
       { id: 'profile_visit', label: 'Profile Views', format: 'number' },
       { id: 'profile_reach', label: 'Profile Reach', format: 'number' },
