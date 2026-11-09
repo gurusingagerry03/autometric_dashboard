@@ -5,7 +5,7 @@
 // their columns are filtered by the slide's channel (metrics are per-platform).
 // Values are REAL DB numbers (via metricsQuery); no data renders "—", never dummy.
 import type { DashPlatform } from '@/components/dashboard/data'
-import { compactNum, groupInt, shortMetricLabel } from './format'
+import { fmtPct, compactNum, groupInt, shortMetricLabel } from './format'
 import { TABLE_COLUMN_TO_TRACKER, fmtTrackerMom, fmtTrackerMonth, fmtTrackerValue, trackerMom, type TrackerMetric, type TrackerMonth } from './monthlyTracker'
 import { fmtYtdGrowth, fmtYtdPrior, fmtYtdRow, ytdLabel, type YtdChannel } from './ytdMetrics'
 
@@ -82,8 +82,8 @@ function growthSub(v: number | null, pv: number | null, inline: boolean): TableC
   // Pembagi |prev|: metrik yang bisa negatif tetap bertanda benar — naik dari -50
   // ke -10 adalah perbaikan, bukan penurunan.
   const g = ((v - pv) / Math.abs(pv)) * 100
-  const flat = Math.abs(g) < 0.5
-  return { text: flat ? '(0%)' : `(${g > 0 ? '+' : '-'}${groupInt(Math.abs(g))}%)`, positive: g > 0, flat, inline }
+  const flat = Math.abs(g) < 0.005
+  return { text: `(${fmtPct(flat ? 0 : g, true)})`, positive: g > 0, flat, inline }
 }
 
 /** Real metric value for a comparison table: previous vs current period. */
@@ -647,7 +647,7 @@ export function typeChannelHint(typeId: string): string {
 // Real DB values: percent keeps up to 2 decimals; time is already in seconds
 // (metricsQuery normalizes avg_watch_time to seconds), shown to 1 decimal.
 function fmtReal(format: TableFormat, val: number, compact = false): string {
-  if (format === 'percent') return (Math.round(val * 100) / 100) + '%'
+  if (format === 'percent') return fmtPct(val)
   if (format === 'time') return (Math.round(val * 10) / 10) + 's'
   // Rasio kecil (Views / Follower ≈ 0.30, rata-rata per post < 10) dulu
   // dibulatkan groupInt jadi "0" — dan tetap diberi growth, jadi terbaca "0 (-28%)".
@@ -675,9 +675,9 @@ function realCell(rowId: string, col: TableColumn, mv: MetricPair | undefined, c
   if (rowId === 'gap') {
     if (prev != null && curr != null && prev !== 0) {
       const g = ((curr - prev) / prev) * 100
-      // "+12.3%" green / "-12.3%" red / "0%" black (anything that rounds to 0.0).
-      if (Math.abs(g) < 0.05) return { text: '0%', gap: true, flat: true }
-      return { text: (g > 0 ? '+' : '-') + Math.abs(g).toFixed(1) + '%', gap: true, positive: g > 0 }
+      // "+1,234.56%" green / "-12.34%" red / "0.00%" black (rounds to 0.00).
+      if (Math.abs(g) < 0.005) return { text: fmtPct(0), gap: true, flat: true }
+      return { text: fmtPct(g, true), gap: true, positive: g > 0 }
     }
     return { text: '—' } // no data → neutral dash (no gap coloring)
   }

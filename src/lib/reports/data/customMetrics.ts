@@ -9,7 +9,7 @@
 //   - l1_silver.unified_post      → per-post grain (likes, reach, er_*, …)
 //   - l2_gold.brand_metric_daily  → daily / profile grain (followers, growth, …)
 //   - derived                     → period-level helpers (total posts)
-import { groupInt } from './format'
+import { fmtPct, groupInt } from './format'
 import { compactNum } from './chartTypes'
 
 export type MetricFormat = 'number' | 'compact' | 'percent' | 'time'
@@ -130,7 +130,7 @@ export function hasMixedPrecedence(terms: Term[]): boolean {
 // ── formatting + preview evaluation (pure, sample-based — no DB) ─────────────────────
 export function formatMetric(format: MetricFormat, v: number | null): string {
   if (v == null || !Number.isFinite(v)) return '—'
-  if (format === 'percent') return (Math.round(v * 100) / 100) + '%'
+  if (format === 'percent') return fmtPct(v)
   if (format === 'time') return (Math.round(v * 10) / 10) + 's'
   if (format === 'compact') return compactNum(v)
   return groupInt(v)

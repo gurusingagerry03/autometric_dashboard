@@ -1,7 +1,7 @@
 // Post data for the Visual Analysis slide. Live-only: values come from
 // l1_silver.unified_post (via ReportPostContext / postsQuery). No sample/dummy
 // fallback — when there is no live pool the slide shows a loading / empty state.
-import { compactNum, groupInt, shortMetricLabel } from './format'
+import { fmtPct, compactNum, groupInt, shortMetricLabel } from './format'
 import { isStoredImage } from '../images/keys'
 
 // Ordered by the Content Performance categories (Acquisition → Awareness →
@@ -204,7 +204,7 @@ export function normPillar(raw?: string | null): { id: string; label: string } {
 }
 
 const fmtValue = (id: string, v: number, compact = false) =>
-  isErMetric(id) || id === 'completion_rate' ? v.toFixed(2) + '%'
+  isErMetric(id) || id === 'completion_rate' ? fmtPct(v)
   : id === 'watch_time' ? v.toFixed(1) + 's'
   : compact ? compactNum(v) : groupInt(v)
 

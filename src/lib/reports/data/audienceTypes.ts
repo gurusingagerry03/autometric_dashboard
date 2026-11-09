@@ -8,6 +8,7 @@
 //   the audience talking — `post_caption` is the BRAND's own copy, and folding it
 //   in would let the brand's own tone inflate its audience-sentiment score. It is
 //   deliberately not read here.
+import { fmtPct } from '@/lib/reports/data/format'
 import type { DashPlatform } from '@/components/dashboard/data'
 import type { SentimentKey } from './chartTypes'
 
@@ -392,12 +393,11 @@ export function taggedFor(m: ReportAudienceMetrics | null | undefined, channel: 
   }
 }
 
-/** Perubahan vs bulan lalu untuk kartu angka: "+50%", "0%", atau null (tanpa pembanding). */
+/** Perubahan vs bulan lalu untuk kartu angka: "+50.00%", "0.00%", atau null (tanpa pembanding). */
 export function taggedChange(cur: number, prev: number): string | null {
-  if (prev <= 0) return cur > 0 ? null : '0%'
+  if (prev <= 0) return cur > 0 ? null : fmtPct(0)
   const d = ((cur - prev) / prev) * 100
-  const r = Math.round(d)
-  return `${r > 0 ? '+' : ''}${r}%`
+  return fmtPct(d, true)
 }
 
 const MON3 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

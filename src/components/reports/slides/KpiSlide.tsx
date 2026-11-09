@@ -1,5 +1,6 @@
 'use client'
 
+import { fmtPct } from '@/lib/reports/data/format'
 import { useState } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import {
@@ -87,7 +88,7 @@ function Scorecard({ metric, accent, count, editable, onClick, meta, caption, em
           <>
             <span className="flex items-center rounded-full" style={{ gap: '0.2cqw', fontSize: s.trend, fontWeight: 800, padding: '0.2cqh 0.7cqw', color: good ? '#16a34a' : '#dc2626', background: good ? '#f0fdf4' : '#fef2f2', ...PJ }}>
               <span className="material-symbols-outlined" style={{ fontSize: `calc(${s.trend} + 0.4cqw)` }}>{metric.delta >= 0 ? 'arrow_outward' : 'south_east'}</span>
-              {Math.abs(metric.delta)}%
+              {fmtPct(Math.abs(metric.delta))}
             </span>
             <span className="truncate" style={{ fontSize: s.cap, color: '#94a3b8', ...PJ }}>{caption ?? t('vs last period')}</span>
           </>

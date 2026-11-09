@@ -2,7 +2,7 @@
 // availability + aggregation kind) drive the real DB values via kpiQuery.ts.
 // No dummy fallback — a metric with no data for the brand+period renders "—".
 import type { DashPlatform } from '@/components/dashboard/data'
-import { groupInt } from './format'
+import { fmtPct, groupInt } from './format'
 import type { ReportTableMetrics, TableChannel } from './tableTypes'
 import { formatMetric } from './customMetrics'
 
@@ -74,12 +74,13 @@ export const kpiPairFor = (m: ReportKpiMetrics | null | undefined, channel: stri
  * sendiri, Engagement Rate akan muncul sebagai "3" di YTD dan "3%" di dashboard.
  */
 export function formatKpiValue(format: KpiFmt, v: number): string {
-  if (format === 'pct') return (Math.round(v * 100) / 100) + '%'
+  if (format === 'pct') return fmtPct(v)
   if (format === 'time') return (Math.round(v * 10) / 10) + 's'
   return groupInt(v) // counts / followers / reach → full numbers with comma separators
 }
 const fmtVal = formatKpiValue
-const round1 = (n: number) => Math.round(n * 10) / 10
+// Delta dua desimal — ditulis lewat fmtPct ("1,234.56%") di semua tempat.
+const round2 = (n: number) => Math.round(n * 100) / 100
 
 /** Build a scorecard metric from a real DB pair (null current → "—", no delta). */
 export function buildKpiMetric(def: KpiDef, pair: KpiPair | null): KpiMetric {
@@ -87,7 +88,7 @@ export function buildKpiMetric(def: KpiDef, pair: KpiPair | null): KpiMetric {
   const prev = pair?.prev ?? null
   const value = curr == null ? '—' : fmtVal(def.format, curr)
   const hasDelta = curr != null && prev != null && prev !== 0
-  const delta = hasDelta ? round1(((curr - prev) / prev) * 100) : 0
+  const delta = hasDelta ? round2(((curr - prev) / prev) * 100) : 0
   return { key: def.key, label: def.label, icon: def.icon, value, delta, positiveIsGood: true, hasDelta }
 }
 
@@ -118,7 +119,7 @@ export function customKpiMetricFor(
   const prev = pair?.prev ?? null
   const value = curr == null ? '—' : formatMetric(def.format, curr)
   const hasDelta = curr != null && prev != null && prev !== 0
-  const delta = hasDelta ? round1(((curr - prev) / prev) * 100) : 0
+  const delta = hasDelta ? round2(((curr - prev) / prev) * 100) : 0
   return { key: def.id, label: def.label, icon: 'calculate', value, delta, positiveIsGood: true, hasDelta }
 }
 

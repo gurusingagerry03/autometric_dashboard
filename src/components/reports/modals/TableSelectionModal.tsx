@@ -102,6 +102,9 @@ export default function TableSelectionModal({
 
   if (!open) return null
 
+  // Edit tabel yang sudah terpasang: jenisnya dikunci — daftar jenis tabel tidak
+  // ditampilkan, yang diedit hanya kolom & opsinya (feedback UAT 2026-11-09).
+  const editing = !!initial && initial.type === type && !!TABLE_TYPES[type]
   const isCompetitor = type === 'brand_vs_competitor'
   const changeType = (id: string) => {
     setType(id)
@@ -123,8 +126,8 @@ export default function TableSelectionModal({
         {/* Header */}
         <div className="p-4 px-6 border-b border-[#f0f1f2] flex justify-between items-center">
           <div>
-            <h3 style={PJ} className="font-bold text-[16px] text-[#0f172a]">{t('Configure Data Table')}</h3>
-            <p className="text-[12px] text-[#94a3b8] mt-0.5">{t('Select a template and customize metrics.')}</p>
+            <h3 style={PJ} className="font-bold text-[16px] text-[#0f172a]">{editing ? t('Edit Data Table') : t('Configure Data Table')}</h3>
+            <p className="text-[12px] text-[#94a3b8] mt-0.5">{editing ? TABLE_TYPES[type].label : t('Select a template and customize metrics.')}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-[#94a3b8] hover:text-[#334155] hover:bg-[#f1f5f9] transition-colors">
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -132,8 +135,8 @@ export default function TableSelectionModal({
         </div>
 
         <div className="flex-1 flex min-h-0">
-          {/* Type list */}
-          <div className="w-[40%] border-r border-[#f0f1f2] bg-[#fafbfb] overflow-y-auto p-2 space-y-1.5">
+          {/* Type list — hanya saat membuat tabel baru */}
+          {!editing && <div className="w-[40%] border-r border-[#f0f1f2] bg-[#fafbfb] overflow-y-auto p-2 space-y-1.5">
             {Object.values(TABLE_TYPES).filter(tt => typeAllowed(tt.id, monthlyOnly)).map(t => {
               const active = type === t.id
               const enabled = isTypeEnabledForChannel(t.id, channel) && !t.disabled
@@ -164,7 +167,7 @@ export default function TableSelectionModal({
                 </button>
               )
             })}
-          </div>
+          </div>}
 
           {/* Columns (+ competitor picker for the competitor table) */}
           <div className="flex-1 p-4 overflow-y-auto">
@@ -326,7 +329,7 @@ export default function TableSelectionModal({
             style={PJ}
             className="px-5 py-2.5 bg-[#2C3079] text-white text-[12.5px] font-bold rounded-lg hover:bg-[#20224F] disabled:opacity-50 transition-colors"
           >
-            Insert Table
+            {editing ? t('Save Changes') : 'Insert Table'}
           </button>
         </div>
       </div>

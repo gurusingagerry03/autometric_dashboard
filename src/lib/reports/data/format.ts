@@ -53,3 +53,16 @@ export function shortPostDate(iso: string): string {
   if (!m) return iso
   return `${Number(m[3])} ${MON[Number(m[2]) - 1]} '${m[1].slice(2)}`
 }
+
+/**
+ * Persen baku seluruh report: "#,##0.00%" — 11581.5 → "11,581.50%" (UAT
+ * 2026-11-08). `signed` menambah "+" untuk nilai positif (baris growth).
+ * Satu helper supaya tabel, scorecard, chart, dan PPTX tidak lagi punya format
+ * persen masing-masing.
+ */
+export function fmtPct(n: number, signed = false): string {
+  const r = Math.round(n * 100) / 100
+  const [int, dec] = Math.abs(r).toFixed(2).split('.')
+  const sign = r < 0 ? '-' : signed && r > 0 ? '+' : ''
+  return `${sign}${groupInt(Number(int))}.${dec}%`
+}

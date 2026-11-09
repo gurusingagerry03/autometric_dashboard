@@ -1,5 +1,6 @@
 'use client'
 
+import { fmtPct } from '@/lib/reports/data/format'
 import { useReportYtd } from '@/lib/reports/data/metricsContext'
 import {
   fmtYtdPct, fmtYtdPriorRange, fmtYtdRange, fmtYtdRow, ytdChannelFor, ytdDelta,
@@ -55,7 +56,7 @@ export default function YtdMetricPickerModal({
           <p style={PJ} className="text-[13px] font-bold text-[#0f172a] truncate">{t(ytdLabel(row.metric))}</p>
           <p className="text-[11.5px] text-[#94a3b8] truncate">
             {fmtYtdRow(row)}
-            {delta == null ? '' : ` · ${delta >= 0 ? '+' : ''}${delta}%`}
+            {delta == null ? '' : ` · ${fmtPct(delta, true)}`}
             {' · '}{fmtYtdPct(row.runRate)}
           </p>
         </div>

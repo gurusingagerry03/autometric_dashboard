@@ -3,6 +3,7 @@
 // Standard Dashboard, Comparison) are built with pptxgenjs shapes / text /
 // native charts (addChart) / native tables (addTable) — no rasterized images,
 // so everything stays editable in PowerPoint.
+import { fmtPct } from '@/lib/reports/data/format'
 import { CoverColors, noHash, tint } from '../cover/colors'
 import { CoverConfig, SLIDE_IN, addCoverSlide, addContainImage, addCoverImage, svgToPng } from './exportCover'
 import { ChartConfig, resolveBarData, resolveLineData, chartSummary, groupBarSeries, SENTIMENT_PALETTES, pptxValueFormat, type ValueLabels } from '../data/chartData'
@@ -496,7 +497,7 @@ function scorecard(slide: Slide, metric: KpiMetric | undefined, accent: string, 
   const trend = metric.hasDelta === false
     ? [{ text: noDeltaLabel, options: { color: '94A3B8' } }]
     : [
-        { text: `${arrow} ${Math.abs(metric.delta)}%  `, options: { color: good ? '16A34A' : 'DC2626', bold: true } },
+        { text: `${arrow} ${fmtPct(Math.abs(metric.delta))}  `, options: { color: good ? '16A34A' : 'DC2626', bold: true } },
         { text: caption ?? 'vs last period', options: { color: '94A3B8' } },
       ]
   // Baris meta (YTD: sejak kapan) menggeser badge deltanya turun, sama seperti

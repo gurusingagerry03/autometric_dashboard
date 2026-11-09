@@ -8,7 +8,7 @@
 // aliran dijumlahkan sepanjang bulan; Followers adalah metrik LEVEL, jadi yang
 // diambil angka terakhir tiap akun di bulan itu.
 import type { DashPlatform } from '@/components/dashboard/data'
-import { groupInt } from './format'
+import { fmtPct, groupInt } from './format'
 
 export type TrackerMetric =
   | 'followers' | 'followers_growth' | 'reach' | 'profile_views' | 'profile_reach'
@@ -76,7 +76,7 @@ export function trackerMom(cur: number | null | undefined, prev: number | null |
 
 export function fmtTrackerValue(metric: TrackerMetric, v: number | null | undefined): string {
   if (v == null) return '—'
-  if (metric === 'er') return `${v.toFixed(2)}%`
+  if (metric === 'er') return fmtPct(v)
   const s = groupInt(Math.round(v))
   return metric === 'followers_growth' && v > 0 ? `+${s}` : s
 }
@@ -86,7 +86,7 @@ export function fmtTrackerMom(metric: TrackerMetric, d: number | null): string {
   if (d == null) return ''
   const v = Math.abs(d) < 0.005 ? 0 : d
   const arrow = v > 0 ? '▲' : v < 0 ? '▼' : '•'
-  return `${arrow} ${Math.abs(v).toFixed(2)}${metric === 'er' ? 'pts' : '%'}`
+  return metric === 'er' ? `${arrow} ${Math.abs(v).toFixed(2)}pts` : `${arrow} ${fmtPct(Math.abs(v))}`
 }
 
 export interface TrackerTableSizes {

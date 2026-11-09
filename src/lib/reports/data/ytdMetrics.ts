@@ -22,7 +22,7 @@ import type { DashPlatform } from '@/components/dashboard/data'
 import { KPI_METRIC_LABEL, type KpiMetric } from '@/lib/kpi/types'
 import { KPI_DEF_BY_KEY, formatKpiValue, kpiDefsForChannel, type KpiDef, type KpiFmt } from './kpiMetrics'
 import { kpiTargetIcon } from './kpiTargets'
-import { groupInt } from './format'
+import { fmtPct, groupInt } from './format'
 
 /** Periode YTD satu brand, beserta periode pembandingnya setahun sebelumnya. */
 export interface YtdWindow {
@@ -127,7 +127,6 @@ export const ytdIcon = (metric: string): string =>
     ? KPI_DEF_BY_KEY[ytdDashBase(metric)]?.icon ?? 'insights'
     : kpiTargetIcon(metric as KpiMetric)
 
-const round1 = (n: number) => Math.round(n * 10) / 10
 
 /**
  * Nilai kartu. `format` hanya dibawa baris dashboard — metrik KPI semuanya
@@ -148,13 +147,13 @@ export const fmtYtdGrowth = (r: YtdRow): string => {
   if (r.percentage == null) return '—'
   const d = r.percentage - 100
   const v = Math.abs(d) < 0.005 ? 0 : d
-  return `${v > 0 ? '+' : ''}${v.toFixed(2)}%`
+  return fmtPct(v, true)
 }
 
 /** Nilai satu baris, memakai format bawaannya. */
 export const fmtYtdRow = (r: YtdRow): string => fmtYtdValue(r.cumulative, r.format)
 
-export const fmtYtdPct = (n: number | null | undefined): string => (n == null ? '—' : round1(n) + '%')
+export const fmtYtdPct = (n: number | null | undefined): string => (n == null ? '—' : fmtPct(n))
 
 /**
  * Selisih terhadap tahun lalu dalam persen, untuk badge kartu.
@@ -169,7 +168,7 @@ export const fmtYtdPct = (n: number | null | undefined): string => (n == null ? 
  * warehouse belum menyimpan data setahun penuh, bukan kesalahan.
  */
 export const ytdDelta = (r: YtdRow): number | null =>
-  r.percentage == null ? null : round1(r.percentage - 100)
+  r.percentage == null ? null : Math.round((r.percentage - 100) * 100) / 100
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const fmtDay = (d: string) => {

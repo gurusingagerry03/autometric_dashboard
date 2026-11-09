@@ -4,12 +4,12 @@
 //
 // ANGKANYA MILIK SERVER, BUKAN MILIK BERKAS INI
 //   `achieved`, `achievementRate`, dan `runRate` datang apa adanya dari
-//   kpiTargetQuery, dihitung sampai periode report (`asOf`). Tidak ada satu pun
+//   kpiTargetQuery, dibaca dari l2_gold.kpi_achievement per bulan report. Tidak ada satu pun
 //   yang dihitung ulang di sini: menghitung ulang di client berarti dua rumus
 //   untuk satu angka, dan yang di slide-lah yang akan diam-diam berbeda.
 import type { DashPlatform } from '@/components/dashboard/data'
-import { KPI_METRIC_LABEL, kpiAccumulates, kpiMetricUnit, type KpiMetric } from '@/lib/kpi/types'
-import { groupInt } from './format'
+import { KPI_METRIC_LABEL, kpiMetricUnit, type KpiMetric } from '@/lib/kpi/types'
+import { fmtPct, groupInt } from './format'
 
 /** Satu KPI brand beserta capaiannya. */
 export interface KpiTarget {
@@ -21,13 +21,13 @@ export interface KpiTarget {
   /** null = capaiannya gagal dihitung (metrik di luar katalog, atau query error). */
   achieved: number | null
   achievementRate: number | null   // achieved / target × 100
-  /** Capaian dibanding target pro-rata waktu — lihat kpiRunRate. */
+  /** Capaian dibanding target pro-rata bulan berjalan (rumus sp_calculate_kpi_achievement). */
   runRate: number | null
-  /** Porsi periode yang sudah lewat: hari berjalan / total hari × 100. */
+  /** Porsi periode yang sudah lewat: bulan berjalan / total bulan × 100. */
   timeGone: number | null
   startDate: string                // YYYY-MM-DD
   endDate: string                  // YYYY-MM-DD
-  /** Hari terakhir yang ikut dihitung: LEAST(hari ini, endDate, akhir bulan report). */
+  /** Hari terakhir yang ikut dihitung (kpi_achievement.period_end). */
   asOf?: string                    // YYYY-MM-DD
 }
 
@@ -135,34 +135,7 @@ export function fmtKpiValue(metric: KpiMetric, n: number | null): string {
 
 /** Persentase capaian/run rate: "#.##%" seperti persen lain di report (deck
  *  revisi Dashboard, slide 15), dan ribuan tetap dipisah (1,508.94%). */
-export const fmtKpiRate = (n: number | null): string => {
-  if (n == null) return '—'
-  const r = Math.round(n * 100) / 100
-  const [int, dec] = Math.abs(r).toFixed(2).split('.')
-  return `${r < 0 ? '-' : ''}${groupInt(Number(int))}.${dec}%`
-}
-
-/**
- * Run rate (Post-UAT Revision Brief, "Report Maker - KPI Slide"):
- *
- *   Run Rate = Current / ((Target / 12) × Time Gone)
- *            = Achievement Rate / Time Gone × 100
- *
- * Dulu "run rate" di slide ini sebenarnya time gone (porsi periode yang sudah
- * lewat); itu sekarang punya baris sendiri. Run rate 100% = tepat di jadwal,
- * di atas 100% = di depan jadwal.
- *
- * Pro-rata waktu hanya berlaku untuk metrik yang BERAKUMULASI (kpiAccumulates).
- * Total Followers juga tidak: angkanya posisi akhir, bukan jumlah harian.
- * ER dan rata-rata per post tidak tumbuh seiring waktu — ER 1.8% di bulan ketiga
- * sudah 1.8%, bukan seperempat target — jadi run rate-nya = achievement rate.
- */
-export function kpiRunRate(metric: KpiMetric, achievementRate: number | null, timeGone: number | null): number | null {
-  if (achievementRate == null) return null
-  if (!kpiAccumulates(metric)) return achievementRate
-  if (!timeGone) return null
-  return Math.round((achievementRate / timeGone) * 100 * 100) / 100
-}
+export const fmtKpiRate = (n: number | null): string => (n == null ? '—' : fmtPct(n))
 
 /**
  * Capaian sudah mengejar waktu yang terpakai? = run rate ≥ 100%.

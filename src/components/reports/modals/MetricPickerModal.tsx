@@ -1,5 +1,6 @@
 'use client'
 
+import { fmtPct } from '@/lib/reports/data/format'
 import { useEffect, useState } from 'react'
 import { kpiDefsForChannel, buildKpiMetric, kpiPairFor, customKpiMetricsList, KpiMetric } from '@/lib/reports/data/kpiMetrics'
 import { useReportKpi, useReportMetrics } from '@/lib/reports/data/metricsContext'
@@ -68,7 +69,7 @@ export default function MetricPickerModal({
                     <span className="truncate">{m.label}</span>
                     <MetricInfo metricKey={m.key} scope="rkpi" size={13} />
                   </p>
-                  <p className="text-[11.5px] text-[#94a3b8]">{m.value}{m.hasDelta ? ` · ${m.delta >= 0 ? '+' : ''}${m.delta}%` : ''}</p>
+                  <p className="text-[11.5px] text-[#94a3b8]">{m.value}{m.hasDelta ? ` · ${fmtPct(m.delta, true)}` : ''}</p>
                 </div>
               </button>
             )

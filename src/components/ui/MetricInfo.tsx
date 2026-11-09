@@ -118,7 +118,11 @@ export default function MetricInfo({ metricKey, scope, size = 13, className = ''
             transform: pos.above ? 'translateY(-100%)' : undefined,
             zIndex:    70,
           }}
-          className="rounded-lg border border-[#e5e7eb] bg-white shadow-lg shadow-black/8 px-3.5 py-3"
+          // Panel ini ikut ter-render di dalam <th> tabel, yang uppercase + bold +
+          // tracking lebar — tanpa reset di sini glossary-nya tertulis KAPITAL
+          // semua (UAT 2026-11-08, slide 28). Scorecard aman karena uppercase-nya
+          // hanya di label, bukan di parent.
+          className="rounded-lg border border-[#e5e7eb] bg-white shadow-lg shadow-black/8 px-3.5 py-3 normal-case tracking-normal font-normal text-left whitespace-normal"
         >
           <p style={PJ} className="text-[11.5px] font-bold text-[#111827] mb-1">{entry.label}</p>
           <p className="text-[12px] leading-relaxed text-[#4b5563]">{entry.description}</p>

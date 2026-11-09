@@ -139,6 +139,9 @@ export default function ChartSelectionModal({
 
   if (!open) return null
 
+  // Edit chart yang sudah terpasang: jenis chart (langkah 1) dikunci — Back
+  // berhenti di langkah 2, tidak kembali ke pilihan jenis (feedback UAT 2026-11-09).
+  const editing = !!initialConfig
   const allCompIds = availableCompetitors.map(c => c.id)
   const reset = () => {
     setStep(1); setCategory(null); setDimension(null); setLineMetrics([])
@@ -216,7 +219,7 @@ export default function ChartSelectionModal({
         {/* Header */}
         <div className="flex justify-between items-center mb-5">
           <div className="flex items-center gap-3">
-            {step > 1 && !monthlyOnly && (
+            {step > (editing ? 2 : 1) && !monthlyOnly && (
               <button onClick={back} className="p-1.5 rounded-lg hover:bg-[#f1f5f9] transition-colors">
                 <span className="material-symbols-outlined text-[18px] text-[#94a3b8]">arrow_back</span>
               </button>

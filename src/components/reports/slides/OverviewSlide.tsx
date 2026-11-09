@@ -23,16 +23,18 @@ function ChooserButton({ icon, label, editable, onClick }: { icon: string; label
   )
 }
 
-function SwitchButton({ onClick }: { onClick?: () => void }) {
-  const t = useT()
+// Tombol pojok = EDIT tabel/chart yang terpasang. Dulu tombol ini "switch":
+// menghapus isinya lalu kembali ke pilihan Chart/Table — dan karena hanya tombol
+// ini yang menonjol, pemakai yang mau mengedit malah kehilangan tabelnya.
+function EditButton({ onClick, title }: { onClick?: () => void; title: string }) {
   return (
     <button
       onClick={onClick}
-      title={t('Switch visualization type')}
+      title={title}
       className="absolute z-10 flex items-center justify-center rounded-[0.5cqw] bg-white border border-[#e2e8f0] text-[#94a3b8] hover:text-[#2C3079] hover:border-[#cbd5e1] shadow-sm transition-colors"
       style={{ top: '0.6cqh', right: '0.6cqw', width: '2.6cqw', height: '2.6cqw' }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: '1.5cqw' }}>swap_horiz</span>
+      <span className="material-symbols-outlined" style={{ fontSize: '1.5cqw' }}>edit</span>
     </button>
   )
 }
@@ -50,6 +52,7 @@ export default function OverviewSlide({
   onChange?: (next: ContentSlide) => void
   onConfigure?: (block: ConfigBlock) => void
 }) {
+  const t = useT()
   const mode = slide.visualMode
   return (
     <>
@@ -61,12 +64,12 @@ export default function OverviewSlide({
           </div>
         ) : mode === 'chart' ? (
           <div className="h-full relative">
-            {editable && <SwitchButton onClick={() => onChange?.({ ...slide, visualMode: null, chart: null })} />}
+            {editable && <EditButton title={t('Edit chart')} onClick={() => onConfigure?.('chart')} />}
             <ChartBlock config={slide.chart} colors={colors} channel={slide.channel} editable={editable} onConfigure={() => onConfigure?.('chart')} placeholderLabel="Select visualization" />
           </div>
         ) : (
           <div className="h-full relative">
-            {editable && <SwitchButton onClick={() => onChange?.({ ...slide, visualMode: null, table: null })} />}
+            {editable && <EditButton title={t('Edit table')} onClick={() => onConfigure?.('table')} />}
             <TableBlock config={slide.table} colors={colors} channel={slide.channel} editable={editable} onConfigure={() => onConfigure?.('table')} onChange={table => onChange?.({ ...slide, table })} />
           </div>
         )}

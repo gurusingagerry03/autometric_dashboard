@@ -1,5 +1,6 @@
 // Chart configuration data + real-data resolvers, mirrored 1:1 from report_2's
 // ChartSelectionModal / SmartChartBlock so the metric-selection flow matches exactly.
+import { fmtPct } from '@/lib/reports/data/format'
 import { CoverColors, distinctSeriesColors } from '../cover/colors'
 import { trackerLineData } from './monthlyTracker'
 import {
@@ -87,7 +88,7 @@ const roundedNum = (n: number): string => {
  */
 export function fmtChartValue(v: number, pct: boolean | undefined, mode: 'tip' | 'absolute' | 'rounded' = 'tip'): string {
   if (!Number.isFinite(v)) return '—'
-  if (pct) return v.toFixed(2) + '%'
+  if (pct) return fmtPct(v)
   if (mode === 'rounded') return roundedNum(v)
   if (mode === 'absolute') return Math.round(v).toLocaleString('en-US')
   return v.toLocaleString('en-US', { maximumFractionDigits: 2 })

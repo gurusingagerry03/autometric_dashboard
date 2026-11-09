@@ -1,5 +1,6 @@
 'use client'
 
+import { fmtPct } from '@/lib/reports/data/format'
 import { useState, useEffect, useRef } from 'react'
 import { CoverColors } from '@/lib/reports/cover/colors'
 import { SlideChrome, ContentSlide, usesKpiLayout } from '@/lib/reports/data/slideModel'
@@ -140,7 +141,7 @@ function renderBold(text: string): React.ReactNode {
   )
 }
 
-const kpiRow = (m: KpiMetric) => ({ metric: m.label, value: m.value, change: m.hasDelta === false ? 'n/a' : `${m.delta >= 0 ? '+' : ''}${m.delta}%` })
+const kpiRow = (m: KpiMetric) => ({ metric: m.label, value: m.value, change: m.hasDelta === false ? 'n/a' : fmtPct(m.delta, true) })
 
 function chartToData(cfg: ChartConfig | null, chart: ReturnType<typeof useReportChart>, channel: string) {
   if (!cfg) return null
